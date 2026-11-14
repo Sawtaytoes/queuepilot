@@ -21,152 +21,231 @@
 // The Plex-gated suites are skipped on every PR, so a gate that lived there would never run.
 //
 // Usage: `server/node_modules/.bin/tsx e2e/lane-drag-test.ts`  (spawns its own server)
-import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import assert from "node:assert/strict"
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = parseInt(process.env.WEB_PORT || '18981', 10);
-const BASE = `http://localhost:${PORT}`;
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+)
+const PORT = parseInt(process.env.WEB_PORT || "18981", 10)
+const BASE = `http://localhost:${PORT}`
 // `bob_anime` is the fixture's RANDOM-order queue, so every entry starts in the pool and a
 // promote is a drag upwards into an empty Priority lane — cases 1, 2 and 4 in one gesture.
-const POOL_QUEUE = 'bob_anime';
+const POOL_QUEUE = "bob_anime"
 // `bob` is priority-by-default: everything starts in the Priority lane, so its pool is the
 // empty one and a demote is the drag downwards.
-const ORDERED_QUEUE = 'bob';
+const ORDERED_QUEUE = "bob"
 
 const waitReady = async (url: string, ms = 30000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + ms
   for (;;) {
     try {
-      if ((await fetch(url)).ok) return;
+      if ((await fetch(url)).ok) return
     } catch {
       /* not up yet */
     }
-    if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (Date.now() > end)
+      throw new Error(`not ready: ${url}`)
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-};
+}
 
-await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-lanedrag.yaml');
-await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-lanedrag.yaml');
-for (const lock of ['/tmp/queues-lanedrag.yaml.lock', '/tmp/sets-lanedrag.yaml.lock']) {
-  await fs.rm(lock, { force: true });
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/queues.harness.yaml`,
+  "/tmp/queues-lanedrag.yaml",
+)
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/sets.fixture.yaml`,
+  "/tmp/sets-lanedrag.yaml",
+)
+for (const lock of [
+  "/tmp/queues-lanedrag.yaml.lock",
+  "/tmp/sets-lanedrag.yaml.lock",
+]) {
+  await fs.rm(lock, { force: true })
 }
 
 const srv = spawnServer({
   env: {
     ...process.env,
-    HISTORY_PATH: '/tmp/.history-lanedrag.json',
-    MQTT_HOST: '',
-    NODE_TLS_REJECT_UNAUTHORIZED: '0',
-    QUEUES_PATH: '/tmp/queues-lanedrag.yaml',
-    SETS_PATH: '/tmp/sets-lanedrag.yaml',
-    STORE_PATH: '/tmp/queuepilot-lanedrag.sqlite',
+    HISTORY_PATH: "/tmp/.history-lanedrag.json",
+    MQTT_HOST: "",
+    NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    QUEUES_PATH: "/tmp/queues-lanedrag.yaml",
+    SETS_PATH: "/tmp/sets-lanedrag.yaml",
+    STORE_PATH: "/tmp/queuepilot-lanedrag.sqlite",
     WEB_PORT: String(PORT),
   },
-  stdio: ['ignore', 'ignore', 'inherit'],
-});
+  stdio: ["ignore", "ignore", "inherit"],
+})
 
-let failed = 0;
-const check = (name: string, isPassing: boolean, detail = '') => {
-  console.log(`  ${isPassing ? 'ok  ' : 'FAIL'} ${name}${isPassing ? '' : ` — ${detail}`}`);
-  if (!isPassing) failed += 1;
-};
+let failed = 0
+const check = (
+  name: string,
+  isPassing: boolean,
+  detail = "",
+) => {
+  console.log(
+    `  ${isPassing ? "ok  " : "FAIL"} ${name}${isPassing ? "" : ` — ${detail}`}`,
+  )
+  if (!isPassing) failed += 1
+}
 
 try {
-  await waitReady(`${BASE}/api/queues`);
+  await waitReady(`${BASE}/api/queues`)
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
+  const browser = await chromium.launch()
+  const page = await browser.newPage({
+    viewport: { width: 1400, height: 1100 },
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
 
   /** Every write this page makes, in order, so a gesture can be asserted on its EFFECT. */
-  const writes: { body: string; method: string; url: string }[] = [];
-  await page.route('**/api/queues/**', async (route, request) => {
-    const method = request.method();
-    if (method === 'PATCH') {
-      writes.push({ body: request.postData() || '', method, url: request.url() });
-    }
-    await route.continue();
-  });
+  const writes: {
+    body: string
+    method: string
+    url: string
+  }[] = []
+  await page.route(
+    "**/api/queues/**",
+    async (route, request) => {
+      const method = request.method()
+      if (method === "PATCH") {
+        writes.push({
+          body: request.postData() || "",
+          method,
+          url: request.url(),
+        })
+      }
+      await route.continue()
+    },
+  )
 
   /** Centre of a `.thumb`, which is the only part of a tile the drag arms from. */
-  const centreOf = async (selector: string) => JSON.parse(String(await page.evaluate(
-    `(() => { const el = document.querySelector(${JSON.stringify(selector)});`
-    + ` if (!el) return 'null'; const r = el.getBoundingClientRect();`
-    + ` return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]); })()`,
-  ))) as [number, number] | null;
+  const centreOf = async (selector: string) =>
+    JSON.parse(
+      String(
+        await page.evaluate(
+          `(() => { const el = document.querySelector(${JSON.stringify(selector)});` +
+            ` if (!el) return 'null'; const r = el.getBoundingClientRect();` +
+            ` return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]); })()`,
+        ),
+      ),
+    ) as [number, number] | null
 
   /** A slow, deliberate pointer drag — the same motion `drag-stability-test` uses. */
-  const dragTo = async (from: [number, number], to: [number, number]) => {
-    await page.mouse.move(from[0], from[1]);
-    await page.mouse.down();
+  const dragTo = async (
+    from: [number, number],
+    to: [number, number],
+  ) => {
+    await page.mouse.move(from[0], from[1])
+    await page.mouse.down()
     for (let attempt = 1; attempt <= 24; attempt += 1) {
       await page.mouse.move(
         from[0] + ((to[0] - from[0]) * attempt) / 24,
         from[1] + ((to[1] - from[1]) * attempt) / 24,
-      );
-      await page.waitForTimeout(16);
+      )
+      await page.waitForTimeout(16)
     }
-    await page.mouse.up();
-    await page.waitForTimeout(700);
-  };
+    await page.mouse.up()
+    await page.waitForTimeout(700)
+  }
 
   // ── A POOL queue: both lanes render, and the Priority one is an empty drop strip ────────
-  await page.goto(`${BASE}/q/${POOL_QUEUE}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#grid-pool li.tile', { timeout: 30000 });
-  await page.waitForTimeout(1500);
+  await page.goto(`${BASE}/q/${POOL_QUEUE}`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#grid-pool li.tile", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(1500)
 
-  const laneCount = Number(await page.evaluate(
-    `document.querySelectorAll('#grid ul.grid[data-lane]').length`,
-  ));
-  check('the page renders two lanes', laneCount === 2, `got ${laneCount}`);
-
-  const hasStrip = Boolean(await page.evaluate(
-    `!!document.querySelector('ul.grid[data-lane="priority"] .dropstrip')`,
-  ));
+  const laneCount = Number(
+    await page.evaluate(
+      `document.querySelectorAll('#grid ul.grid[data-lane]').length`,
+    ),
+  )
   check(
-    'an empty Priority lane renders a drop strip, not nothing',
+    "the page renders two lanes",
+    laneCount === 2,
+    `got ${laneCount}`,
+  )
+
+  const hasStrip = Boolean(
+    await page.evaluate(
+      `!!document.querySelector('ul.grid[data-lane="priority"] .dropstrip')`,
+    ),
+  )
+  check(
+    "an empty Priority lane renders a drop strip, not nothing",
     hasStrip,
-    'no `.dropstrip` — the first promote would have nothing to aim at',
-  );
+    "no `.dropstrip` — the first promote would have nothing to aim at",
+  )
 
-  const stripBox = await centreOf('ul.grid[data-lane="priority"] .dropstrip');
-  const firstPoolTile = await centreOf('#grid-pool li.tile .thumb');
-  assert.ok(stripBox && firstPoolTile, 'need both a strip and a pool tile to drag');
+  const stripBox = await centreOf(
+    'ul.grid[data-lane="priority"] .dropstrip',
+  )
+  const firstPoolTile = await centreOf(
+    "#grid-pool li.tile .thumb",
+  )
+  assert.ok(
+    stripBox && firstPoolTile,
+    "need both a strip and a pool tile to drag",
+  )
 
-  const promotedKey = String(await page.evaluate(
-    `document.querySelector('#grid-pool li.tile').dataset.key`,
-  ));
+  const promotedKey = String(
+    await page.evaluate(
+      `document.querySelector('#grid-pool li.tile').dataset.key`,
+    ),
+  )
 
-  writes.length = 0;
-  await dragTo(firstPoolTile, stripBox);
+  writes.length = 0
+  await dragTo(firstPoolTile, stripBox)
 
-  const placementWrite = writes.find((write) => write.url.includes('/placement'));
+  const placementWrite = writes.find((write) =>
+    write.url.includes("/placement"),
+  )
   check(
-    'a drag into the Priority lane PATCHes placement: priority',
-    Boolean(placementWrite && JSON.parse(placementWrite.body).placement === 'priority'),
-    `writes: ${JSON.stringify(writes.map((write) => write.url.split('/api')[1]))}`,
-  );
+    "a drag into the Priority lane PATCHes placement: priority",
+    Boolean(
+      placementWrite &&
+        JSON.parse(placementWrite.body).placement ===
+          "priority",
+    ),
+    `writes: ${JSON.stringify(writes.map((write) => write.url.split("/api")[1]))}`,
+  )
 
-  const orderWrite = writes.find((write) => write.url.endsWith('/order'));
+  const orderWrite = writes.find((write) =>
+    write.url.endsWith("/order"),
+  )
   check(
-    'and the order that follows leads with the promoted entry',
-    Boolean(orderWrite && JSON.parse(orderWrite.body).keys?.[0] === promotedKey),
-    `order was ${orderWrite ? JSON.stringify(JSON.parse(orderWrite.body).keys?.slice(0, 3)) : 'not written'}`,
-  );
+    "and the order that follows leads with the promoted entry",
+    Boolean(
+      orderWrite &&
+        JSON.parse(orderWrite.body).keys?.[0] ===
+          promotedKey,
+    ),
+    `order was ${orderWrite ? JSON.stringify(JSON.parse(orderWrite.body).keys?.slice(0, 3)) : "not written"}`,
+  )
 
   check(
-    'placement is written BEFORE the order',
-    Boolean(placementWrite && orderWrite)
-      && writes.indexOf(placementWrite!) < writes.indexOf(orderWrite!),
-    'a scan landing between the two would read a half-written file',
-  );
+    "placement is written BEFORE the order",
+    Boolean(placementWrite && orderWrite) &&
+      writes.indexOf(placementWrite!) <
+        writes.indexOf(orderWrite!),
+    "a scan landing between the two would read a half-written file",
+  )
 
   // WAIT for it, do not read it once.
   //
@@ -191,191 +270,282 @@ try {
     .waitForFunction(
       (key) =>
         !!document.querySelector(
-          `ul.grid[data-lane="priority"] li.tile[data-key="${(key as string).replace(/["\\]/g, '\\$&')}"]`,
+          `ul.grid[data-lane="priority"] li.tile[data-key="${(key as string).replace(/["\\]/g, "\\$&")}"]`,
         ),
       promotedKey,
       { timeout: 10000 },
     )
     .then(() => true)
-    .catch(() => false);
-  check('the tile is now in the Priority lane on screen', hasLanded, 'it snapped back');
+    .catch(() => false)
+  check(
+    "the tile is now in the Priority lane on screen",
+    hasLanded,
+    "it snapped back",
+  )
 
   // ── A drag that stays in the POOL writes nothing ────────────────────────────────────────
-  const poolA = await centreOf('#grid-pool li.tile .thumb');
-  const poolB = await centreOf('#grid-pool li.tile:nth-child(3) .thumb');
-  assert.ok(poolA && poolB, 'need two pool tiles');
+  const poolA = await centreOf("#grid-pool li.tile .thumb")
+  const poolB = await centreOf(
+    "#grid-pool li.tile:nth-child(3) .thumb",
+  )
+  assert.ok(poolA && poolB, "need two pool tiles")
 
-  writes.length = 0;
-  await dragTo(poolA, poolB);
+  writes.length = 0
+  await dragTo(poolA, poolB)
   check(
-    'a drag inside the pool saves nothing',
+    "a drag inside the pool saves nothing",
     writes.length === 0,
-    `wrote ${JSON.stringify(writes.map((write) => write.url.split('/api')[1]))} — the pool is shuffled at playback, so its order is not a thing to save`,
-  );
+    `wrote ${JSON.stringify(writes.map((write) => write.url.split("/api")[1]))} — the pool is shuffled at playback, so its order is not a thing to save`,
+  )
 
   // ── An ORDERED queue: the pool is the empty lane, and the drag down is a demote ─────────
-  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
-  await page.waitForTimeout(1500);
+  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#grid-priority li.tile", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(1500)
 
-  const poolStrip = await centreOf('ul.grid[data-lane="random"] .dropstrip');
-  const firstOrdered = await centreOf('#grid-priority li.tile .thumb');
-  assert.ok(poolStrip && firstOrdered, 'need a pool strip and an ordered tile');
+  const poolStrip = await centreOf(
+    'ul.grid[data-lane="random"] .dropstrip',
+  )
+  const firstOrdered = await centreOf(
+    "#grid-priority li.tile .thumb",
+  )
+  assert.ok(
+    poolStrip && firstOrdered,
+    "need a pool strip and an ordered tile",
+  )
 
-  const demotedKey = String(await page.evaluate(
-    `document.querySelector('#grid-priority li.tile').dataset.key`,
-  ));
+  const demotedKey = String(
+    await page.evaluate(
+      `document.querySelector('#grid-priority li.tile').dataset.key`,
+    ),
+  )
 
-  writes.length = 0;
-  await dragTo(firstOrdered, poolStrip);
+  writes.length = 0
+  await dragTo(firstOrdered, poolStrip)
 
-  const demote = writes.find((write) => write.url.includes('/placement'));
+  const demote = writes.find((write) =>
+    write.url.includes("/placement"),
+  )
   check(
-    'a drag into the pool PATCHes placement: random',
-    Boolean(demote && JSON.parse(demote.body).placement === 'random'),
-    `writes: ${JSON.stringify(writes.map((write) => `${write.url.split('/api')[1]} ${write.body}`))}`,
-  );
+    "a drag into the pool PATCHes placement: random",
+    Boolean(
+      demote &&
+        JSON.parse(demote.body).placement === "random",
+    ),
+    `writes: ${JSON.stringify(writes.map((write) => `${write.url.split("/api")[1]} ${write.body}`))}`,
+  )
   check(
-    'and it names the entry that was dragged',
-    Boolean(demote?.url.includes(encodeURIComponent(demotedKey))),
-    `patched ${demote?.url.split('/items/')[1]}, dragged ${demotedKey}`,
-  );
+    "and it names the entry that was dragged",
+    Boolean(
+      demote?.url.includes(encodeURIComponent(demotedKey)),
+    ),
+    `patched ${demote?.url.split("/items/")[1]}, dragged ${demotedKey}`,
+  )
 
   // ── TOUCH: the number owns its hold, and a poster hold always becomes a drag ───────────
-  await page.setViewportSize({ width: 390, height: 640 });
-  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#grid-priority li.tile .priority-position', { timeout: 30000 });
-  await page.waitForTimeout(1000);
+  await page.setViewportSize({ width: 390, height: 640 })
+  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(
+    "#grid-priority li.tile .priority-position",
+    { timeout: 30000 },
+  )
+  await page.waitForTimeout(1000)
 
   await page.evaluate(() => {
-    const input = document.querySelector('#grid-priority .priority-position');
-    input?.dispatchEvent(new MouseEvent('contextmenu', {
-      bubbles: true,
-      button: 2,
-      cancelable: true,
-    }));
-  });
+    const input = document.querySelector(
+      "#grid-priority .priority-position",
+    )
+    input?.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        button: 2,
+        cancelable: true,
+      }),
+    )
+  })
   check(
-    'a hold on the Priority number does not open the tile menu',
-    !await page.locator('#tilemenu:not([hidden])').count(),
-    'the number press passed through to the poster action',
-  );
+    "a hold on the Priority number does not open the tile menu",
+    !(await page
+      .locator("#tilemenu:not([hidden])")
+      .count()),
+    "the number press passed through to the poster action",
+  )
 
-  const main = page.locator('main');
+  const main = page.locator("main")
   await main.evaluate((element) => {
-    element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
-  });
-  const touchTiles = page.locator('#grid-priority li.tile .thumb');
-  const mainBox = await main.boundingBox();
-  assert.ok(mainBox, 'need the Main scroll region');
-  let visibleTileIndex = -1;
-  for (let index = 0; index < await touchTiles.count(); index += 1) {
-    const box = await touchTiles.nth(index).boundingBox();
-    if (box && box.y >= mainBox.y
-      && box.y + box.height <= mainBox.y + mainBox.height) {
-      visibleTileIndex = index;
-      break;
+    element.scrollTop =
+      (element.scrollHeight - element.clientHeight) / 2
+  })
+  const touchTiles = page.locator(
+    "#grid-priority li.tile .thumb",
+  )
+  const mainBox = await main.boundingBox()
+  assert.ok(mainBox, "need the Main scroll region")
+  let visibleTileIndex = -1
+  for (
+    let index = 0;
+    index < (await touchTiles.count());
+    index += 1
+  ) {
+    const box = await touchTiles.nth(index).boundingBox()
+    if (
+      box &&
+      box.y >= mainBox.y &&
+      box.y + box.height <= mainBox.y + mainBox.height
+    ) {
+      visibleTileIndex = index
+      break
     }
   }
-  assert.ok(visibleTileIndex >= 0, 'need a Priority poster inside the Main viewport');
-  const touchTile = touchTiles.nth(visibleTileIndex);
-  const touchBox = await touchTile.boundingBox();
-  assert.ok(touchBox, 'need a visible Priority poster for the touch gesture');
+  assert.ok(
+    visibleTileIndex >= 0,
+    "need a Priority poster inside the Main viewport",
+  )
+  const touchTile = touchTiles.nth(visibleTileIndex)
+  const touchBox = await touchTile.boundingBox()
+  assert.ok(
+    touchBox,
+    "need a visible Priority poster for the touch gesture",
+  )
   const touchStart = {
     x: touchBox.x + touchBox.width / 2,
     y: touchBox.y + touchBox.height / 2,
-  };
+  }
 
   await touchTile.evaluate((element, start) => {
-    element.dispatchEvent(new PointerEvent('pointerdown', {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: start.x,
-      clientY: start.y,
-      pointerId: 41,
-      pointerType: 'touch',
-    }));
-  }, touchStart);
-  await page.waitForTimeout(250);
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        clientX: start.x,
+        clientY: start.y,
+        pointerId: 41,
+        pointerType: "touch",
+      }),
+    )
+  }, touchStart)
+  await page.waitForTimeout(250)
 
   check(
-    'a touch hold picks up the tile without a just-right movement window',
-    await touchTile.evaluate((element) => element.closest('li.tile')?.classList.contains('dragging') === true),
-    'the tile was not dragging after the 200 ms hold',
-  );
+    "a touch hold picks up the tile without a just-right movement window",
+    await touchTile.evaluate(
+      (element) =>
+        element
+          .closest("li.tile")
+          ?.classList.contains("dragging") === true,
+    ),
+    "the tile was not dragging after the 200 ms hold",
+  )
 
   await touchTile.evaluate((element) => {
-    element.dispatchEvent(new MouseEvent('contextmenu', {
-      bubbles: true,
-      button: 2,
-      cancelable: true,
-    }));
-  });
+    element.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        button: 2,
+        cancelable: true,
+      }),
+    )
+  })
   check(
-    'the later touch contextmenu cannot replace an armed drag',
-    !await page.locator('#tilemenu:not([hidden])').count()
-      && await touchTile.evaluate((element) => element.closest('li.tile')?.classList.contains('dragging') === true),
-    'the Play / lane menu opened over the drag',
-  );
+    "the later touch contextmenu cannot replace an armed drag",
+    !(await page
+      .locator("#tilemenu:not([hidden])")
+      .count()) &&
+      (await touchTile.evaluate(
+        (element) =>
+          element
+            .closest("li.tile")
+            ?.classList.contains("dragging") === true,
+      )),
+    "the Play / lane menu opened over the drag",
+  )
 
-  const scrollBefore = await main.evaluate((element) => element.scrollTop);
-  const scrollOwnerState = await touchTile.evaluate((element) => {
-    const owners = [];
-    let ancestor = element.parentElement;
+  const scrollBefore = await main.evaluate(
+    (element) => element.scrollTop,
+  )
+  const scrollOwnerState = await touchTile.evaluate(
+    (element) => {
+      const owners = []
+      let ancestor = element.parentElement
 
-    while (ancestor) {
-      const overflowY = getComputedStyle(ancestor).overflowY;
-      if (overflowY === 'auto' || overflowY === 'scroll') {
-        owners.push({
-          className: ancestor.className,
-          clientHeight: ancestor.clientHeight,
-          scrollHeight: ancestor.scrollHeight,
-          scrollTop: ancestor.scrollTop,
-          tagName: ancestor.tagName,
-        });
+      while (ancestor) {
+        const overflowY =
+          getComputedStyle(ancestor).overflowY
+        if (
+          overflowY === "auto" ||
+          overflowY === "scroll"
+        ) {
+          owners.push({
+            className: ancestor.className,
+            clientHeight: ancestor.clientHeight,
+            scrollHeight: ancestor.scrollHeight,
+            scrollTop: ancestor.scrollTop,
+            tagName: ancestor.tagName,
+          })
+        }
+        ancestor = ancestor.parentElement
       }
-      ancestor = ancestor.parentElement;
-    }
 
-    return owners;
-  });
-  await page.evaluate(({ x, y }) => {
-    window.dispatchEvent(new PointerEvent('pointermove', {
-      bubbles: true,
-      button: 0,
-      buttons: 1,
-      clientX: x,
-      clientY: y,
-      pointerId: 41,
-      pointerType: 'touch',
-    }));
-  }, { x: touchStart.x, y: 638 });
-  await page.waitForTimeout(500);
-  const scrollAfter = await main.evaluate((element) => element.scrollTop);
+      return owners
+    },
+  )
+  await page.evaluate(
+    ({ x, y }) => {
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          clientX: x,
+          clientY: y,
+          pointerId: 41,
+          pointerType: "touch",
+        }),
+      )
+    },
+    { x: touchStart.x, y: 638 },
+  )
+  await page.waitForTimeout(500)
+  const scrollAfter = await main.evaluate(
+    (element) => element.scrollTop,
+  )
   check(
-    'holding a dragged tile at the viewport edge scrolls to later items',
+    "holding a dragged tile at the viewport edge scrolls to later items",
     scrollAfter > scrollBefore,
     `scroll stayed at ${scrollBefore} (after ${scrollAfter}); owners ${JSON.stringify(scrollOwnerState)}`,
-  );
+  )
 
-  await page.evaluate(({ x, y }) => {
-    window.dispatchEvent(new PointerEvent('pointerup', {
-      bubbles: true,
-      button: 0,
-      buttons: 0,
-      clientX: x,
-      clientY: y,
-      pointerId: 41,
-      pointerType: 'touch',
-    }));
-  }, { x: touchStart.x, y: 638 });
-  await page.waitForTimeout(500);
+  await page.evaluate(
+    ({ x, y }) => {
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          button: 0,
+          buttons: 0,
+          clientX: x,
+          clientY: y,
+          pointerId: 41,
+          pointerType: "touch",
+        }),
+      )
+    },
+    { x: touchStart.x, y: 638 },
+  )
+  await page.waitForTimeout(500)
 
-  await browser.close();
+  await browser.close()
 } finally {
-  killServer(srv);
+  killServer(srv)
 }
 
-console.log(failed ? `\n${failed} FAILURE(S)` : '\nALL PASS');
-process.exit(failed ? 1 : 0);
+console.log(
+  failed ? `\n${failed} FAILURE(S)` : "\nALL PASS",
+)
+process.exit(failed ? 1 : 0)

@@ -25,40 +25,73 @@
 // Plex is unreachable on purpose (a closed port), so nothing here talks to the household.
 //
 // Run:  server/node_modules/.bin/tsx e2e/people-test.ts   (repo root; non-zero on failure)
-import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import type { ChildProcess } from 'node:child_process';
+import { promises as fs } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { DatabaseSync } from "node:sqlite"
+import type { ChildProcess } from "node:child_process"
 
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-let failures = 0;
-const ok = (name: string, isPassing: boolean, extra = ''): void => {
-  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!isPassing) failures += 1;
-};
+let failures = 0
+const ok = (
+  name: string,
+  isPassing: boolean,
+  extra = "",
+): void => {
+  console.log(
+    `${isPassing ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`,
+  )
+  if (!isPassing) failures += 1
+}
 
 /** Compare by value. ARRAY order is a contract here and is compared strictly — it is shelf
  * order, registry order and roster order. OBJECT key order is not, so keys are sorted first;
  * the maps below are keyed by set id and would otherwise fail on the order they were built in. */
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
-    item && typeof item === 'object' && !Array.isArray(item)
-      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([key], [right]) => (key < right ? -1 : 1)))
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(
+            item as Record<string, unknown>,
+          ).sort(([key], [right]) =>
+            key < right ? -1 : 1,
+          ),
+        )
       : item,
-  );
+  )
 
-const same = (name: string, actual: unknown, expected: unknown): void =>
-  ok(name, stable(actual) === stable(expected), `got ${JSON.stringify(actual)}`);
+const same = (
+  name: string,
+  actual: unknown,
+  expected: unknown,
+): void =>
+  ok(
+    name,
+    stable(actual) === stable(expected),
+    `got ${JSON.stringify(actual)}`,
+  )
 
 // ── the fixture ───────────────────────────────────────────────────────────────────────── //
 //
 // The existing e2e cast — Bob, Alice, Carol, Dave, Erin. New PEOPLE fixtures are Ada, Grace
 // and Linus; the groups and queues here are the old cast and are not renamed.
 
-const SET_IDS = ['bob_movies', 'bob_alice_anime', 'carol_shows', 'dave_reading'] as const;
-const GROUP_IDS = ['bob', 'bob-alice', 'carol', 'dave'] as const;
+const SET_IDS = [
+  "bob_movies",
+  "bob_alice_anime",
+  "carol_shows",
+  "dave_reading",
+] as const
+const GROUP_IDS = [
+  "bob",
+  "bob-alice",
+  "carol",
+  "dave",
+] as const
 
 const SETS = `sets:
 - id: bob_movies
@@ -86,13 +119,13 @@ const SETS = `sets:
   kind: manga
   source: queue
   sections: []
-`;
+`
 
 const QUEUES = `bob_movies:
 - {ratingKey: "1", title: "A Movie (2001)"}
 bob_alice_anime: []
 dave_reading: []
-`;
+`
 
 // `bob-alice` claims its set EXPLICITLY; `bob` claims by ACCOUNT. Both halves of the
 // membership rule are therefore live in this fixture, which is what makes "the profile gate
@@ -113,7 +146,7 @@ const GROUPS = `groups:
 - id: dave
   label: Dave
   sets: [dave_reading]
-`;
+`
 
 /** The mapping the tool would write: two people, one attached to an existing group. `Erin` is
  * a person nobody's group names — the ordinary case, and the one that merges nothing. */
@@ -139,154 +172,258 @@ groups:
 - id: bob
   label: Bob
   people: [bob]
-`;
+`
 
 interface Capture {
-  setIds: string[];
-  groupIds: string[];
-  bobSetIds: string[];
-  bobAliceSetIds: string[];
-  requiresProfile: Record<string, string | null>;
-  groupPageStatus: Record<string, number>;
-  storePath: string;
+  setIds: string[]
+  groupIds: string[]
+  bobSetIds: string[]
+  bobAliceSetIds: string[]
+  requiresProfile: Record<string, string | null>
+  groupPageStatus: Record<string, number>
+  storePath: string
 }
 
-async function boot(label: string, port: number, isConfirmed: boolean): Promise<Capture> {
-  const dir = await fs.mkdtemp(path.join(tmpdir(), `qp-people-${label}-`));
-  await fs.writeFile(path.join(dir, 'sets.yaml'), SETS);
-  await fs.writeFile(path.join(dir, 'queues.yaml'), QUEUES);
-  await fs.writeFile(path.join(dir, 'groups.yaml'), GROUPS);
-  await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
+async function boot(
+  label: string,
+  port: number,
+  isConfirmed: boolean,
+): Promise<Capture> {
+  const dir = await fs.mkdtemp(
+    path.join(tmpdir(), `qp-people-${label}-`),
+  )
+  await fs.writeFile(path.join(dir, "sets.yaml"), SETS)
+  await fs.writeFile(path.join(dir, "queues.yaml"), QUEUES)
+  await fs.writeFile(path.join(dir, "groups.yaml"), GROUPS)
+  await fs.writeFile(
+    path.join(dir, "pending.yaml"),
+    "seen_through: 0\n",
+  )
   // The proposal filename, not the confirmed one — the tool writes this, and confirming is
   // meant to be ONE edit rather than an edit plus a rename.
   await fs.writeFile(
-    path.join(dir, 'people-mapping-proposal.yaml'),
-    `${isConfirmed ? 'confirmed: true\n' : '# confirmed: true\n'}${MAPPING}`,
-  );
+    path.join(dir, "people-mapping-proposal.yaml"),
+    `${isConfirmed ? "confirmed: true\n" : "# confirmed: true\n"}${MAPPING}`,
+  )
 
   const child: ChildProcess = spawnServer({
     env: {
       ...process.env,
-      CACHE_PATH: path.join(dir, 'cache.sqlite'),
-      GROUPS_PATH: path.join(dir, 'groups.yaml'),
-      HISTORY_PATH: path.join(dir, '.history.json'),
-      MQTT_HOST: '',
-      NODE_TLS_REJECT_UNAUTHORIZED: '0',
-      PENDING_PATH: path.join(dir, 'pending.yaml'),
-      PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-      PLEX_TOKEN: '',
-      QUEUES_PATH: path.join(dir, 'queues.yaml'),
-      SETS_PATH: path.join(dir, 'sets.yaml'),
-      STORE_BACKEND: 'sqlite',
+      CACHE_PATH: path.join(dir, "cache.sqlite"),
+      GROUPS_PATH: path.join(dir, "groups.yaml"),
+      HISTORY_PATH: path.join(dir, ".history.json"),
+      MQTT_HOST: "",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
+      PENDING_PATH: path.join(dir, "pending.yaml"),
+      PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+      PLEX_TOKEN: "",
+      QUEUES_PATH: path.join(dir, "queues.yaml"),
+      SETS_PATH: path.join(dir, "sets.yaml"),
+      STORE_BACKEND: "sqlite",
       WEB_PORT: String(port),
     },
-    stdio: 'ignore',
-  });
+    stdio: "ignore",
+  })
 
   try {
     for (let attempt = 0; attempt < 80; attempt += 1) {
       try {
-        await fetch(`http://localhost:${port}/api/history`);
-        break;
+        await fetch(`http://localhost:${port}/api/history`)
+        break
       } catch {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 200),
+        )
       }
     }
 
-    const registry = (await (await fetch(`http://localhost:${port}/api/sets`)).json()) as {
-      sets: { id: string; requires_profile?: string }[];
-    };
-    const groups = (await (await fetch(`http://localhost:${port}/api/groups`)).json()) as {
-      groups: { id: string; setIds: string[] }[];
-    };
-
-    const groupPageStatus: Record<string, number> = {};
-    for (const id of GROUP_IDS) {
-      groupPageStatus[id] = (await fetch(`http://localhost:${port}/g/${id}`)).status;
+    const registry = (await (
+      await fetch(`http://localhost:${port}/api/sets`)
+    ).json()) as {
+      sets: { id: string; requires_profile?: string }[]
+    }
+    const groups = (await (
+      await fetch(`http://localhost:${port}/api/groups`)
+    ).json()) as {
+      groups: { id: string; setIds: string[] }[]
     }
 
-    const byId = new Map(groups.groups.map((group) => [group.id, group]));
+    const groupPageStatus: Record<string, number> = {}
+    for (const id of GROUP_IDS) {
+      groupPageStatus[id] = (
+        await fetch(`http://localhost:${port}/g/${id}`)
+      ).status
+    }
+
+    const byId = new Map(
+      groups.groups.map((group) => [group.id, group]),
+    )
     return {
-      bobAliceSetIds: byId.get('bob-alice')?.setIds ?? [],
-      bobSetIds: byId.get('bob')?.setIds ?? [],
+      bobAliceSetIds: byId.get("bob-alice")?.setIds ?? [],
+      bobSetIds: byId.get("bob")?.setIds ?? [],
       groupIds: groups.groups.map((group) => group.id),
       groupPageStatus,
       requiresProfile: Object.fromEntries(
-        registry.sets.map((set) => [set.id, set.requires_profile ?? null]),
+        registry.sets.map((set) => [
+          set.id,
+          set.requires_profile ?? null,
+        ]),
       ),
       setIds: registry.sets.map((set) => set.id),
-      storePath: path.join(dir, 'queues.queuepilot.sqlite'),
-    };
+      storePath: path.join(dir, "queues.queuepilot.sqlite"),
+    }
   } finally {
     await new Promise((resolve) => {
-      child.once('exit', resolve);
-      killServer(child);
-    });
+      child.once("exit", resolve)
+      killServer(child)
+    })
   }
 }
 
 /** The people rows the server left behind, read straight off the store file. */
-function peopleIn(storePath: string): { people: string[]; roster: Record<string, string[]> } {
-  const db = new DatabaseSync(storePath, { readOnly: true });
+function peopleIn(storePath: string): {
+  people: string[]
+  roster: Record<string, string[]>
+} {
+  const db = new DatabaseSync(storePath, { readOnly: true })
   try {
-    const people = (db.prepare('SELECT id FROM people ORDER BY position, id').all() as { id: string }[])
-      .map((row) => row.id);
-    const roster: Record<string, string[]> = {};
+    const people = (
+      db
+        .prepare(
+          "SELECT id FROM people ORDER BY position, id",
+        )
+        .all() as { id: string }[]
+    ).map((row) => row.id)
+    const roster: Record<string, string[]> = {}
     for (const row of db
-      .prepare('SELECT group_id, person_id FROM group_people ORDER BY group_id, position')
+      .prepare(
+        "SELECT group_id, person_id FROM group_people ORDER BY group_id, position",
+      )
       .all() as { group_id: string; person_id: string }[]) {
-      roster[row.group_id] = [...(roster[row.group_id] ?? []), row.person_id];
+      roster[row.group_id] = [
+        ...(roster[row.group_id] ?? []),
+        row.person_id,
+      ]
     }
-    return { people, roster };
+    return { people, roster }
   } finally {
-    db.close();
+    db.close()
   }
 }
 
 // ── 1. an UNCONFIRMED mapping file changes nothing ───────────────────────────────────── //
 
-const before = await boot('unconfirmed', 18801, false);
+const before = await boot("unconfirmed", 18801, false)
 
-same('the set ids are exactly the registry, in file order', before.setIds, [...SET_IDS]);
-same('the group ids are exactly the file, `all` first', before.groupIds, ['all', ...GROUP_IDS]);
-same('every `requires_profile` survived verbatim', before.requiresProfile, {
-  bob_alice_anime: 'bob_plex',
-  bob_movies: 'bob_plex',
-  carol_shows: null,
-  dave_reading: null,
-});
+same(
+  "the set ids are exactly the registry, in file order",
+  before.setIds,
+  [...SET_IDS],
+)
+same(
+  "the group ids are exactly the file, `all` first",
+  before.groupIds,
+  ["all", ...GROUP_IDS],
+)
+same(
+  "every `requires_profile` survived verbatim",
+  before.requiresProfile,
+  {
+    bob_alice_anime: "bob_plex",
+    bob_movies: "bob_plex",
+    carol_shows: null,
+    dave_reading: null,
+  },
+)
 // The profile gate as MEMBERSHIP: `bob_movies` names no group, plays as `bob_plex`, and
 // therefore derives into the group that claims that account. `bob_alice_anime` plays as the
 // same account but is NAMED by `bob-alice`, so explicit beats derived and it does not leak.
-same('the profile gate still resolves — a gated set derives into its account holder',
-  before.bobSetIds, ['bob_movies']);
-same('…and an explicitly claimed set stays where it was claimed',
-  before.bobAliceSetIds, ['bob_alice_anime']);
-same('every `/g/<id>` still opens', before.groupPageStatus, {
-  bob: 200, 'bob-alice': 200, carol: 200, dave: 200,
-});
+same(
+  "the profile gate still resolves — a gated set derives into its account holder",
+  before.bobSetIds,
+  ["bob_movies"],
+)
+same(
+  "…and an explicitly claimed set stays where it was claimed",
+  before.bobAliceSetIds,
+  ["bob_alice_anime"],
+)
+same(
+  "every `/g/<id>` still opens",
+  before.groupPageStatus,
+  {
+    bob: 200,
+    "bob-alice": 200,
+    carol: 200,
+    dave: 200,
+  },
+)
 
-const beforeRows = peopleIn(before.storePath);
-same('an UNCONFIRMED mapping imported NOBODY', beforeRows.people, []);
-same('…and attached nobody to a group', beforeRows.roster, {});
+const beforeRows = peopleIn(before.storePath)
+same(
+  "an UNCONFIRMED mapping imported NOBODY",
+  beforeRows.people,
+  [],
+)
+same(
+  "…and attached nobody to a group",
+  beforeRows.roster,
+  {},
+)
 
 // ── 2. the same file, confirmed ───────────────────────────────────────────────────────── //
 
-const after = await boot('confirmed', 18802, true);
+const after = await boot("confirmed", 18802, true)
 
-const afterRows = peopleIn(after.storePath);
-same('a CONFIRMED mapping imports the people it names', afterRows.people, ['bob', 'erin']);
-same('…and the group it names becomes a saved set of those people', afterRows.roster, {
-  bob: ['bob'],
-});
+const afterRows = peopleIn(after.storePath)
+same(
+  "a CONFIRMED mapping imports the people it names",
+  afterRows.people,
+  ["bob", "erin"],
+)
+same(
+  "…and the group it names becomes a saved set of those people",
+  afterRows.roster,
+  {
+    bob: ["bob"],
+  },
+)
 
 // The whole point of the package, and the reason the ids are compared as strings.
-same('the set ids are unchanged by the people import', after.setIds, before.setIds);
-same('the group ids are unchanged by the people import', after.groupIds, before.groupIds);
-same('the profile gate is unchanged by the people import', after.requiresProfile, before.requiresProfile);
-same('group membership is unchanged by the people import', after.bobSetIds, before.bobSetIds);
-same('…on the explicit side too', after.bobAliceSetIds, before.bobAliceSetIds);
-same('every `/g/<id>` still opens after the import', after.groupPageStatus, before.groupPageStatus);
+same(
+  "the set ids are unchanged by the people import",
+  after.setIds,
+  before.setIds,
+)
+same(
+  "the group ids are unchanged by the people import",
+  after.groupIds,
+  before.groupIds,
+)
+same(
+  "the profile gate is unchanged by the people import",
+  after.requiresProfile,
+  before.requiresProfile,
+)
+same(
+  "group membership is unchanged by the people import",
+  after.bobSetIds,
+  before.bobSetIds,
+)
+same(
+  "…on the explicit side too",
+  after.bobAliceSetIds,
+  before.bobAliceSetIds,
+)
+same(
+  "every `/g/<id>` still opens after the import",
+  after.groupPageStatus,
+  before.groupPageStatus,
+)
 
-console.log(failures ? `\n${failures} FAILED` : '\nall people checks passed');
-process.exit(failures ? 1 : 0);
+console.log(
+  failures
+    ? `\n${failures} FAILED`
+    : "\nall people checks passed",
+)
+process.exit(failures ? 1 : 0)

@@ -33,57 +33,82 @@
 //
 // Each shot waits for a marker that proves ITS view painted with data. A marker that never
 // appears FAILS the run: a shot of a spinner would become the baseline and hide the break.
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 
-import { startBoardGameServer, stopBoardGameServer } from './board-game-play-harness.js';
-import { startFixtureServer } from './fixture-server.js';
-import { chromium, type Browser, type Page, type Request } from './playwright.js';
-import { chooseVrtSharedMemory } from './sharedMemory.js';
-import { killServer, REPO_ROOT } from './stubs/server-process.mjs';
-import { startTonightServer, stopTonightServer } from './tonight-harness.js';
+import {
+  startBoardGameServer,
+  stopBoardGameServer,
+} from "./board-game-play-harness.js"
+import { startFixtureServer } from "./fixture-server.js"
+import {
+  chromium,
+  type Browser,
+  type Page,
+  type Request,
+} from "./playwright.js"
+import { chooseVrtSharedMemory } from "./sharedMemory.js"
+import {
+  killServer,
+  REPO_ROOT,
+} from "./stubs/server-process.mjs"
+import {
+  startTonightServer,
+  stopTonightServer,
+} from "./tonight-harness.js"
 
-const FIXED_NOW = '2026-06-15T18:00:00.000Z';
-const RANDOM_SEED = 20260615;
+const FIXED_NOW = "2026-06-15T18:00:00.000Z"
+const RANDOM_SEED = 20260615
 
-const OUT = path.resolve(process.env.VRT_ACTUAL_DIR || path.join(REPO_ROOT, '.vrt-actual'));
+const OUT = path.resolve(
+  process.env.VRT_ACTUAL_DIR ||
+    path.join(REPO_ROOT, ".vrt-actual"),
+)
 
 // Private ports, away from every other harness's.
-const LANDING_PORT = 18951;
-const TONIGHT_PORT = 18952;
-const BOARD_GAME_PORT = 18953;
-const CALENDAR_PORT = 18954;
+const LANDING_PORT = 18951
+const TONIGHT_PORT = 18952
+const BOARD_GAME_PORT = 18953
+const CALENDAR_PORT = 18954
 
 const VIEWS = {
   // The Wide View: the width the landing fixture was drawn for.
-  wide: { hasTouch: false, isMobile: false, viewport: { height: 1000, width: 1400 } },
+  wide: {
+    hasTouch: false,
+    isMobile: false,
+    viewport: { height: 1000, width: 1400 },
+  },
   // The Narrow View: 390px is the reported phone width `narrow-scroll-test` also walks.
   // `isMobile` is what makes Chromium honor `<meta name="viewport">`, so this is the layout a
   // phone really gets rather than a narrow desktop window.
-  narrow: { hasTouch: true, isMobile: true, viewport: { height: 844, width: 390 } },
-} as const;
+  narrow: {
+    hasTouch: true,
+    isMobile: true,
+    viewport: { height: 844, width: 390 },
+  },
+} as const
 
-const SCHEMES = ['light', 'dark'] as const;
+const SCHEMES = ["light", "dark"] as const
 
 interface Screen {
   /** The file-name stem. Keep it stable: a renamed shot is a deleted shot plus a new one. */
-  name: string;
-  path: string;
+  name: string
+  path: string
   /** The view's own marker. It must prove the DATA painted, not just the shell. */
-  ready: string;
+  ready: string
 }
 
 // Every harness spreads `process.env` into its server's env, so these reach all four servers.
-process.env.TZ = 'UTC';
-process.env.VRT_FIXED_NOW = FIXED_NOW;
-process.env.VRT_RANDOM_SEED = String(RANDOM_SEED);
+process.env.TZ = "UTC"
+process.env.VRT_FIXED_NOW = FIXED_NOW
+process.env.VRT_RANDOM_SEED = String(RANDOM_SEED)
 process.env.NODE_OPTIONS = [
   process.env.NODE_OPTIONS,
-  `--import=${pathToFileURL(path.join(REPO_ROOT, 'e2e', 'stubs', 'fixed-clock.mjs')).href}`,
+  `--import=${pathToFileURL(path.join(REPO_ROOT, "e2e", "stubs", "fixed-clock.mjs")).href}`,
 ]
   .filter(Boolean)
-  .join(' ');
+  .join(" ")
 
 /**
  * The page is at rest when the store's load has FINISHED and its toast has gone. Each step is
@@ -100,46 +125,65 @@ process.env.NODE_OPTIONS = [
  * never finishes, so it is not counted.
  */
 const hasToastCleared = () => {
-  const status = document.querySelector('#status');
-  return (!status || (status.textContent ?? '') === '') && !document.querySelector('#revalidating');
-};
+  const status = document.querySelector("#status")
+  return (
+    (!status || (status.textContent ?? "") === "") &&
+    !document.querySelector("#revalidating")
+  )
+}
 
 function trackApi(page: Page) {
-  const inFlight = new Set<unknown>();
-  let hasRevalidated = false;
-  let lastChange = Date.now();
-  const isCounted = (url: string) => url.includes('/api/') && !url.includes('/api/events');
+  const inFlight = new Set<unknown>()
+  let hasRevalidated = false
+  let lastChange = Date.now()
+  const isCounted = (url: string) =>
+    url.includes("/api/") && !url.includes("/api/events")
   const done = (request: Request) => {
-    if (!isCounted(request.url())) return;
-    inFlight.delete(request);
-    lastChange = Date.now();
-    if (request.url().includes('/api/queues?fresh=1')) hasRevalidated = true;
-  };
-  page.on('request', (request) => {
-    if (!isCounted(request.url())) return;
-    inFlight.add(request);
-    lastChange = Date.now();
-  });
-  page.on('requestfinished', done);
-  page.on('requestfailed', done);
+    if (!isCounted(request.url())) return
+    inFlight.delete(request)
+    lastChange = Date.now()
+    if (request.url().includes("/api/queues?fresh=1"))
+      hasRevalidated = true
+  }
+  page.on("request", (request) => {
+    if (!isCounted(request.url())) return
+    inFlight.add(request)
+    lastChange = Date.now()
+  })
+  page.on("requestfinished", done)
+  page.on("requestfailed", done)
 
   return {
     reset() {
-      inFlight.clear();
-      hasRevalidated = false;
-      lastChange = Date.now();
+      inFlight.clear()
+      hasRevalidated = false
+      lastChange = Date.now()
     },
     async settle(label: string) {
-      const deadline = Date.now() + 90000;
-      while (!(hasRevalidated && inFlight.size === 0 && Date.now() - lastChange > 750)) {
+      const deadline = Date.now() + 90000
+      while (
+        !(
+          hasRevalidated &&
+          inFlight.size === 0 &&
+          Date.now() - lastChange > 750
+        )
+      ) {
         if (Date.now() > deadline) {
-          throw new Error(`vrt-capture: ${label} never settled (revalidated=${hasRevalidated}, in flight=${inFlight.size})`);
+          throw new Error(
+            `vrt-capture: ${label} never settled (revalidated=${hasRevalidated}, in flight=${inFlight.size})`,
+          )
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 100),
+        )
       }
-      await page.waitForFunction(hasToastCleared, undefined, { timeout: 30000 });
+      await page.waitForFunction(
+        hasToastCleared,
+        undefined,
+        { timeout: 30000 },
+      )
     },
-  };
+  }
 }
 
 async function shootOne(
@@ -153,51 +197,67 @@ async function shootOne(
     ...VIEWS[viewName],
     colorScheme: scheme,
     deviceScaleFactor: 1,
-    locale: 'en-US',
-    reducedMotion: 'reduce',
-    timezoneId: 'UTC',
-  });
-  await context.clock.setFixedTime(FIXED_NOW);
+    locale: "en-US",
+    reducedMotion: "reduce",
+    timezoneId: "UTC",
+  })
+  await context.clock.setFixedTime(FIXED_NOW)
   await context.addInitScript(
     ({ scheme: chosen, seed: initial }) => {
       try {
-        localStorage.setItem('charcuterie-scheme', chosen);
+        localStorage.setItem("charcuterie-scheme", chosen)
       } catch {
         /* no storage — the context's colorScheme still carries it */
       }
-      let seed = initial >>> 0;
+      let seed = initial >>> 0
       Math.random = () => {
-        seed = (seed + 0x6d2b79f5) >>> 0;
-        let mixed = seed;
-        mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
-        mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
-        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
-      };
+        seed = (seed + 0x6d2b79f5) >>> 0
+        let mixed = seed
+        mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1)
+        mixed ^=
+          mixed +
+          Math.imul(mixed ^ (mixed >>> 7), mixed | 61)
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296
+      }
     },
     { scheme, seed: RANDOM_SEED },
-  );
-  const page = await context.newPage();
-  const api = trackApi(page);
+  )
+  const page = await context.newPage()
+  const api = trackApi(page)
 
   try {
     for (const screen of screens) {
-      api.reset();
-      await page.goto(`${base}${screen.path}`, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector(screen.ready, { state: 'visible', timeout: 30000 });
-      await api.settle(`${screen.name}--${viewName}--${scheme}`);
+      api.reset()
+      await page.goto(`${base}${screen.path}`, {
+        waitUntil: "domcontentloaded",
+      })
+      await page.waitForSelector(screen.ready, {
+        state: "visible",
+        timeout: 30000,
+      })
+      await api.settle(
+        `${screen.name}--${viewName}--${scheme}`,
+      )
       // Fonts, then every image to a final state. A poster whose request fails is `complete`
       // too, and that is the settled state here: Plex is a closed port.
       await page.evaluate(
         'Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.complete ? null : new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))])',
-      );
+      )
       // The header's ResizeObserver and the view swap settle in the frames after the marker.
-      await page.waitForTimeout(500);
-      const file = path.join(OUT, `${screen.name}--${viewName}--${scheme}.png`);
-      await page.screenshot({ animations: 'disabled', caret: 'hide', path: file });
-      console.log('wrote', path.basename(file));
+      await page.waitForTimeout(500)
+      const file = path.join(
+        OUT,
+        `${screen.name}--${viewName}--${scheme}.png`,
+      )
+      await page.screenshot({
+        animations: "disabled",
+        caret: "hide",
+        path: file,
+      })
+      console.log("wrote", path.basename(file))
     }
   } finally {
-    await context.close();
+    await context.close()
   }
 }
 
@@ -206,86 +266,121 @@ async function shootOne(
  * about eleven seconds on every page, so running them one after another would take four times
  * as long for the same pictures. The server is read-only for every screen here.
  */
-async function shoot(browser: Browser, base: string, screens: Screen[]) {
-  const views = Object.keys(VIEWS) as (keyof typeof VIEWS)[];
+async function shoot(
+  browser: Browser,
+  base: string,
+  screens: Screen[],
+) {
+  const views = Object.keys(VIEWS) as (keyof typeof VIEWS)[]
   await Promise.all(
     views.flatMap((viewName) =>
-      SCHEMES.map((scheme) => shootOne(browser, base, screens, viewName, scheme)),
+      SCHEMES.map((scheme) =>
+        shootOne(browser, base, screens, viewName, scheme),
+      ),
     ),
-  );
+  )
 }
 
-await fs.rm(OUT, { force: true, recursive: true });
-await fs.mkdir(OUT, { recursive: true });
+await fs.rm(OUT, { force: true, recursive: true })
+await fs.mkdir(OUT, { recursive: true })
 
-const stops: (() => void)[] = [];
+const stops: (() => void)[] = []
 // Keep Chromium's shared memory in RAM when the runner's `/dev/shm` has room (see
 // `sharedMemory.ts`); otherwise Playwright's default writes it to temp files on disk.
-const browser = await chromium.launch({ ignoreDefaultArgs: await chooseVrtSharedMemory() });
+const browser = await chromium.launch({
+  ignoreDefaultArgs: await chooseVrtSharedMemory(),
+})
 
 try {
   const landing = await startFixtureServer(LANDING_PORT, {
-    groups: 'landing.groups.yaml',
-    people: 'landing.people-mapping.yaml',
-    queues: 'landing.queues.yaml',
-    sets: 'landing.sets.yaml',
-  });
-  stops.push(() => killServer(landing.child));
+    groups: "landing.groups.yaml",
+    people: "landing.people-mapping.yaml",
+    queues: "landing.queues.yaml",
+    sets: "landing.sets.yaml",
+  })
+  stops.push(() => killServer(landing.child))
   await shoot(browser, landing.base, [
     {
-      name: 'home',
-      path: '/',
-      ready: '#mode-landing:not([hidden]) [role="group"][aria-label="Start something"]',
+      name: "home",
+      path: "/",
+      ready:
+        '#mode-landing:not([hidden]) [role="group"][aria-label="Start something"]',
     },
-    { name: 'overview', path: '/overview', ready: '#play:not([hidden]) .playcard' },
-    { name: 'queues', path: '/queues', ready: '.shelf' },
-    { name: 'people', path: '/people', ready: '#people' },
-    { name: 'pending', path: '/pending', ready: '#pending:not([hidden])' },
-    { name: 'collection', path: '/collection', ready: '#collection-picker:not([hidden])' },
-    { name: 'queue-family', path: '/q/family', ready: '#queue:not([hidden]) li.tile' },
-    { name: 'rules-younger', path: '/channels/younger', ready: '#chbody' },
-  ]);
-  stops.pop()?.();
+    {
+      name: "overview",
+      path: "/overview",
+      ready: "#play:not([hidden]) .playcard",
+    },
+    { name: "queues", path: "/queues", ready: ".shelf" },
+    { name: "people", path: "/people", ready: "#people" },
+    {
+      name: "pending",
+      path: "/pending",
+      ready: "#pending:not([hidden])",
+    },
+    {
+      name: "collection",
+      path: "/collection",
+      ready: "#collection-picker:not([hidden])",
+    },
+    {
+      name: "queue-family",
+      path: "/q/family",
+      ready: "#queue:not([hidden]) li.tile",
+    },
+    {
+      name: "rules-younger",
+      path: "/channels/younger",
+      ready: "#chbody",
+    },
+  ])
+  stops.pop()?.()
 
   // The calendar needs a registry holding every combination of the two date settings, which
   // only its own fixture has. Its dates are literal, so the fixed clock decides what is in
   // season.
   const calendar = await startFixtureServer(CALENDAR_PORT, {
-    queues: 'queues.harness.yaml',
-    sets: 'calendar.sets.yaml',
-  });
-  stops.push(() => killServer(calendar.child));
+    queues: "queues.harness.yaml",
+    sets: "calendar.sets.yaml",
+  })
+  stops.push(() => killServer(calendar.child))
   await shoot(browser, calendar.base, [
-    { name: 'calendar', path: '/calendar', ready: '#calendar-rows > li' },
-  ]);
-  stops.pop()?.();
+    {
+      name: "calendar",
+      path: "/calendar",
+      ready: "#calendar-rows > li",
+    },
+  ])
+  stops.pop()?.()
 
-  const tonight = await startTonightServer(TONIGHT_PORT);
-  stops.push(() => stopTonightServer(tonight));
+  const tonight = await startTonightServer(TONIGHT_PORT)
+  stops.push(() => stopTonightServer(tonight))
   await shoot(browser, tonight.base, [
     {
-      name: 'what-to-watch-play',
-      path: '/what-to-watch-play',
-      ready: '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]',
+      name: "what-to-watch-play",
+      path: "/what-to-watch-play",
+      ready:
+        '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]',
     },
-  ]);
-  stops.pop()?.();
+  ])
+  stops.pop()?.()
 
-  const boardGames = await startBoardGameServer(BOARD_GAME_PORT);
-  stops.push(() => stopBoardGameServer(boardGames));
+  const boardGames =
+    await startBoardGameServer(BOARD_GAME_PORT)
+  stops.push(() => stopBoardGameServer(boardGames))
   await shoot(browser, boardGames.base, [
     {
-      name: 'board-games',
-      path: '/collection/board-games',
-      ready: '#collection:not([hidden]) #collection-grid',
+      name: "board-games",
+      path: "/collection/board-games",
+      ready: "#collection:not([hidden]) #collection-grid",
     },
     {
-      name: 'result-tidewright',
-      path: '/result/tidewright',
-      ready: '#result:not([hidden]) #result-card',
+      name: "result-tidewright",
+      path: "/result/tidewright",
+      ready: "#result:not([hidden]) #result-card",
     },
-  ]);
+  ])
 } finally {
-  await browser.close();
-  for (const stop of stops) stop();
+  await browser.close()
+  for (const stop of stops) stop()
 }

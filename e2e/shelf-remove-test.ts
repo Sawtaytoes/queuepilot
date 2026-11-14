@@ -23,31 +23,34 @@
 // count, the YAML on disk, the undo stack — is true on the degraded path.
 //
 //   server/node_modules/.bin/tsx e2e/shelf-remove-test.ts
-import type { ChildProcess } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import type { ChildProcess } from "node:child_process"
+import { promises as fs } from "node:fs"
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const PORT = 18792;
-const QUEUES = '/tmp/queues-shelfremove.yaml';
+const PORT = 18792
+const QUEUES = "/tmp/queues-shelfremove.yaml"
 const env = {
   ...process.env,
   WEB_PORT: String(PORT),
   QUEUES_PATH: QUEUES,
-  SETS_PATH: '/tmp/sets-shelfremove.yaml',
-  GROUPS_PATH: '/tmp/groups-shelfremove.yaml',
-  HISTORY_PATH: '/tmp/history-shelfremove.json',
-  CACHE_PATH: '/tmp/cache-shelfremove.sqlite',
-  PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-  PLEX_TOKEN: '',
-  MQTT_HOST: '',
-  NODE_TLS_REJECT_UNAUTHORIZED: '0',
-};
+  SETS_PATH: "/tmp/sets-shelfremove.yaml",
+  GROUPS_PATH: "/tmp/groups-shelfremove.yaml",
+  HISTORY_PATH: "/tmp/history-shelfremove.json",
+  CACHE_PATH: "/tmp/cache-shelfremove.sqlite",
+  PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+  PLEX_TOKEN: "",
+  MQTT_HOST: "",
+  NODE_TLS_REJECT_UNAUTHORIZED: "0",
+}
 
 const ok = (name: string, isPass: boolean) => {
-  console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`);
-  if (!isPass) process.exitCode = 1;
-};
+  console.log(`${isPass ? "PASS" : "FAIL"} ${name}`)
+  if (!isPass) process.exitCode = 1
+}
 
 // Two ordered queues, because "remove" and "move to the other shelf" share a gesture surface
 // and a fixture with one shelf cannot tell them apart.
@@ -62,14 +65,14 @@ const SETS_SEED = `sets:
   kind: movies
   source: queue
   sections: [ 1 ]
-`;
+`
 const QUEUES_SEED = `q_shelf:
 - {title: Duel (1971)}
 - {title: Cowboy Bebop}
 - {title: The Iron Giant (1999)}
 q_other:
 - {title: Steamboy (2004)}
-`;
+`
 
 /**
  * The entries `queues.yaml` actually holds for a set — the write, not the optimistic DOM.
@@ -78,158 +81,278 @@ q_other:
  * counts the other queue's entries too, which makes "the file lost one" true for the wrong
  * reason and, worse, makes it FALSE when the right thing happened.
  */
-const fileEntries = async (setId: string): Promise<string[]> => {
-  const lines = (await fs.readFile(QUEUES, 'utf8')).split('\n');
-  const start = lines.findIndex((line) => line.startsWith(`${setId}:`));
-  if (start < 0) return [];
-  const out: string[] = [];
+const fileEntries = async (
+  setId: string,
+): Promise<string[]> => {
+  const lines = (await fs.readFile(QUEUES, "utf8")).split(
+    "\n",
+  )
+  const start = lines.findIndex((line) =>
+    line.startsWith(`${setId}:`),
+  )
+  if (start < 0) return []
+  const out: string[] = []
   for (const line of lines.slice(start + 1)) {
     // A list item is at column 0 too, so "next top-level key" is a non-space that is not
     // the `- ` bullet — not simply a non-space.
-    if (/^[^\s-]/.test(line)) break;
-    const match = /^- (.+)$/.exec(line);
-    if (match) out.push((match[1] as string).trim());
+    if (/^[^\s-]/.test(line)) break
+    const match = /^- (.+)$/.exec(line)
+    if (match) out.push((match[1] as string).trim())
   }
-  return out;
-};
+  return out
+}
 
-let server: ChildProcess | undefined;
-const browser = await chromium.launch();
+let server: ChildProcess | undefined
+const browser = await chromium.launch()
 
 try {
-  await fs.writeFile(QUEUES, QUEUES_SEED);
-  await fs.writeFile(env.SETS_PATH, SETS_SEED);
-  for (const file of [QUEUES, env.SETS_PATH, env.HISTORY_PATH]) {
-    await fs.rm(`${file}.lock`, { force: true, recursive: true });
+  await fs.writeFile(QUEUES, QUEUES_SEED)
+  await fs.writeFile(env.SETS_PATH, SETS_SEED)
+  for (const file of [
+    QUEUES,
+    env.SETS_PATH,
+    env.HISTORY_PATH,
+  ]) {
+    await fs.rm(`${file}.lock`, {
+      force: true,
+      recursive: true,
+    })
   }
-  await fs.rm(env.HISTORY_PATH, { force: true });
-  server = spawnServer({ env, stdio: 'ignore' });
+  await fs.rm(env.HISTORY_PATH, { force: true })
+  server = spawnServer({ env, stdio: "ignore" })
   for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
-      break;
+      await fetch(`http://localhost:${PORT}/api/sets`).then(
+        (response) => response.json(),
+      )
+      break
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 200),
+      )
     }
   }
 
-  const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
+  const page = await browser.newPage({
+    viewport: { width: 1400, height: 950 },
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
 
-  const shelf = '.shelf[data-set="q_shelf"]';
-  const tiles = () => page.$$eval(`${shelf} li.tile`, (els) => els.length);
-  const count = () => page.textContent(`${shelf} .sec`);
-  const away = () => page.mouse.move(0, 0);
+  const shelf = '.shelf[data-set="q_shelf"]'
+  const tiles = () =>
+    page.$$eval(`${shelf} li.tile`, (els) => els.length)
+  const count = () => page.textContent(`${shelf} .sec`)
+  const away = () => page.mouse.move(0, 0)
 
-  await page.goto(`http://localhost:${PORT}/picks`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/picks`, {
+    waitUntil: "domcontentloaded",
+  })
   // Picks starts collapsed; this test needs the tile controls visible.
-  await page.click('#collapseall');
-  await page.waitForSelector(`${shelf} li.tile`, { timeout: 30000 });
+  await page.click("#collapseall")
+  await page.waitForSelector(`${shelf} li.tile`, {
+    timeout: 30000,
+  })
 
-  ok('the shelf renders its three entries', (await tiles()) === 3);
-  ok('the shelf header counts three', (await count()) === '3');
+  ok(
+    "the shelf renders its three entries",
+    (await tiles()) === 3,
+  )
+  ok(
+    "the shelf header counts three",
+    (await count()) === "3",
+  )
 
   // ---- 1. the control is THERE, and it can be SEEN ----
-  ok('every shelf tile carries a ✕',
-    (await page.$$eval(`${shelf} li.tile .remove`, (els) => els.length)) === 3);
+  ok(
+    "every shelf tile carries a ✕",
+    (await page.$$eval(
+      `${shelf} li.tile .remove`,
+      (els) => els.length,
+    )) === 3,
+  )
   // The bug's second half. `.tile .check/.remove { display: none }` used to be undone only
   // under `.editable`, which is on the queue page's <main> and not on this one.
   // `.every()` over an EMPTY list is `true`, so both of these carry their own length check.
   // Without it the two assertions that exist to catch "the button is invisible" pass loudest
   // in the one case where there is no button at all.
-  ok('the ✕ is not display:none on the shelf',
-    await page.$$eval(`${shelf} li.tile .remove`,
-      (els) => els.length === 3 && els.every((el) => getComputedStyle(el).display !== 'none')));
-  ok('the ✕ has a real hit box',
-    await page.$$eval(`${shelf} li.tile .remove`, (els) =>
-      els.length === 3 && els.every((el) => el.getBoundingClientRect().width >= 20)));
+  ok(
+    "the ✕ is not display:none on the shelf",
+    await page.$$eval(
+      `${shelf} li.tile .remove`,
+      (els) =>
+        els.length === 3 &&
+        els.every(
+          (el) => getComputedStyle(el).display !== "none",
+        ),
+    ),
+  )
+  ok(
+    "the ✕ has a real hit box",
+    await page.$$eval(
+      `${shelf} li.tile .remove`,
+      (els) =>
+        els.length === 3 &&
+        els.every(
+          (el) => el.getBoundingClientRect().width >= 20,
+        ),
+    ),
+  )
 
   // Quiet until asked for — the same rule the queue grid follows. A wall of posters must not
   // become a wall of buttons (decision 2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster).
-  await away();
-  await page.waitForTimeout(400);
-  const firstRemove = page.locator(`${shelf} li.tile .remove`).first();
-  ok('the ✕ is invisible at rest',
-    (await firstRemove.evaluate((element) => getComputedStyle(element).opacity)) === '0');
-  await page.locator(`${shelf} li.tile`).first().hover();
-  await page.waitForTimeout(400);
-  ok('the ✕ appears on hover',
-    (await firstRemove.evaluate((element) => getComputedStyle(element).opacity)) === '1');
+  await away()
+  await page.waitForTimeout(400)
+  const firstRemove = page
+    .locator(`${shelf} li.tile .remove`)
+    .first()
+  ok(
+    "the ✕ is invisible at rest",
+    (await firstRemove.evaluate(
+      (element) => getComputedStyle(element).opacity,
+    )) === "0",
+  )
+  await page.locator(`${shelf} li.tile`).first().hover()
+  await page.waitForTimeout(400)
+  ok(
+    "the ✕ appears on hover",
+    (await firstRemove.evaluate(
+      (element) => getComputedStyle(element).opacity,
+    )) === "1",
+  )
 
   // What must NOT have been switched on with it. The shelf has no multi-select and no
   // per-tile ▶ — turning the whole `.editable` chrome on here would have brought both, and
   // the point of the change is one control, not a mode.
-  ok('the shelf gains no ✓ multi-select',
-    (await page.$$eval(`${shelf} li.tile .check`, (els) => els.length)) === 0);
-  ok('the shelf gains no per-tile ▶',
-    (await page.$$eval(`${shelf} li.tile .tileplay`, (els) => els.length)) === 0);
+  ok(
+    "the shelf gains no ✓ multi-select",
+    (await page.$$eval(
+      `${shelf} li.tile .check`,
+      (els) => els.length,
+    )) === 0,
+  )
+  ok(
+    "the shelf gains no per-tile ▶",
+    (await page.$$eval(
+      `${shelf} li.tile .tileplay`,
+      (els) => els.length,
+    )) === 0,
+  )
 
   // ---- 2. clicking it removes the entry, and the file agrees ----
-  const removedTitle = await page.textContent(`${shelf} li.tile .title`);
-  await firstRemove.click();
+  const removedTitle = await page.textContent(
+    `${shelf} li.tile .title`,
+  )
+  await firstRemove.click()
   await page.waitForFunction(
-    () => document.querySelectorAll('.shelf[data-set="q_shelf"] li.tile').length === 2,
-    undefined, { timeout: 15000 });
-  ok('the tile goes immediately (optimistic)', (await tiles()) === 2);
-  ok('the shelf header re-counts', (await count()) === '2');
+    () =>
+      document.querySelectorAll(
+        '.shelf[data-set="q_shelf"] li.tile',
+      ).length === 2,
+    undefined,
+    { timeout: 15000 },
+  )
+  ok(
+    "the tile goes immediately (optimistic)",
+    (await tiles()) === 2,
+  )
+  ok("the shelf header re-counts", (await count()) === "2")
 
-  let onDisk: string[] = [];
+  let onDisk: string[] = []
   for (let attempt = 0; attempt < 40; attempt++) {
-    onDisk = await fileEntries('q_shelf');
-    if (onDisk.length === 2) break;
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    onDisk = await fileEntries("q_shelf")
+    if (onDisk.length === 2) break
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
-  ok('queues.yaml lost exactly that entry',
-    onDisk.length === 2 && !onDisk.some((entry) => entry.includes('Duel')));
-  ok('the OTHER queue is untouched', (await fileEntries('q_other')).length === 1);
-  ok('the removed tile was the one clicked', (removedTitle ?? '').includes('Duel'));
+  ok(
+    "queues.yaml lost exactly that entry",
+    onDisk.length === 2 &&
+      !onDisk.some((entry) => entry.includes("Duel")),
+  )
+  ok(
+    "the OTHER queue is untouched",
+    (await fileEntries("q_other")).length === 1,
+  )
+  ok(
+    "the removed tile was the one clicked",
+    (removedTitle ?? "").includes("Duel"),
+  )
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector(`${shelf} li.tile`, { timeout: 30000 });
-  ok('the removal survives a reload', (await tiles()) === 2);
+  await page.reload({ waitUntil: "domcontentloaded" })
+  await page.waitForSelector(`${shelf} li.tile`, {
+    timeout: 30000,
+  })
+  ok("the removal survives a reload", (await tiles()) === 2)
 
   // ---- 3. UNDO. A shelf removal is a write like any other, so it is on the stack ----
   //
   // Nothing in the client does this: `undoSnapshot` middleware snapshots the YAML before every
   // mutating request, so the ✕ joins undo by being a DELETE. Asserting it here is what stops a
   // future "optimistic-only" shortcut that skips the request from looking correct on screen.
-  await page.waitForFunction(() => {
-    const undo = document.querySelector<HTMLButtonElement>('#undo');
-    return undo !== null && !undo.disabled;
-  }, undefined, { timeout: 20000 });
-  await page.click('#undo');
   await page.waitForFunction(
-    () => document.querySelectorAll('.shelf[data-set="q_shelf"] li.tile').length === 3,
-    undefined, { timeout: 30000 });
-  ok('undo puts the shelf tile back', (await tiles()) === 3);
-  ok('undo puts it back in the FILE too', (await fileEntries('q_shelf')).length === 3);
+    () => {
+      const undo =
+        document.querySelector<HTMLButtonElement>("#undo")
+      return undo !== null && !undo.disabled
+    },
+    undefined,
+    { timeout: 20000 },
+  )
+  await page.click("#undo")
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll(
+        '.shelf[data-set="q_shelf"] li.tile',
+      ).length === 3,
+    undefined,
+    { timeout: 30000 },
+  )
+  ok("undo puts the shelf tile back", (await tiles()) === 3)
+  ok(
+    "undo puts it back in the FILE too",
+    (await fileEntries("q_shelf")).length === 3,
+  )
 
   // ---- 4. the per-entry menu, which the shelf also never had ----
   //
   // `useHomeDrags` already suppressed the browser's native menu over a shelf poster (a touch
   // long-press arms a drag there), so before this change a right-click on a shelf poster did
   // nothing whatsoever.
-  const poster = page.locator(`${shelf} li.tile .thumb`).first();
-  await poster.click({ button: 'right' });
-  await page.waitForSelector('#tilemenu:not([hidden])', { timeout: 15000 });
-  ok('right-click opens the per-entry menu', true);
+  const poster = page
+    .locator(`${shelf} li.tile .thumb`)
+    .first()
+  await poster.click({ button: "right" })
+  await page.waitForSelector("#tilemenu:not([hidden])", {
+    timeout: 15000,
+  })
+  ok("right-click opens the per-entry menu", true)
   // The menu carries what the CARD cannot, and Remove is not one of those things: the ✕ six
   // pixels away already does it, and this suite pins that ✕ four times over
   // (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`). Until 2026-08-26 the
   // menu held one row — "Remove from this queue" — and this file asserted it. The rows are
   // read BY NAME, not by class: `.danger` was the app's own colour and stopped existing when
   // the row became a Charcuterie `Button` with an `intent` prop, and a skin is not a handle.
-  const rows = () => page.$$eval('#tilemenu button',
-    (els) => els.map((el) => (el.textContent ?? '').trim()));
-  ok('the menu offers no Remove row',
-    !(await rows()).some((row) => /remove/i.test(row)));
+  const rows = () =>
+    page.$$eval("#tilemenu button", (els) =>
+      els.map((el) => (el.textContent ?? "").trim()),
+    )
+  ok(
+    "the menu offers no Remove row",
+    !(await rows()).some((row) => /remove/i.test(row)),
+  )
   // `q_shelf` declares no random order, so every entry starts in the Priority queue and the
   // lane row is the DEMOTE. This is the shelf's half of the claim: the page that could not
   // remove a title also could not change its lane, because a lane was a drag across a
   // divider the shelf does not draw.
-  const laneRow = page.getByRole('button', { name: 'Move to the Random pool' });
-  ok('the menu carries the lane move', (await rows()).includes('Move to the Random pool'));
-  await laneRow.click();
+  const laneRow = page.getByRole("button", {
+    name: "Move to the Random pool",
+  })
+  ok(
+    "the menu carries the lane move",
+    (await rows()).includes("Move to the Random pool"),
+  )
+  await laneRow.click()
   // The FILE, not the DOM: a demote paints nothing on a shelf — the tile stays where it is,
   // which is why the write is the only honest assertion here.
   //
@@ -239,32 +362,68 @@ try {
   // one sequence, which is the order half
   // (decision `2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence`).
   const shelfYaml = async () => {
-    const lines = (await fs.readFile(QUEUES, 'utf8')).split('\n');
-    const rest = lines.slice(lines.findIndex((line) => line.startsWith('q_shelf:')) + 1);
-    const end = rest.findIndex((line) => /^[^\s-]/.test(line));
-    return (end < 0 ? rest : rest.slice(0, end)).join('\n').trimEnd();
-  };
-  const demoted = async () =>
-    /- title: Duel \(1971\)\s*\n\s+placement: random$/.test(await shelfYaml());
-  for (let attempt = 0; attempt < 75 && !(await demoted()); attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const lines = (await fs.readFile(QUEUES, "utf8")).split(
+      "\n",
+    )
+    const rest = lines.slice(
+      lines.findIndex((line) =>
+        line.startsWith("q_shelf:"),
+      ) + 1,
+    )
+    const end = rest.findIndex((line) =>
+      /^[^\s-]/.test(line),
+    )
+    return (end < 0 ? rest : rest.slice(0, end))
+      .join("\n")
+      .trimEnd()
   }
-  ok('the lane row writes the placement, and the demote lands at the end', await demoted());
-  ok('and the entry is still on the shelf', (await tiles()) === 3);
+  const demoted = async () =>
+    /- title: Duel \(1971\)\s*\n\s+placement: random$/.test(
+      await shelfYaml(),
+    )
+  for (
+    let attempt = 0;
+    attempt < 75 && !(await demoted());
+    attempt++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  ok(
+    "the lane row writes the placement, and the demote lands at the end",
+    await demoted(),
+  )
+  ok(
+    "and the entry is still on the shelf",
+    (await tiles()) === 3,
+  )
 
   // ---- 5. the queue page still removes, after the lift ----
   //
   // `removeTile` moved out of QueueView into `state/queueEntry`. The page it came from is the
   // one that had this working, so it is the one a bad lift would break.
-  await page.goto(`http://localhost:${PORT}/q/q_shelf`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#grid li.tile', { timeout: 30000 });
-  const gridBefore = await page.$$eval('#grid li.tile', (els) => els.length);
-  await page.locator('#grid li.tile .remove').first().click();
+  await page.goto(`http://localhost:${PORT}/q/q_shelf`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#grid li.tile", {
+    timeout: 30000,
+  })
+  const gridBefore = await page.$$eval(
+    "#grid li.tile",
+    (els) => els.length,
+  )
+  await page
+    .locator("#grid li.tile .remove")
+    .first()
+    .click()
   await page.waitForFunction(
-    (tileCount) => document.querySelectorAll('#grid li.tile').length === tileCount - 1,
-    gridBefore, { timeout: 15000 });
-  ok('the queue grid still removes after the lift', true);
+    (tileCount) =>
+      document.querySelectorAll("#grid li.tile").length ===
+      tileCount - 1,
+    gridBefore,
+    { timeout: 15000 },
+  )
+  ok("the queue grid still removes after the lift", true)
 } finally {
-  await browser.close();
-  if (server) killServer(server);
+  await browser.close()
+  if (server) killServer(server)
 }

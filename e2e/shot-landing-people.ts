@@ -18,101 +18,130 @@
 //
 //   PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot \
 //     server/node_modules/.bin/tsx e2e/shot-landing-people.ts --tag=before
-import type { ChildProcess } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import type { ChildProcess } from "node:child_process"
+import { promises as fs } from "node:fs"
 
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
 // Its own port and its own temp files. A harness that shared them with `shot-queue-people.ts`
 // could not be run beside it, and the two are run back to back.
-const PORT = 18798;
-const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
-const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
+const PORT = 18798
+const tagArg = process.argv.find((arg) =>
+  arg.startsWith("--tag="),
+)
+const TAG = tagArg ? tagArg.slice("--tag=".length) : "after"
 
 const env = {
   ...process.env,
-  CACHE_PATH: '/tmp/cache-shotlandingpeople.sqlite',
-  GROUPS_PATH: '/tmp/groups-shotlandingpeople.yaml',
-  HISTORY_PATH: '/tmp/history-shotlandingpeople.json',
+  CACHE_PATH: "/tmp/cache-shotlandingpeople.sqlite",
+  GROUPS_PATH: "/tmp/groups-shotlandingpeople.yaml",
+  HISTORY_PATH: "/tmp/history-shotlandingpeople.json",
   // The shell in this workspace carries real MQTT_* values, and a harness that does not blank
   // them dials the household broker and retries forever.
-  MQTT_HOST: '',
-  MQTT_PASS: '',
-  MQTT_PORT: '',
-  MQTT_USER: '',
-  NODE_TLS_REJECT_UNAUTHORIZED: '0',
-  PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-  PLEX_TOKEN: '',
-  QUEUES_PATH: '/tmp/queues-shotlandingpeople.yaml',
-  SETS_PATH: '/tmp/sets-shotlandingpeople.yaml',
+  MQTT_HOST: "",
+  MQTT_PASS: "",
+  MQTT_PORT: "",
+  MQTT_USER: "",
+  NODE_TLS_REJECT_UNAUTHORIZED: "0",
+  PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+  PLEX_TOKEN: "",
+  QUEUES_PATH: "/tmp/queues-shotlandingpeople.yaml",
+  SETS_PATH: "/tmp/sets-shotlandingpeople.yaml",
   WEB_PORT: String(PORT),
-};
+}
 
 for (const [src, dest] of [
-  ['e2e/fixtures/landing.sets.yaml', env.SETS_PATH],
-  ['e2e/fixtures/landing.queues.yaml', env.QUEUES_PATH],
-  ['e2e/fixtures/landing.groups.yaml', env.GROUPS_PATH],
+  ["e2e/fixtures/landing.sets.yaml", env.SETS_PATH],
+  ["e2e/fixtures/landing.queues.yaml", env.QUEUES_PATH],
+  ["e2e/fixtures/landing.groups.yaml", env.GROUPS_PATH],
   // The proposal filename, not a confirmed one — the importer looks for exactly this.
-  ['e2e/fixtures/landing.people-mapping.yaml', '/tmp/people-mapping-proposal.yaml'],
+  [
+    "e2e/fixtures/landing.people-mapping.yaml",
+    "/tmp/people-mapping-proposal.yaml",
+  ],
 ] as const) {
-  await fs.copyFile(src, dest);
-  await fs.rm(`${dest}.lock`, { force: true, recursive: true });
+  await fs.copyFile(src, dest)
+  await fs.rm(`${dest}.lock`, {
+    force: true,
+    recursive: true,
+  })
 }
 // The store derives its own path from the queues path, so a stale one from a previous run
 // would keep the previous run's rows AND its "already seeded" marker.
 for (const stale of [
-  '/tmp/queues-shotlandingpeople.queuepilot.sqlite',
-  '/tmp/cache-shotlandingpeople.sqlite',
+  "/tmp/queues-shotlandingpeople.queuepilot.sqlite",
+  "/tmp/cache-shotlandingpeople.sqlite",
 ]) {
-  await fs.rm(stale, { force: true });
+  await fs.rm(stale, { force: true })
 }
 
-await fs.mkdir('__screenshots__', { recursive: true });
+await fs.mkdir("__screenshots__", { recursive: true })
 
-let server: ChildProcess | undefined;
-const browser = await chromium.launch();
+let server: ChildProcess | undefined
+const browser = await chromium.launch()
 
 // The owner's UI is dark, and the scheme persists to localStorage — set it before first paint
 // rather than clicking the toggle after it.
 const darkInit = () => {
   try {
-    localStorage.setItem('charcuterie-scheme', 'dark');
+    localStorage.setItem("charcuterie-scheme", "dark")
   } catch {
     /* private mode — the shot is light then, and says so */
   }
-};
+}
 
 try {
-  server = spawnServer({ env, stdio: 'ignore' });
+  server = spawnServer({ env, stdio: "ignore" })
 
   for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
-      break;
+      await fetch(`http://localhost:${PORT}/api/sets`).then(
+        (response) => response.json(),
+      )
+      break
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 200),
+      )
     }
   }
 
   // ── 1. the landing ─────────────────────────────────────────────────────────────────── //
 
-  const ctx = await browser.newContext({ viewport: { width: 1420, height: 1000 } });
-  await ctx.addInitScript(darkInit);
-  const page = await ctx.newPage();
+  const ctx = await browser.newContext({
+    viewport: { width: 1420, height: 1000 },
+  })
+  await ctx.addInitScript(darkInit)
+  const page = await ctx.newPage()
 
-  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.playcard', { timeout: 30000 });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: `__screenshots__/landingpeople-${TAG}-landing.png` });
+  await page.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(".playcard", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(1500)
+  await page.screenshot({
+    path: `__screenshots__/landingpeople-${TAG}-landing.png`,
+  })
 
-  const faces = await page.$$eval('#play [data-person-face]', (nodes) => nodes.length);
-  const anybody = await page.$$eval('#play .qpeople.none', (nodes) => nodes.length);
+  const faces = await page.$$eval(
+    "#play [data-person-face]",
+    (nodes) => nodes.length,
+  )
+  const anybody = await page.$$eval(
+    "#play .qpeople.none",
+    (nodes) => nodes.length,
+  )
   console.log(
     faces === 0
-      ? 'no faces on any landing card — the BEFORE state'
+      ? "no faces on any landing card — the BEFORE state"
       : `${faces} faces across the landing cards, and ${anybody} card(s) saying "Anybody"`,
-  );
+  )
 
   // A Rules card carries a people row TOO, since 2026-08-26. This line used to assert the
   // opposite and warn when one appeared: the argument was that a filtered pool is bound to one
@@ -123,14 +152,14 @@ try {
   const onRules = await page.$$eval(
     '.playcard[data-kind="rules"] .qpeople',
     (nodes) => nodes.length,
-  );
+  )
   console.log(
     onRules === 0
-      ? '⚠️ no people row on any Rules card'
+      ? "⚠️ no people row on any Rules card"
       : `${onRules} Rules card(s) carry a people row`,
-  );
+  )
 
-  await ctx.close();
+  await ctx.close()
 
   // ── 2. the Narrow View ─────────────────────────────────────────────────────────────── //
   //
@@ -142,12 +171,16 @@ try {
     hasTouch: true,
     isMobile: true,
     viewport: { height: 844, width: 390 },
-  });
-  await narrowCtx.addInitScript(darkInit);
-  const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('.playcard', { timeout: 30000 });
-  await narrow.waitForTimeout(1500);
+  })
+  await narrowCtx.addInitScript(darkInit)
+  const narrow = await narrowCtx.newPage()
+  await narrow.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await narrow.waitForSelector(".playcard", {
+    timeout: 30000,
+  })
+  await narrow.waitForTimeout(1500)
   // SCROLL TO A PICKS CARD FIRST. The fixture's Rules cards sort ahead of the Picks ones and
   // fill a 390px viewport on their own, so an unscrolled frame shows only the kind this change
   // does not touch — before and after came out byte-identical, which reads as "no effect in
@@ -155,20 +188,24 @@ try {
   await narrow
     .locator('.playcard[data-kind="picks"]')
     .first()
-    .scrollIntoViewIfNeeded();
-  await narrow.waitForTimeout(600);
-  await narrow.screenshot({ path: `__screenshots__/landingpeople-${TAG}-narrow.png` });
+    .scrollIntoViewIfNeeded()
+  await narrow.waitForTimeout(600)
+  await narrow.screenshot({
+    path: `__screenshots__/landingpeople-${TAG}-narrow.png`,
+  })
 
   const overflow = await narrow.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  )
   console.log(
     overflow > 1
       ? `⚠️ the Narrow View scrolls horizontally by ${overflow}px`
-      : 'the Narrow View does not scroll horizontally',
-  );
-  await narrowCtx.close();
+      : "the Narrow View does not scroll horizontally",
+  )
+  await narrowCtx.close()
 } finally {
-  await browser.close();
-  killServer(server);
+  await browser.close()
+  killServer(server)
 }

@@ -10,15 +10,18 @@
 // e2e/profile-gate-test.ts (waitForProfile / setForProfile against a synthetic PMS log).
 //
 // Run:  server/node_modules/.bin/tsx e2e/session-profile-gate-test.ts   (from the repo root; non-zero on failure)
-process.env.PLAYBACK_FSM = 'false'; // the in-session gate; the FSM's own gate is playback-fsm-test
-process.env.RESUME_ON_ADVANCE = 'false';
-process.env.ADB_ENABLED = 'false';
+process.env.PLAYBACK_FSM = "false" // the in-session gate; the FSM's own gate is playback-fsm-test
+process.env.RESUME_ON_ADVANCE = "false"
+process.env.ADB_ENABLED = "false"
 
 import {
-  stubSessionDeps, useFixtures, resetSession, SESSION_CTL as RAW_SESSION_CTL,
-} from './stubs/session-harness.mjs';
-import type { SessionStartPayload } from '../server/src/types.js';
-import type { SessionStateExtra } from '../server/src/session.js';
+  stubSessionDeps,
+  useFixtures,
+  resetSession,
+  SESSION_CTL as RAW_SESSION_CTL,
+} from "./stubs/session-harness.mjs"
+import type { SessionStartPayload } from "../server/src/types.js"
+import type { SessionStateExtra } from "../server/src/session.js"
 
 /**
  * The harness control surface, typed.
@@ -31,20 +34,20 @@ import type { SessionStateExtra } from '../server/src/session.js';
  * shape the stub actually carries at runtime; it is a view of the same object, not a copy.
  */
 interface SessionCtl {
-  drives: unknown[];
-  plays: unknown[];
-  states: unknown[];
-  lastPlayed: unknown[];
-  profileTitle: string | null;
-  activeProfileTitle: string | null;
-  accountCalls: unknown[];
-  waitCalls: unknown[];
-  switchCalls: unknown[];
-  playResult: unknown;
+  drives: unknown[]
+  plays: unknown[]
+  states: unknown[]
+  lastPlayed: unknown[]
+  profileTitle: string | null
+  activeProfileTitle: string | null
+  accountCalls: unknown[]
+  waitCalls: unknown[]
+  switchCalls: unknown[]
+  playResult: unknown
 }
-const SESSION_CTL = RAW_SESSION_CTL as unknown as SessionCtl;
+const SESSION_CTL = RAW_SESSION_CTL as unknown as SessionCtl
 
-stubSessionDeps();
+stubSessionDeps()
 
 // A rotation channel with explicit per-profile bindings (what makes set:"auto" route here),
 // and a reel queue that requires the 'Demo' profile. Both resolve against the synthetic corpus.
@@ -71,87 +74,196 @@ const SETS = `sets:
     reel: true
     sections: [1, 5]
     requires_profile: Demo
-`;
-const QUEUES = 'demo:\n  - {ratingKey: 2001}\n';
-useFixtures({ sets: SETS, queues: QUEUES });
+`
+const QUEUES = "demo:\n  - {ratingKey: 2001}\n"
+useFixtures({ sets: SETS, queues: QUEUES })
 
-const session = await import('../server/src/session.js');
+const session = await import("../server/src/session.js")
 
 // Capture what the session publishes, the way mqttd would.
-const STATES: SessionStateExtra[] = [];
+const STATES: SessionStateExtra[] = []
 session.setPublishers({
   state: (payload) => STATES.push(payload || {}),
   lastPlayed: () => {},
-});
+})
 
-const FAILS: string[] = [];
-function check(name: string, isPassing: boolean, detail = ''): void {
-  console.log((isPassing ? 'ok    ' : 'FAIL  ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
-  if (!isPassing) FAILS.push(name);
+const FAILS: string[] = []
+function check(
+  name: string,
+  isPassing: boolean,
+  detail = "",
+): void {
+  console.log(
+    (isPassing ? "ok    " : "FAIL  ") +
+      name +
+      (!isPassing && detail ? `  -- ${detail}` : ""),
+  )
+  if (!isPassing) FAILS.push(name)
 }
 
-async function run(payload: SessionStartPayload, signedInAs: string | null = null, activeAs: string | null = null) {
-  resetSession();
-  STATES.length = 0;
-  SESSION_CTL.profileTitle = signedInAs;
-  SESSION_CTL.activeProfileTitle = activeAs;
-  const res = await session.startSession(payload);
+async function run(
+  payload: SessionStartPayload,
+  signedInAs: string | null = null,
+  activeAs: string | null = null,
+) {
+  resetSession()
+  STATES.length = 0
+  SESSION_CTL.profileTitle = signedInAs
+  SESSION_CTL.activeProfileTitle = activeAs
+  const res = await session.startSession(payload)
   return {
     res,
-    played: SESSION_CTL.plays.length > 0 || SESSION_CTL.drives.length > 0,
-    awaiting: STATES.map((state) => state.awaiting).filter(Boolean),
-    lastError: [...STATES].reverse().find((state) => state.error)?.error || null,
-  };
+    played:
+      SESSION_CTL.plays.length > 0 ||
+      SESSION_CTL.drives.length > 0,
+    awaiting: STATES.map((state) => state.awaiting).filter(
+      Boolean,
+    ),
+    lastError:
+      [...STATES].reverse().find((state) => state.error)
+        ?.error || null,
+  }
 }
 
 // 1. A card naming a profile must WAIT for that profile — not just trust the payload.
-let outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' });
-check('card profile gates: does not play on a silent log', !outcome.played);
-check('card profile gates: announces the wait', outcome.awaiting.includes('profile:Younger'),
-  JSON.stringify(outcome.awaiting));
-check('card profile gates: names the profile in the error',
-  Boolean(outcome.lastError && outcome.lastError.includes('Younger')), String(outcome.lastError));
+let outcome = await run({
+  set: "shows_shorts",
+  kind: "cartoons",
+  profile: "Younger",
+})
+check(
+  "card profile gates: does not play on a silent log",
+  !outcome.played,
+)
+check(
+  "card profile gates: announces the wait",
+  outcome.awaiting.includes("profile:Younger"),
+  JSON.stringify(outcome.awaiting),
+)
+check(
+  "card profile gates: names the profile in the error",
+  Boolean(
+    outcome.lastError &&
+      outcome.lastError.includes("Younger"),
+  ),
+  String(outcome.lastError),
+)
 
 // 2. The WRONG profile signing in must not satisfy it (the mis-attribution case).
-outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Older');
-check('wrong profile does not clear the gate', !outcome.played, String(outcome.lastError));
+outcome = await run(
+  {
+    set: "shows_shorts",
+    kind: "cartoons",
+    profile: "Younger",
+  },
+  "Older",
+)
+check(
+  "wrong profile does not clear the gate",
+  !outcome.played,
+  String(outcome.lastError),
+)
 
 // 3. The right profile signing in clears it and plays.
-outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Younger');
-check('right profile clears the gate and plays', outcome.played, String(outcome.lastError));
+outcome = await run(
+  {
+    set: "shows_shorts",
+    kind: "cartoons",
+    profile: "Younger",
+  },
+  "Younger",
+)
+check(
+  "right profile clears the gate and plays",
+  outcome.played,
+  String(outcome.lastError),
+)
 
 // 4. No profile on the card => rotation set stays ungated, exactly as before.
-outcome = await run({ set: 'shows_shorts', kind: 'cartoons' });
-check('ungated rotation set still plays with no profile', outcome.played, String(outcome.lastError));
-check('ungated rotation set never announces a wait', outcome.awaiting.length === 0,
-  JSON.stringify(outcome.awaiting));
+outcome = await run({
+  set: "shows_shorts",
+  kind: "cartoons",
+})
+check(
+  "ungated rotation set still plays with no profile",
+  outcome.played,
+  String(outcome.lastError),
+)
+check(
+  "ungated rotation set never announces a wait",
+  outcome.awaiting.length === 0,
+  JSON.stringify(outcome.awaiting),
+)
 
 // 5. requires_profile still works on its own.
-outcome = await run({ set: 'demo', kind: 'movie' }, 'Demo');
-check('requires_profile clears on the required profile', outcome.played, String(outcome.lastError));
-outcome = await run({ set: 'demo', kind: 'movie' }, 'Older');
-check('requires_profile rejects the wrong profile', !outcome.played);
+outcome = await run({ set: "demo", kind: "movie" }, "Demo")
+check(
+  "requires_profile clears on the required profile",
+  outcome.played,
+  String(outcome.lastError),
+)
+outcome = await run({ set: "demo", kind: "movie" }, "Older")
+check(
+  "requires_profile rejects the wrong profile",
+  !outcome.played,
+)
 
 // 6. A card contradicting the set's requires_profile errors instead of guessing.
-outcome = await run({ set: 'demo', kind: 'movie', profile: 'Younger' });
-check('card/set profile conflict is a clear error',
-  Boolean(outcome.lastError && outcome.lastError.includes('requires')), String(outcome.lastError));
-check('conflict does not play', !outcome.played);
+outcome = await run({
+  set: "demo",
+  kind: "movie",
+  profile: "Younger",
+})
+check(
+  "card/set profile conflict is a clear error",
+  Boolean(
+    outcome.lastError &&
+      outcome.lastError.includes("requires"),
+  ),
+  String(outcome.lastError),
+)
+check("conflict does not play", !outcome.played)
 
 // 7. set=auto is unchanged: the first signed-in profile decides the tier.
-outcome = await run({ set: 'auto', kind: 'cartoons' }, 'Older');
-check('auto still resolves the tier from the log', outcome.played, String(outcome.lastError));
+outcome = await run(
+  { set: "auto", kind: "cartoons" },
+  "Older",
+)
+check(
+  "auto still resolves the tier from the log",
+  outcome.played,
+  String(outcome.lastError),
+)
 
 // A secondary player can report its active profile without any new PMS log line.
-outcome = await run({ set: 'auto', kind: 'cartoons', target: {
-  id: 'den', name: 'Den TV', machineIdentifier: 'den-player', uri: 'http://192.0.2.31:32500', mode: 'client', default: false,
-} }, null, 'Older');
-check('auto observes the selected player rather than the default', outcome.played && SESSION_CTL.accountCalls[0] === 'den');
-check('an active-session profile does not wait on an unrelated log', SESSION_CTL.waitCalls.length === 0);
+outcome = await run(
+  {
+    set: "auto",
+    kind: "cartoons",
+    target: {
+      id: "den",
+      name: "Den TV",
+      machineIdentifier: "den-player",
+      uri: "http://192.0.2.31:32500",
+      mode: "client",
+      default: false,
+    },
+  },
+  null,
+  "Older",
+)
+check(
+  "auto observes the selected player rather than the default",
+  outcome.played && SESSION_CTL.accountCalls[0] === "den",
+)
+check(
+  "an active-session profile does not wait on an unrelated log",
+  SESSION_CTL.waitCalls.length === 0,
+)
 
-console.log();
+console.log()
 if (FAILS.length) {
-  console.log(`${FAILS.length} FAILED: ${FAILS.join(', ')}`);
-  process.exit(1);
+  console.log(`${FAILS.length} FAILED: ${FAILS.join(", ")}`)
+  process.exit(1)
 }
-console.log('all profile-gate checks passed');
+console.log("all profile-gate checks passed")

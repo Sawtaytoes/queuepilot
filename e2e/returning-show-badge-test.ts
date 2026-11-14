@@ -23,33 +23,59 @@
 //   4. The FILE is not written. This is a prediction, not a scan.
 //
 // Run:  server/node_modules/.bin/tsx e2e/returning-show-badge-test.ts   (from the repo root)
-process.env.MQTT_HOST = ''; // no import-time broker connect (mqttc.js guards on HOST)
+process.env.MQTT_HOST = "" // no import-time broker connect (mqttc.js guards on HOST)
 
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
 import {
-  FINISHED_RK, QUEUES_YAML, RETURNING_RK, SETS_YAML, SKIPPED_RK, startStubPlex,
-} from './stubs/plex-returning-show.mjs';
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
+import {
+  FINISHED_RK,
+  QUEUES_YAML,
+  RETURNING_RK,
+  SETS_YAML,
+  SKIPPED_RK,
+  startStubPlex,
+} from "./stubs/plex-returning-show.mjs"
 
-const FAILS: string[] = [];
-function ok(name: string, isPassing: boolean, detail = ''): void {
-  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
-  if (!isPassing) FAILS.push(name);
+const FAILS: string[] = []
+function ok(
+  name: string,
+  isPassing: boolean,
+  detail = "",
+): void {
+  console.log(
+    (isPassing ? "PASS " : "FAIL ") +
+      name +
+      (!isPassing && detail ? `  -- ${detail}` : ""),
+  )
+  if (!isPassing) FAILS.push(name)
 }
 
-const PORT = Number(process.env.WEB_PORT || 18797);
-const PLEX_PORT = Number(process.env.PLEX_STUB_PORT || 18798);
-const Q_PATH = '/tmp/queues-returning-show.yaml';
-const S_PATH = '/tmp/sets-returning-show.yaml';
+const PORT = Number(process.env.WEB_PORT || 18797)
+const PLEX_PORT = Number(
+  process.env.PLEX_STUB_PORT || 18798,
+)
+const Q_PATH = "/tmp/queues-returning-show.yaml"
+const S_PATH = "/tmp/sets-returning-show.yaml"
 
-writeFileSync(Q_PATH, QUEUES_YAML);
-writeFileSync(S_PATH, SETS_YAML);
-for (const file of [`${Q_PATH}.lock`, `${S_PATH}.lock`, '/tmp/cache-returning-show.sqlite']) {
-  rmSync(file, { force: true });
+writeFileSync(Q_PATH, QUEUES_YAML)
+writeFileSync(S_PATH, SETS_YAML)
+for (const file of [
+  `${Q_PATH}.lock`,
+  `${S_PATH}.lock`,
+  "/tmp/cache-returning-show.sqlite",
+]) {
+  rmSync(file, { force: true })
 }
 
-const plex = startStubPlex(PLEX_PORT);
-await plex.ready;
+const plex = startStubPlex(PLEX_PORT)
+await plex.ready
 
 const child = spawnServer({
   env: {
@@ -57,65 +83,100 @@ const child = spawnServer({
     WEB_PORT: String(PORT),
     QUEUES_PATH: Q_PATH,
     SETS_PATH: S_PATH,
-    HISTORY_PATH: '/tmp/history-returning-show.json',
-    CACHE_PATH: '/tmp/cache-returning-show.sqlite',
+    HISTORY_PATH: "/tmp/history-returning-show.json",
+    CACHE_PATH: "/tmp/cache-returning-show.sqlite",
     PLEX_API_SERVER_URL: `http://127.0.0.1:${PLEX_PORT}`,
-    PLEX_TOKEN: 'offline-test-token',
-    MQTT_HOST: '',
+    PLEX_TOKEN: "offline-test-token",
+    MQTT_HOST: "",
   },
-  stdio: process.env.TEST_DEBUG ? 'inherit' : 'ignore',
-});
+  stdio: process.env.TEST_DEBUG ? "inherit" : "ignore",
+})
 
 /** One tile as this test reads it. */
 interface Tile {
-  ratingKey?: string | null;
-  done?: boolean;
-  isFinished?: boolean;
-  isRevived?: boolean;
-  nextEp?: { episode?: number } | null;
+  ratingKey?: string | null
+  done?: boolean
+  isFinished?: boolean
+  isRevived?: boolean
+  nextEp?: { episode?: number } | null
 }
 
 try {
-  let items: Tile[] = [];
+  let items: Tile[] = []
   for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((response) => response.json()) as {
-        sets: Record<string, { items: Tile[] }>;
-      };
-      items = body.sets.anime?.items ?? [];
-      if (items.length) break;
+      const body = (await fetch(
+        `http://localhost:${PORT}/api/queues`,
+      ).then((response) => response.json())) as {
+        sets: Record<string, { items: Tile[] }>
+      }
+      items = body.sets.anime?.items ?? []
+      if (items.length) break
     } catch {
       /* not up yet */
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  const byKey = (rk: string): Tile => items.find((item) => String(item.ratingKey) === rk) || {};
-  ok(`the queue resolves its three entries (${items.length})`, items.length === 3);
+  const byKey = (rk: string): Tile =>
+    items.find((item) => String(item.ratingKey) === rk) ||
+    {}
+  ok(
+    `the queue resolves its three entries (${items.length})`,
+    items.length === 3,
+  )
 
-  const returning = byKey(RETURNING_RK);
-  ok('the returning show has a fresh episode to play', returning.nextEp?.episode === 3,
-    JSON.stringify(returning));
-  ok('…so the next scan will revive it, and the grid says so now',
-    returning.isRevived === true, JSON.stringify(returning));
-  ok('…while the file still says done — this is the PREDICTION, not the flag',
-    returning.done === true);
+  const returning = byKey(RETURNING_RK)
+  ok(
+    "the returning show has a fresh episode to play",
+    returning.nextEp?.episode === 3,
+    JSON.stringify(returning),
+  )
+  ok(
+    "…so the next scan will revive it, and the grid says so now",
+    returning.isRevived === true,
+    JSON.stringify(returning),
+  )
+  ok(
+    "…while the file still says done — this is the PREDICTION, not the flag",
+    returning.done === true,
+  )
 
-  const skipped = byKey(SKIPPED_RK);
-  ok('a hand-marked done entry has the same fresh episode', skipped.nextEp?.episode === 3,
-    JSON.stringify(skipped));
-  ok('…and is NOT revived: no done_at means the owner skipped it on purpose',
-    skipped.isRevived === false, JSON.stringify(skipped));
+  const skipped = byKey(SKIPPED_RK)
+  ok(
+    "a hand-marked done entry has the same fresh episode",
+    skipped.nextEp?.episode === 3,
+    JSON.stringify(skipped),
+  )
+  ok(
+    "…and is NOT revived: no done_at means the owner skipped it on purpose",
+    skipped.isRevived === false,
+    JSON.stringify(skipped),
+  )
 
-  const finished = byKey(FINISHED_RK);
-  ok('a genuinely finished show has nothing left', finished.nextEp == null);
-  ok('…and keeps its Completed badge', finished.isRevived === false, JSON.stringify(finished));
+  const finished = byKey(FINISHED_RK)
+  ok(
+    "a genuinely finished show has nothing left",
+    finished.nextEp == null,
+  )
+  ok(
+    "…and keeps its Completed badge",
+    finished.isRevived === false,
+    JSON.stringify(finished),
+  )
 
-  ok('nothing wrote the file — every entry is still done',
-    (readFileSync(Q_PATH, 'utf8').match(/done: true/g) || []).length === 3);
+  ok(
+    "nothing wrote the file — every entry is still done",
+    (
+      readFileSync(Q_PATH, "utf8").match(/done: true/g) ||
+      []
+    ).length === 3,
+  )
 } finally {
-  killServer(child);
-  await plex.close();
+  killServer(child)
+  await plex.close()
 }
 
-console.log(FAILS.length ? `FAILURES: ${FAILS.length}` : 'done');
-process.exit(FAILS.length ? 1 : 0);
+console.log(
+  FAILS.length ? `FAILURES: ${FAILS.length}` : "done",
+)
+process.exit(FAILS.length ? 1 : 0)

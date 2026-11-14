@@ -26,77 +26,100 @@
 // draws do not depend on the day the smoke runs.
 //
 // Run from the REPO ROOT (the Tonight harness copies its fixtures by relative path).
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 
-import { startBoardGameServer } from '../board-game-play-harness.js';
-import { startFixtureServer } from '../fixture-server.js';
-import { killServer, REPO_ROOT } from '../stubs/server-process.mjs';
-import { startTonightServer } from '../tonight-harness.js';
-import { SMOKE_BASE_PORT, SMOKE_FIXED_NOW } from './ports.js';
+import { startBoardGameServer } from "../board-game-play-harness.js"
+import { startFixtureServer } from "../fixture-server.js"
+import {
+  killServer,
+  REPO_ROOT,
+} from "../stubs/server-process.mjs"
+import { startTonightServer } from "../tonight-harness.js"
+import {
+  SMOKE_BASE_PORT,
+  SMOKE_FIXED_NOW,
+} from "./ports.js"
 
-process.env.TZ = 'UTC';
-process.env.VRT_FIXED_NOW = SMOKE_FIXED_NOW;
+process.env.TZ = "UTC"
+process.env.VRT_FIXED_NOW = SMOKE_FIXED_NOW
 process.env.NODE_OPTIONS = [
   process.env.NODE_OPTIONS,
-  `--import=${pathToFileURL(path.join(REPO_ROOT, 'e2e', 'stubs', 'fixed-clock.mjs')).href}`,
+  `--import=${pathToFileURL(path.join(REPO_ROOT, "e2e", "stubs", "fixed-clock.mjs")).href}`,
 ]
   .filter(Boolean)
-  .join(' ');
+  .join(" ")
 
-const children: Parameters<typeof killServer>[0][] = [];
+const children: Parameters<typeof killServer>[0][] = []
 
 const stopAll = () => {
-  for (const child of children) killServer(child);
-  children.length = 0;
-};
-
-for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
-  process.on(signal, () => {
-    stopAll();
-    process.exit(0);
-  });
+  for (const child of children) killServer(child)
+  children.length = 0
 }
-process.on('exit', stopAll);
+
+for (const signal of [
+  "SIGTERM",
+  "SIGINT",
+  "SIGHUP",
+] as const) {
+  process.on(signal, () => {
+    stopAll()
+    process.exit(0)
+  })
+}
+process.on("exit", stopAll)
 
 try {
-  const landing = await startFixtureServer(SMOKE_BASE_PORT, {
-    groups: 'landing.groups.yaml',
-    people: 'landing.people-mapping.yaml',
-    queues: 'landing.queues.yaml',
-    sets: 'landing.sets.yaml',
-  });
-  children.push(landing.child);
+  const landing = await startFixtureServer(
+    SMOKE_BASE_PORT,
+    {
+      groups: "landing.groups.yaml",
+      people: "landing.people-mapping.yaml",
+      queues: "landing.queues.yaml",
+      sets: "landing.sets.yaml",
+    },
+  )
+  children.push(landing.child)
 
-  const calendar = await startFixtureServer(SMOKE_BASE_PORT + 1, {
-    queues: 'queues.harness.yaml',
-    sets: 'calendar.sets.yaml',
-  });
-  children.push(calendar.child);
+  const calendar = await startFixtureServer(
+    SMOKE_BASE_PORT + 1,
+    {
+      queues: "queues.harness.yaml",
+      sets: "calendar.sets.yaml",
+    },
+  )
+  children.push(calendar.child)
 
   // The person-photo spec writes, so it gets a landing server of its own (base port + 4).
-  const photos = await startFixtureServer(SMOKE_BASE_PORT + 4, {
-    groups: 'landing.groups.yaml',
-    people: 'landing.people-mapping.yaml',
-    queues: 'landing.queues.yaml',
-    sets: 'landing.sets.yaml',
-  });
-  children.push(photos.child);
+  const photos = await startFixtureServer(
+    SMOKE_BASE_PORT + 4,
+    {
+      groups: "landing.groups.yaml",
+      people: "landing.people-mapping.yaml",
+      queues: "landing.queues.yaml",
+      sets: "landing.sets.yaml",
+    },
+  )
+  children.push(photos.child)
 
-  const tonight = await startTonightServer(SMOKE_BASE_PORT + 2);
-  children.push(tonight.child);
+  const tonight = await startTonightServer(
+    SMOKE_BASE_PORT + 2,
+  )
+  children.push(tonight.child)
 
-  const boardGames = await startBoardGameServer(SMOKE_BASE_PORT + 3);
-  children.push(boardGames.child);
+  const boardGames = await startBoardGameServer(
+    SMOKE_BASE_PORT + 3,
+  )
+  children.push(boardGames.child)
 
   console.log(
-    `smoke servers up: ${[landing, calendar, photos, tonight, boardGames].map(({ base }) => base).join(' ')}`,
-  );
+    `smoke servers up: ${[landing, calendar, photos, tonight, boardGames].map(({ base }) => base).join(" ")}`,
+  )
 } catch (error) {
-  console.error('smoke servers failed to start:', error);
-  stopAll();
-  process.exit(1);
+  console.error("smoke servers failed to start:", error)
+  stopAll()
+  process.exit(1)
 }
 
 // Stay alive until Playwright sends the signal.
-setInterval(() => {}, 1 << 30);
+setInterval(() => {}, 1 << 30)

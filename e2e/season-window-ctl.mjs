@@ -5,4 +5,4 @@
 // array is to import it from a real file by URL. `reconcileQueue` answers `{reconciled: false}`
 // whether the season gate stopped it or the provider work failed, so WHETHER IT REACHED THE
 // PROVIDER is the only thing that tells the two apart — and that is what this records.
-export const RECONCILE_CTL = { providerCalls: [] };
+export const RECONCILE_CTL = { providerCalls: [] }

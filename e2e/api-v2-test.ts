@@ -3,9 +3,12 @@
 // `done` surfacing (B), collection-typed add + `collections=1` search (C), per-account
 // /api/ratings with static fallback (D), and rotation createSet/updateSet knobs (E + I).
 // Plex/plex.tv are unreachable here, so the Plex-dependent bits assert the DEGRADED path.
-import { killServer, spawnServer } from './stubs/server-process.mjs';
-import { promises as fs } from 'node:fs';
-import type { ChildProcess } from 'node:child_process';
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
+import { promises as fs } from "node:fs"
+import type { ChildProcess } from "node:child_process"
 
 /**
  * A JSON body off the API. `Response.json()` is honestly `unknown`, and this suite reads
@@ -14,17 +17,17 @@ import type { ChildProcess } from 'node:child_process';
  * copy of server/src/routes that rots on its own; so the cast lives HERE, once, and every
  * read below is deliberately unchecked.
  */
-type JsonBody = Record<string, any>;
+type JsonBody = Record<string, any>
 
-const PORT = 18772;
-const QUEUES = '/tmp/queues-apiv2.yaml';
-const SETS = '/tmp/sets-apiv2.yaml';
-const HIST = '/tmp/history-apiv2.json';
+const PORT = 18772
+const QUEUES = "/tmp/queues-apiv2.yaml"
+const SETS = "/tmp/sets-apiv2.yaml"
+const HIST = "/tmp/history-apiv2.json"
 // A providers.yaml of this suite's own, so the registry holds a PUSH provider and a PULL one.
 // The capability under test is reported WITHOUT instantiating either, which is the whole point
 // of the kind-keyed map — neither of these has a token here and neither needs one.
-const PROVIDERS = '/tmp/providers-apiv2.yaml';
-const PROVIDER_SECRETS = '/tmp/providers-secrets-apiv2.yaml';
+const PROVIDERS = "/tmp/providers-apiv2.yaml"
+const PROVIDER_SECRETS = "/tmp/providers-secrets-apiv2.yaml"
 const env = {
   ...process.env,
   WEB_PORT: String(PORT),
@@ -34,18 +37,35 @@ const env = {
   PROVIDERS_PATH: PROVIDERS,
   PROVIDERS_SECRETS_PATH: PROVIDER_SECRETS,
   // Force the Plex-down path deterministically regardless of the caller's env.
-  PLEX_API_SERVER_URL: 'https://127.0.0.1:1', // nothing listens → every plex fetch fails fast
-  PLEX_TOKEN: '',
-  MQTT_HOST: '',
-  NODE_TLS_REJECT_UNAUTHORIZED: '0',
-};
-const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
-const api = (apiPath: string, opts?: RequestInit): Promise<JsonBody> =>
-  fetch(`http://localhost:${PORT}/api${apiPath}`, opts).then((response) => response.json() as Promise<JsonBody>);
+  PLEX_API_SERVER_URL: "https://127.0.0.1:1", // nothing listens → every plex fetch fails fast
+  PLEX_TOKEN: "",
+  MQTT_HOST: "",
+  NODE_TLS_REJECT_UNAUTHORIZED: "0",
+}
+const ok = (name: string, isPassing: boolean) => {
+  console.log(`${isPassing ? "PASS" : "FAIL"} ${name}`)
+  if (!isPassing) process.exitCode = 1
+}
+const api = (
+  apiPath: string,
+  opts?: RequestInit,
+): Promise<JsonBody> =>
+  fetch(
+    `http://localhost:${PORT}/api${apiPath}`,
+    opts,
+  ).then((response) => response.json() as Promise<JsonBody>)
 const post = (apiPath: string, body?: unknown) =>
-  api(apiPath, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+  api(apiPath, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body || {}),
+  })
 const patch = (apiPath: string, body?: unknown) =>
-  api(apiPath, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+  api(apiPath, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body || {}),
+  })
 
 // A queues.yaml with two done entries (mapping w/ done:true) + two plain entries under a
 // seeded curated queue (`bob` exists in the default sets.yaml the server writes on boot).
@@ -54,52 +74,114 @@ const QUEUES_SEED = `bob:
 - {title: "Done Movie B (2019)", done: true}
 - {ratingKey: 555, title: "Done Movie C", done: true}
 - {title: "Plain Movie D"}
-`;
+`
 
-for (const filePath of [QUEUES, SETS, HIST, PROVIDERS, PROVIDER_SECRETS]) {
-  await fs.rm(filePath, { force: true });
-  await fs.rm(filePath + '.lock', { recursive: true, force: true });
+for (const filePath of [
+  QUEUES,
+  SETS,
+  HIST,
+  PROVIDERS,
+  PROVIDER_SECRETS,
+]) {
+  await fs.rm(filePath, { force: true })
+  await fs.rm(filePath + ".lock", {
+    recursive: true,
+    force: true,
+  })
 }
-await fs.writeFile(QUEUES, QUEUES_SEED, 'utf8');
-await fs.writeFile(PROVIDERS, `providers:
+await fs.writeFile(QUEUES, QUEUES_SEED, "utf8")
+await fs.writeFile(
+  PROVIDERS,
+  `providers:
 - id: kavita
   kind: kavita
   label: Kavita
   base_url: http://127.0.0.1:1
-`, 'utf8');
+`,
+  "utf8",
+)
 
 async function startServer(): Promise<ChildProcess> {
-  const child = spawnServer({ env, stdio: 'ignore' });
+  const child = spawnServer({ env, stdio: "ignore" })
   for (let attempt = 0; attempt < 50; attempt++) {
-    try { await api('/history'); return child; } catch { await new Promise((resolve) => setTimeout(resolve, 200)); }
+    try {
+      await api("/history")
+      return child
+    } catch {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 200),
+      )
+    }
   }
-  throw new Error('server did not come up');
+  throw new Error("server did not come up")
 }
-const stop = (child: ChildProcess) => new Promise((resolve) => { child.once('exit', resolve); killServer(child); });
+const stop = (child: ChildProcess) =>
+  new Promise((resolve) => {
+    child.once("exit", resolve)
+    killServer(child)
+  })
 
-const srv = await startServer();
+const srv = await startServer()
 try {
   // --- B: done surfacing + remove-completed ---------------------------------- //
-  let items = (await api('/queues')).sets.bob.items;
-  ok(`queues surfaces 4 bob items (${items.length})`, items.length === 4);
-  const doneCount = items.filter((item: JsonBody) => item.done).length;
-  ok(`two entries surface done:true (${doneCount})`, doneCount === 2);
-  ok('plain string entry is not done', items.find((item: JsonBody) => item.raw === 'Plain Movie A (2020)')?.done === false);
-  ok('mapping w/ done:true is done', items.find((item: JsonBody) => item.raw === 'Done Movie B (2019)')?.done === true);
+  let items = (await api("/queues")).sets.bob.items
+  ok(
+    `queues surfaces 4 bob items (${items.length})`,
+    items.length === 4,
+  )
+  const doneCount = items.filter(
+    (item: JsonBody) => item.done,
+  ).length
+  ok(
+    `two entries surface done:true (${doneCount})`,
+    doneCount === 2,
+  )
+  ok(
+    "plain string entry is not done",
+    items.find(
+      (item: JsonBody) =>
+        item.raw === "Plain Movie A (2020)",
+    )?.done === false,
+  )
+  ok(
+    "mapping w/ done:true is done",
+    items.find(
+      (item: JsonBody) =>
+        item.raw === "Done Movie B (2019)",
+    )?.done === true,
+  )
 
-  const rc = await post('/queues/bob/remove-completed');
-  ok(`remove-completed removed 2 (removed=${rc.removed})`, rc.removed === 2);
-  items = (await api('/queues')).sets.bob.items;
-  ok(`only the 2 plain entries remain (${items.length})`, items.length === 2 && items.every((item: JsonBody) => !item.done));
+  const rc = await post("/queues/bob/remove-completed")
+  ok(
+    `remove-completed removed 2 (removed=${rc.removed})`,
+    rc.removed === 2,
+  )
+  items = (await api("/queues")).sets.bob.items
+  ok(
+    `only the 2 plain entries remain (${items.length})`,
+    items.length === 2 &&
+      items.every((item: JsonBody) => !item.done),
+  )
 
-  const rc2 = await post('/queues/bob/remove-completed');
-  ok('remove-completed is idempotent (0 the second time)', rc2.removed === 0);
-  const bad = await post('/queues/nope_not_a_set/remove-completed');
-  ok('remove-completed 400s on an unknown set', bad.error === 'unknown set');
+  const rc2 = await post("/queues/bob/remove-completed")
+  ok(
+    "remove-completed is idempotent (0 the second time)",
+    rc2.removed === 0,
+  )
+  const bad = await post(
+    "/queues/nope_not_a_set/remove-completed",
+  )
+  ok(
+    "remove-completed 400s on an unknown set",
+    bad.error === "unknown set",
+  )
 
   // remove-completed goes through the undo snapshot middleware.
-  const hist = await api('/history');
-  ok(`mutations snapshotted for undo (undo=${hist.undo})`, hist.undo >= 1);
+  const hist = await api("/history")
+  ok(
+    `mutations snapshotted for undo (undo=${hist.undo})`,
+    hist.undo >= 1,
+  )
 
   // --- B2: the shelf SKELETON carries the lane -------------------------------- //
   //
@@ -112,18 +194,40 @@ try {
   //
   // Zero Plex calls either way — `placement` is written on the entry, so it costs a property
   // read. That is why this belongs in the skeleton at all.
-  const promoteKey = (await api('/queues')).sets.bob.items[0].key as string;
-  await patch(`/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`, { placement: 'priority' });
-  const skeleton = (await api('/shelves')).sets.bob.items as JsonBody[];
-  ok('the shelf skeleton reports the promoted entry\'s lane',
-    skeleton.find((item) => item.key === promoteKey)?.placement === 'priority');
-  ok('an un-promoted entry is null in the skeleton, never guessed',
-    skeleton.filter((item) => item.key !== promoteKey).every((item) => item.placement === null));
-  const resolved = (await api('/queues')).sets.bob.items as JsonBody[];
-  ok('the skeleton and the resolved payload agree, entry for entry',
-    JSON.stringify(skeleton.map((item) => [item.key, item.placement]))
-      === JSON.stringify(resolved.map((item) => [item.key, item.placement])));
-  await patch(`/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`, { placement: '' });
+  const promoteKey = (await api("/queues")).sets.bob
+    .items[0].key as string
+  await patch(
+    `/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`,
+    { placement: "priority" },
+  )
+  const skeleton = (await api("/shelves")).sets.bob
+    .items as JsonBody[]
+  ok(
+    "the shelf skeleton reports the promoted entry's lane",
+    skeleton.find((item) => item.key === promoteKey)
+      ?.placement === "priority",
+  )
+  ok(
+    "an un-promoted entry is null in the skeleton, never guessed",
+    skeleton
+      .filter((item) => item.key !== promoteKey)
+      .every((item) => item.placement === null),
+  )
+  const resolved = (await api("/queues")).sets.bob
+    .items as JsonBody[]
+  ok(
+    "the skeleton and the resolved payload agree, entry for entry",
+    JSON.stringify(
+      skeleton.map((item) => [item.key, item.placement]),
+    ) ===
+      JSON.stringify(
+        resolved.map((item) => [item.key, item.placement]),
+      ),
+  )
+  await patch(
+    `/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`,
+    { placement: "" },
+  )
 
   // --- B3: the SECTION window lands, clears, and reaches the wire ------------- //
   //
@@ -131,287 +235,627 @@ try {
   // — the writer coerces, because the writer is the only thing that can see the other side of
   // the window under the same lock (decision
   // `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
-  const sectionKey = (await api('/queues')).sets.bob.items[0].key as string;
-  const sectionPath = `/queues/bob/items/${encodeURIComponent(sectionKey)}`;
+  const sectionKey = (await api("/queues")).sets.bob
+    .items[0].key as string
+  const sectionPath = `/queues/bob/items/${encodeURIComponent(sectionKey)}`
 
-  const setEnd = await patch(`${sectionPath}/end`, { end: { position_ms: 3960000 } });
-  ok('PATCH …/end lands', setEnd.ok === true && setEnd.end?.position_ms === 3960000);
-  let tile = ((await api('/queues')).sets.bob.items as JsonBody[])
-    .find((item) => item.key === sectionKey);
-  ok('…and the end reaches the wire', tile?.end?.position_ms === 3960000);
+  const setEnd = await patch(`${sectionPath}/end`, {
+    end: { position_ms: 3960000 },
+  })
+  ok(
+    "PATCH …/end lands",
+    setEnd.ok === true &&
+      setEnd.end?.position_ms === 3960000,
+  )
+  let tile = (
+    (await api("/queues")).sets.bob.items as JsonBody[]
+  ).find((item) => item.key === sectionKey)
+  ok(
+    "…and the end reaches the wire",
+    tile?.end?.position_ms === 3960000,
+  )
 
   // A film section: a position with NO series and NO episode. `normalizeStart` used to discard
   // exactly this shape, so it is asserted through the route rather than only in a unit test.
-  const setStart = await patch(`${sectionPath}/start`, { start: { position_ms: 3660000 } });
-  ok('PATCH …/start takes a MOVIE section', setStart.ok === true
-    && setStart.start?.position_ms === 3660000);
-  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((item) => item.key === sectionKey);
-  ok('…and the start position reaches the wire', tile?.start?.position_ms === 3660000);
-  ok('…with no season or episode invented beside it',
-    tile?.start?.season === undefined && tile?.start?.episode === undefined);
+  const setStart = await patch(`${sectionPath}/start`, {
+    start: { position_ms: 3660000 },
+  })
+  ok(
+    "PATCH …/start takes a MOVIE section",
+    setStart.ok === true &&
+      setStart.start?.position_ms === 3660000,
+  )
+  tile = (
+    (await api("/queues")).sets.bob.items as JsonBody[]
+  ).find((item) => item.key === sectionKey)
+  ok(
+    "…and the start position reaches the wire",
+    tile?.start?.position_ms === 3660000,
+  )
+  ok(
+    "…with no season or episode invented beside it",
+    tile?.start?.season === undefined &&
+      tile?.start?.episode === undefined,
+  )
 
   // Refused BY NAME rather than swapped, and nothing is written.
-  const equal = await patch(`${sectionPath}/end`, { end: { position_ms: 3660000 } });
-  ok('an end EQUAL to the start is refused', equal.ok === false
-    && typeof equal.error === 'string' && equal.error.includes('strictly after'));
-  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((item) => item.key === sectionKey);
-  ok('…and the refused write changed nothing', tile?.end?.position_ms === 3960000);
+  const equal = await patch(`${sectionPath}/end`, {
+    end: { position_ms: 3660000 },
+  })
+  ok(
+    "an end EQUAL to the start is refused",
+    equal.ok === false &&
+      typeof equal.error === "string" &&
+      equal.error.includes("strictly after"),
+  )
+  tile = (
+    (await api("/queues")).sets.bob.items as JsonBody[]
+  ).find((item) => item.key === sectionKey)
+  ok(
+    "…and the refused write changed nothing",
+    tile?.end?.position_ms === 3960000,
+  )
 
-  const clearEnd = await patch(`${sectionPath}/end`, { end: null });
-  ok('PATCH …/end {end: null} clears', clearEnd.ok === true && clearEnd.end === null);
-  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((item) => item.key === sectionKey);
-  ok('…and the wire reports no end', tile?.end == null);
-  ok('…while the start it was paired with survives', tile?.start?.position_ms === 3660000);
+  const clearEnd = await patch(`${sectionPath}/end`, {
+    end: null,
+  })
+  ok(
+    "PATCH …/end {end: null} clears",
+    clearEnd.ok === true && clearEnd.end === null,
+  )
+  tile = (
+    (await api("/queues")).sets.bob.items as JsonBody[]
+  ).find((item) => item.key === sectionKey)
+  ok("…and the wire reports no end", tile?.end == null)
+  ok(
+    "…while the start it was paired with survives",
+    tile?.start?.position_ms === 3660000,
+  )
 
-  const junkEnd = await patch(`${sectionPath}/end`, { end: { position_ms: 'quarter past' } });
-  ok('a junk end drops the key rather than writing one',
-    junkEnd.ok === true && junkEnd.end === null);
-  const badSet = await patch('/queues/does_not_exist/items/rk:1/end', { end: { position_ms: 1 } });
-  ok('PATCH …/end 400s on an unknown set', badSet.error === 'unknown set');
+  const junkEnd = await patch(`${sectionPath}/end`, {
+    end: { position_ms: "quarter past" },
+  })
+  ok(
+    "a junk end drops the key rather than writing one",
+    junkEnd.ok === true && junkEnd.end === null,
+  )
+  const badSet = await patch(
+    "/queues/does_not_exist/items/rk:1/end",
+    { end: { position_ms: 1 } },
+  )
+  ok(
+    "PATCH …/end 400s on an unknown set",
+    badSet.error === "unknown set",
+  )
 
-  await patch(`${sectionPath}/start`, { start: null });
+  await patch(`${sectionPath}/start`, { start: null })
 
   // The bulk RESET clears the window with everything else.
-  await patch(`${sectionPath}/start`, { start: { position_ms: 1000 } });
-  await patch(`${sectionPath}/end`, { end: { position_ms: 2000 } });
-  await patch('/queues/bulk', { items: [{ set: 'bob', key: sectionKey }], reset: true });
-  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((item) => item.key === sectionKey);
-  ok('bulk reset clears BOTH ends of the window',
-    tile?.start == null && tile?.end == null);
+  await patch(`${sectionPath}/start`, {
+    start: { position_ms: 1000 },
+  })
+  await patch(`${sectionPath}/end`, {
+    end: { position_ms: 2000 },
+  })
+  await patch("/queues/bulk", {
+    items: [{ set: "bob", key: sectionKey }],
+    reset: true,
+  })
+  tile = (
+    (await api("/queues")).sets.bob.items as JsonBody[]
+  ).find((item) => item.key === sectionKey)
+  ok(
+    "bulk reset clears BOTH ends of the window",
+    tile?.start == null && tile?.end == null,
+  )
 
   // --- B4: playing a section is a PROVIDER capability ------------------------- //
   //
   // Reported off a kind-keyed map, so it is answerable with no token and no instantiation —
   // which is what lets the web app hide the control on a reading queue that was never
   // configured. Neither provider here is configured, and both still answer.
-  const registry = (await api('/providers')).providers as JsonBody[];
-  const plexView = registry.find((provider) => provider.id === 'plex');
-  const kavitaView = registry.find((provider) => provider.id === 'kavita');
-  ok('the registry holds a push provider and a pull one',
-    plexView?.delivery === 'push' && kavitaView?.delivery === 'pull');
-  ok('Plex reports that it can play a section', plexView?.plays_sections === true);
-  ok('a PULL provider reports that it cannot', kavitaView?.plays_sections === false);
-  ok('…and neither answer needed a configured token',
-    plexView?.configured === false && kavitaView?.configured === false);
+  const registry = (await api("/providers"))
+    .providers as JsonBody[]
+  const plexView = registry.find(
+    (provider) => provider.id === "plex",
+  )
+  const kavitaView = registry.find(
+    (provider) => provider.id === "kavita",
+  )
+  ok(
+    "the registry holds a push provider and a pull one",
+    plexView?.delivery === "push" &&
+      kavitaView?.delivery === "pull",
+  )
+  ok(
+    "Plex reports that it can play a section",
+    plexView?.plays_sections === true,
+  )
+  ok(
+    "a PULL provider reports that it cannot",
+    kavitaView?.plays_sections === false,
+  )
+  ok(
+    "…and neither answer needed a configured token",
+    plexView?.configured === false &&
+      kavitaView?.configured === false,
+  )
 
   // --- C: collection-typed add + collections search flag --------------------- //
-  const addColl = await post('/queues/bob/items', { type: 'collection', value: { title: 'Marvel Cinematic Universe' } });
-  ok('collection add accepted', addColl.added === true);
-  items = (await api('/queues')).sets.bob.items;
-  ok('collection written as "Collection: <name>" string',
-    Boolean(items.find((item: JsonBody) => item.raw === 'Collection: Marvel Cinematic Universe')));
-  const addColl2 = await post('/queues/bob/items', { type: 'collection', value: 'Collection: Studio Ghibli' });
-  ok('an already-prefixed collection name is not doubled', addColl2.added === true);
-  items = (await api('/queues')).sets.bob.items;
-  ok('prefixed name kept verbatim (no "Collection: Collection:")',
-    Boolean(items.find((item: JsonBody) => item.raw === 'Collection: Studio Ghibli')) &&
-    !items.find((item: JsonBody) => /Collection: Collection:/.test(item.raw)));
-  const emptyColl = await post('/queues/bob/items', { type: 'collection', value: { title: '' } });
-  ok('empty collection name 400s', emptyColl.error === 'empty collection name');
+  const addColl = await post("/queues/bob/items", {
+    type: "collection",
+    value: { title: "Marvel Cinematic Universe" },
+  })
+  ok("collection add accepted", addColl.added === true)
+  items = (await api("/queues")).sets.bob.items
+  ok(
+    'collection written as "Collection: <name>" string',
+    Boolean(
+      items.find(
+        (item: JsonBody) =>
+          item.raw ===
+          "Collection: Marvel Cinematic Universe",
+      ),
+    ),
+  )
+  const addColl2 = await post("/queues/bob/items", {
+    type: "collection",
+    value: "Collection: Studio Ghibli",
+  })
+  ok(
+    "an already-prefixed collection name is not doubled",
+    addColl2.added === true,
+  )
+  items = (await api("/queues")).sets.bob.items
+  ok(
+    'prefixed name kept verbatim (no "Collection: Collection:")',
+    Boolean(
+      items.find(
+        (item: JsonBody) =>
+          item.raw === "Collection: Studio Ghibli",
+      ),
+    ) &&
+      !items.find((item: JsonBody) =>
+        /Collection: Collection:/.test(item.raw),
+      ),
+  )
+  const emptyColl = await post("/queues/bob/items", {
+    type: "collection",
+    value: { title: "" },
+  })
+  ok(
+    "empty collection name 400s",
+    emptyColl.error === "empty collection name",
+  )
 
   // Search degrades cleanly (Plex unreachable) with the collections flag on — no throw, [].
-  const search = await api('/search?set=bob&q=star&collections=1');
-  ok('search?collections=1 degrades to [] with Plex down', Array.isArray(search.results) && search.results.length === 0);
+  const search = await api(
+    "/search?set=bob&q=star&collections=1",
+  )
+  ok(
+    "search?collections=1 degrades to [] with Plex down",
+    Array.isArray(search.results) &&
+      search.results.length === 0,
+  )
 
   // --- D: per-account ratings with static fallback --------------------------- //
   // `younger` (seeded default, has user_uuid) → account-token mint fails (no plex.tv) →
   // contentRatings fails (no Plex) → static fallback list.
-  const rat = await api('/ratings?set=younger');
-  ok('ratings falls back to static list with Plex down',
-    Array.isArray(rat.ratings) && rat.ratings.includes('G') && rat.ratings.includes('PG'));
-  const ratBad = await api('/ratings?set=does_not_exist');
-  ok('ratings 400s on an unknown set', ratBad.error === 'unknown set');
+  const rat = await api("/ratings?set=younger")
+  ok(
+    "ratings falls back to static list with Plex down",
+    Array.isArray(rat.ratings) &&
+      rat.ratings.includes("G") &&
+      rat.ratings.includes("PG"),
+  )
+  const ratBad = await api("/ratings?set=does_not_exist")
+  ok(
+    "ratings 400s on an unknown set",
+    ratBad.error === "unknown set",
+  )
 
   // --- E + I: create + configure a rotation channel from Node ----------------- //
-  const created = await post('/sets', {
-    label: 'Tween Zone',
-    source: 'rotation',
-    kind: 'cartoons',
+  const created = await post("/sets", {
+    label: "Tween Zone",
+    source: "rotation",
+    kind: "cartoons",
     sections: [5],
     item_sections: [15],
-    allowed_ratings: ['TV-PG', 'PG'],
-    movie_ratings: ['PG'],
-    blocklist: ['999'],
-    plex_user: 'Tween Kids',
+    allowed_ratings: ["TV-PG", "PG"],
+    movie_ratings: ["PG"],
+    blocklist: ["999"],
+    plex_user: "Tween Kids",
     account_id: 424242,
-    user_uuid: 'deadbeefcafe0001',
+    user_uuid: "deadbeefcafe0001",
     watch_count_accounts: [424242],
-    mode: 'both',
-    audio_language: 'jpn',
-    movie_excludes: ['111', '222'],
-  });
-  ok('rotation createSet returns an id', typeof created.id === 'string' && created.id.length > 0);
-  const rid = created.id;
+    mode: "both",
+    audio_language: "jpn",
+    movie_excludes: ["111", "222"],
+  })
+  ok(
+    "rotation createSet returns an id",
+    typeof created.id === "string" && created.id.length > 0,
+  )
+  const rid = created.id
 
-  let reg = await api('/sets');
-  let ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('created set is a rotation source', ns && ns.source === 'rotation');
-  ok('rotation carries user_uuid (previously dropped)', ns.user_uuid === 'deadbeefcafe0001');
-  ok('rotation carries watch_count_accounts', Array.isArray(ns.watch_count_accounts) && ns.watch_count_accounts[0] === 424242);
-  ok('rotation carries account_id as a number', ns.account_id === 424242);
-  ok('rotation carries mode', ns.mode === 'both');
-  ok('rotation carries audio_language', ns.audio_language === 'jpn');
-  ok('rotation carries movie_excludes', Array.isArray(ns.movie_excludes) && ns.movie_excludes.join(',') === '111,222');
-  ok('rotation carries allowed_ratings + movie_ratings',
-    ns.allowed_ratings.includes('PG') && ns.movie_ratings.join(',') === 'PG');
+  let reg = await api("/sets")
+  let ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "created set is a rotation source",
+    ns && ns.source === "rotation",
+  )
+  ok(
+    "rotation carries user_uuid (previously dropped)",
+    ns.user_uuid === "deadbeefcafe0001",
+  )
+  ok(
+    "rotation carries watch_count_accounts",
+    Array.isArray(ns.watch_count_accounts) &&
+      ns.watch_count_accounts[0] === 424242,
+  )
+  ok(
+    "rotation carries account_id as a number",
+    ns.account_id === 424242,
+  )
+  ok("rotation carries mode", ns.mode === "both")
+  ok(
+    "rotation carries audio_language",
+    ns.audio_language === "jpn",
+  )
+  ok(
+    "rotation carries movie_excludes",
+    Array.isArray(ns.movie_excludes) &&
+      ns.movie_excludes.join(",") === "111,222",
+  )
+  ok(
+    "rotation carries allowed_ratings + movie_ratings",
+    ns.allowed_ratings.includes("PG") &&
+      ns.movie_ratings.join(",") === "PG",
+  )
 
   // updateSet: the new rotation knobs are in the allow-list and coerce/persist.
-  await patch(`/sets/${rid}`, { mode: 'episodic', audio_language: 'eng', movie_excludes: ['333'], watch_count_accounts: [1, 2] });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('updateSet changed mode', ns.mode === 'episodic');
-  ok('updateSet changed audio_language', ns.audio_language === 'eng');
-  ok('updateSet changed movie_excludes', ns.movie_excludes.join(',') === '333');
-  ok('updateSet changed watch_count_accounts', ns.watch_count_accounts.join(',') === '1,2');
+  await patch(`/sets/${rid}`, {
+    mode: "episodic",
+    audio_language: "eng",
+    movie_excludes: ["333"],
+    watch_count_accounts: [1, 2],
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok("updateSet changed mode", ns.mode === "episodic")
+  ok(
+    "updateSet changed audio_language",
+    ns.audio_language === "eng",
+  )
+  ok(
+    "updateSet changed movie_excludes",
+    ns.movie_excludes.join(",") === "333",
+  )
+  ok(
+    "updateSet changed watch_count_accounts",
+    ns.watch_count_accounts.join(",") === "1,2",
+  )
 
   // Per-show start overrides for the dynamic rule pool (decision
   // 2026-08-07-dynamic-pool-start-override): a {ratingKey: {season, episode}} map that the
   // Channels view writes and reads back to seed the "Start from…" picker. Whole-map replace,
   // and an empty map drops the key — same shape the members[] write uses.
-  await patch(`/sets/${rid}`, { starts: { 777: { season: 2, episode: 5 }, 888: { episode: 3 } } });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('updateSet persists starts keyed by ratingKey',
-    ns.starts && ns.starts['777'] && ns.starts['777'].season === 2 && ns.starts['777'].episode === 5);
-  ok('a single-season start stores just the episode', ns.starts['888'].episode === 3 && ns.starts['888'].season == null);
+  await patch(`/sets/${rid}`, {
+    starts: {
+      777: { season: 2, episode: 5 },
+      888: { episode: 3 },
+    },
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "updateSet persists starts keyed by ratingKey",
+    ns.starts &&
+      ns.starts["777"] &&
+      ns.starts["777"].season === 2 &&
+      ns.starts["777"].episode === 5,
+  )
+  ok(
+    "a single-season start stores just the episode",
+    ns.starts["888"].episode === 3 &&
+      ns.starts["888"].season == null,
+  )
   // A cleared entry (no episode, no series) is dropped, not stored as an empty object.
-  await patch(`/sets/${rid}`, { starts: { 777: { season: 2, episode: 5 } } });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('updateSet whole-map replace drops the omitted key', ns.starts['888'] == null && ns.starts['777'] != null);
+  await patch(`/sets/${rid}`, {
+    starts: { 777: { season: 2, episode: 5 } },
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "updateSet whole-map replace drops the omitted key",
+    ns.starts["888"] == null && ns.starts["777"] != null,
+  )
   // An empty map removes the field entirely (every show back to natural next-unwatched).
-  await patch(`/sets/${rid}`, { starts: {} });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('updateSet empty starts map clears to {}', !ns.starts || Object.keys(ns.starts).length === 0);
+  await patch(`/sets/${rid}`, { starts: {} })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "updateSet empty starts map clears to {}",
+    !ns.starts || Object.keys(ns.starts).length === 0,
+  )
 
-  const badMode = await patch(`/sets/${rid}`, { mode: 'bogus' });
-  ok('updateSet rejects an invalid mode', /invalid mode/.test(String(badMode.error || '')));
+  const badMode = await patch(`/sets/${rid}`, {
+    mode: "bogus",
+  })
+  ok(
+    "updateSet rejects an invalid mode",
+    /invalid mode/.test(String(badMode.error || "")),
+  )
   // id + source are immutable — a patch attempting them is ignored, not applied.
-  await patch(`/sets/${rid}`, { source: 'queue', id: 'hacked' });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('source stays rotation (immutable)', ns && ns.source === 'rotation');
-  ok('id unchanged (immutable)', Boolean(reg.sets.find((set: JsonBody) => set.id === rid)) && !reg.sets.find((set: JsonBody) => set.id === 'hacked'));
+  await patch(`/sets/${rid}`, {
+    source: "queue",
+    id: "hacked",
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "source stays rotation (immutable)",
+    ns && ns.source === "rotation",
+  )
+  ok(
+    "id unchanged (immutable)",
+    Boolean(
+      reg.sets.find((set: JsonBody) => set.id === rid),
+    ) &&
+      !reg.sets.find(
+        (set: JsonBody) => set.id === "hacked",
+      ),
+  )
 
   // A rotation create with NO library at all is ACCEPTED, and means every video library
   // (decision 2026-08-17-no-libraries-checked-means-every-library). It used to be rejected
   // with "at least one library section required", which is what stopped anyone from saying
   // "search all of it".
-  const noSecs = await post('/sets', { label: 'Every Lib Chan', source: 'rotation', sections: [] });
-  ok('rotation createSet accepts NO library — it means all of them', typeof noSecs.id === 'string' && noSecs.id.length > 0);
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === noSecs.id);
-  ok('the unscoped channel persists empty sections', ns && Array.isArray(ns.sections) && ns.sections.length === 0);
+  const noSecs = await post("/sets", {
+    label: "Every Lib Chan",
+    source: "rotation",
+    sections: [],
+  })
+  ok(
+    "rotation createSet accepts NO library — it means all of them",
+    typeof noSecs.id === "string" && noSecs.id.length > 0,
+  )
+  reg = await api("/sets")
+  ns = reg.sets.find(
+    (set: JsonBody) => set.id === noSecs.id,
+  )
+  ok(
+    "the unscoped channel persists empty sections",
+    ns &&
+      Array.isArray(ns.sections) &&
+      ns.sections.length === 0,
+  )
 
   // --- Shorts-only channels: a rotation channel may have no SHOW library ------ //
   // The Younger Kids Shows/Shorts split (2026-07-27) needs a channel that draws purely
   // from item_sections. Before this, `sections: []` was rejected outright, so a
   // Shorts-only channel could be hand-written into sets.yaml but never saved from the UI.
-  const shortsOnly = await post('/sets', {
-    label: 'Shorts Only', source: 'rotation', kind: 'cartoons',
-    sections: [], item_sections: [15],
-  });
-  ok('rotation createSet allows no show library when item_sections has one',
-    typeof shortsOnly.id === 'string' && shortsOnly.id.length > 0);
-  const sid = shortsOnly.id;
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === sid);
-  ok('shorts-only channel persists empty sections',
-    ns && Array.isArray(ns.sections) && ns.sections.length === 0);
-  ok('shorts-only channel keeps its item_sections', ns.item_sections.join(',') === '15');
+  const shortsOnly = await post("/sets", {
+    label: "Shorts Only",
+    source: "rotation",
+    kind: "cartoons",
+    sections: [],
+    item_sections: [15],
+  })
+  ok(
+    "rotation createSet allows no show library when item_sections has one",
+    typeof shortsOnly.id === "string" &&
+      shortsOnly.id.length > 0,
+  )
+  const sid = shortsOnly.id
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === sid)
+  ok(
+    "shorts-only channel persists empty sections",
+    ns &&
+      Array.isArray(ns.sections) &&
+      ns.sections.length === 0,
+  )
+  ok(
+    "shorts-only channel keeps its item_sections",
+    ns.item_sections.join(",") === "15",
+  )
 
   // Patching sections to [] is fine while item_sections still holds a library...
-  const clearSecs = await patch(`/sets/${rid}`, { sections: [] });
-  ok('updateSet allows clearing sections when item_sections remain', !clearSecs.error);
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('cleared sections persisted', ns.sections.length === 0 && ns.item_sections.join(',') === '15');
+  const clearSecs = await patch(`/sets/${rid}`, {
+    sections: [],
+  })
+  ok(
+    "updateSet allows clearing sections when item_sections remain",
+    !clearSecs.error,
+  )
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "cleared sections persisted",
+    ns.sections.length === 0 &&
+      ns.item_sections.join(",") === "15",
+  )
 
   // ...and so is emptying BOTH: unchecking the last box is a real edit that means "draw
   // from every library", not a save error.
-  const emptyBoth = await patch(`/sets/${rid}`, { sections: [], item_sections: [] });
-  ok('updateSet allows emptying every library', !emptyBoth.error);
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === rid);
-  ok('the emptied scope persisted', ns.sections.length === 0 && ns.item_sections.length === 0);
+  const emptyBoth = await patch(`/sets/${rid}`, {
+    sections: [],
+    item_sections: [],
+  })
+  ok(
+    "updateSet allows emptying every library",
+    !emptyBoth.error,
+  )
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === rid)
+  ok(
+    "the emptied scope persisted",
+    ns.sections.length === 0 &&
+      ns.item_sections.length === 0,
+  )
 
   // A CURATED queue needs no section either — its search widens to every library instead.
-  const curatedNoSecs = await post('/sets', { label: 'Unscoped Queue', sections: [], item_sections: [] });
-  ok('curated createSet accepts NO section', typeof curatedNoSecs.id === 'string' && curatedNoSecs.id.length > 0);
+  const curatedNoSecs = await post("/sets", {
+    label: "Unscoped Queue",
+    sections: [],
+    item_sections: [],
+  })
+  ok(
+    "curated createSet accepts NO section",
+    typeof curatedNoSecs.id === "string" &&
+      curatedNoSecs.id.length > 0,
+  )
 
   // --- default_profile: the UI-seed hint the Play/Channels dropdowns start on --- //
   // A two-binding rotation channel that names one binding as its default; it must
   // round-trip on create, be re-pointable, and clear back to "no default" (dropdowns
   // then fall back to profiles[0]). (decision 2026-08-07-default-profile-per-channel)
-  const dp = await post('/sets', {
-    label: 'Default Profile Chan', source: 'rotation', kind: 'cartoons',
-    sections: [5], item_sections: [15],
+  const dp = await post("/sets", {
+    label: "Default Profile Chan",
+    source: "rotation",
+    kind: "cartoons",
+    sections: [5],
+    item_sections: [15],
     profiles: [
-      { plex_user: 'Younger Kids', account_id: 1, allowed_ratings: ['TV-Y'] },
-      { plex_user: 'Older Kids', account_id: 2, allowed_ratings: ['TV-PG'] },
+      {
+        plex_user: "Younger Kids",
+        account_id: 1,
+        allowed_ratings: ["TV-Y"],
+      },
+      {
+        plex_user: "Older Kids",
+        account_id: 2,
+        allowed_ratings: ["TV-PG"],
+      },
     ],
-    default_profile: 'Older Kids',
-  });
-  const dpid = dp.id;
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === dpid);
-  ok('createSet persists default_profile', ns && ns.default_profile === 'Older Kids');
-  ok('default_profile channel has explicit profiles', ns.has_explicit_profiles === true);
+    default_profile: "Older Kids",
+  })
+  const dpid = dp.id
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === dpid)
+  ok(
+    "createSet persists default_profile",
+    ns && ns.default_profile === "Older Kids",
+  )
+  ok(
+    "default_profile channel has explicit profiles",
+    ns.has_explicit_profiles === true,
+  )
 
-  await patch(`/sets/${dpid}`, { default_profile: 'Younger Kids' });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === dpid);
-  ok('updateSet re-points default_profile', ns.default_profile === 'Younger Kids');
+  await patch(`/sets/${dpid}`, {
+    default_profile: "Younger Kids",
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === dpid)
+  ok(
+    "updateSet re-points default_profile",
+    ns.default_profile === "Younger Kids",
+  )
 
-  await patch(`/sets/${dpid}`, { default_profile: '' });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === dpid);
-  ok('updateSet clears default_profile to null', ns.default_profile == null);
-  await api(`/sets/${dpid}`, { method: 'DELETE' });
+  await patch(`/sets/${dpid}`, { default_profile: "" })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === dpid)
+  ok(
+    "updateSet clears default_profile to null",
+    ns.default_profile == null,
+  )
+  await api(`/sets/${dpid}`, { method: "DELETE" })
 
   // --- Queue flags: keep_completed / reel / remove_completed_after (Set editor) --- //
   // These lived hand-YAML only until the SetModal exposure; the API must round-trip
   // them so the UI can read and write. (decision 2026-08-08-set-modal-queue-flags)
-  const playlist = await post('/sets', {
-    label: 'Playlist Queue', kind: 'movies', sections: [1],
-    keep_completed: true, remove_completed_after: '24h',
-  });
-  const plid = playlist.id;
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === plid);
-  ok('createSet persists keep_completed', ns && ns.keep_completed === true);
-  ok('createSet persists remove_completed_after', ns && ns.remove_completed_after === '24h');
-  ok('createSet leaves reel false when unset', ns && ns.reel === false);
+  const playlist = await post("/sets", {
+    label: "Playlist Queue",
+    kind: "movies",
+    sections: [1],
+    keep_completed: true,
+    remove_completed_after: "24h",
+  })
+  const plid = playlist.id
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === plid)
+  ok(
+    "createSet persists keep_completed",
+    ns && ns.keep_completed === true,
+  )
+  ok(
+    "createSet persists remove_completed_after",
+    ns && ns.remove_completed_after === "24h",
+  )
+  ok(
+    "createSet leaves reel false when unset",
+    ns && ns.reel === false,
+  )
 
-  await patch(`/sets/${plid}`, { reel: true });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === plid);
-  ok('updateSet reel:true lands', ns.reel === true);
-  ok('updateSet reel implies keep_completed on normalize', ns.keep_completed === true);
+  await patch(`/sets/${plid}`, { reel: true })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === plid)
+  ok("updateSet reel:true lands", ns.reel === true)
+  ok(
+    "updateSet reel implies keep_completed on normalize",
+    ns.keep_completed === true,
+  )
 
-  await patch(`/sets/${plid}`, { reel: false, keep_completed: false, remove_completed_after: '' });
-  reg = await api('/sets');
-  ns = reg.sets.find((set: JsonBody) => set.id === plid);
-  ok('updateSet clears reel', ns.reel === false);
-  ok('updateSet clears keep_completed', ns.keep_completed === false);
-  ok('updateSet blank remove_completed_after → null (keep forever)', ns.remove_completed_after == null);
+  await patch(`/sets/${plid}`, {
+    reel: false,
+    keep_completed: false,
+    remove_completed_after: "",
+  })
+  reg = await api("/sets")
+  ns = reg.sets.find((set: JsonBody) => set.id === plid)
+  ok("updateSet clears reel", ns.reel === false)
+  ok(
+    "updateSet clears keep_completed",
+    ns.keep_completed === false,
+  )
+  ok(
+    "updateSet blank remove_completed_after → null (keep forever)",
+    ns.remove_completed_after == null,
+  )
 
   // Rotation channels reject the queue-only knobs (they have no consumption model).
-  const rotReject = await patch(`/sets/${sid}`, { keep_completed: true });
-  ok('rotation rejects keep_completed', /only valid on curated queues/.test(String(rotReject.error || '')));
-  const rotRejectTtl = await patch(`/sets/${sid}`, { remove_completed_after: '7d' });
-  ok('rotation rejects remove_completed_after', /only valid on curated queues/.test(String(rotRejectTtl.error || '')));
-  await api(`/sets/${plid}`, { method: 'DELETE' });
+  const rotReject = await patch(`/sets/${sid}`, {
+    keep_completed: true,
+  })
+  ok(
+    "rotation rejects keep_completed",
+    /only valid on curated queues/.test(
+      String(rotReject.error || ""),
+    ),
+  )
+  const rotRejectTtl = await patch(`/sets/${sid}`, {
+    remove_completed_after: "7d",
+  })
+  ok(
+    "rotation rejects remove_completed_after",
+    /only valid on curated queues/.test(
+      String(rotRejectTtl.error || ""),
+    ),
+  )
+  await api(`/sets/${plid}`, { method: "DELETE" })
 
   // --- Rotation channels are now DELETABLE (2026-07-27; was blocked before) ---- //
-  const del = await api(`/sets/${sid}`, { method: 'DELETE' });
-  ok('rotation channel deletes (no longer blocked)', del.deleted === true);
-  reg = await api('/sets');
-  ok('deleted rotation channel is gone from the registry', !reg.sets.find((set: JsonBody) => set.id === sid));
-  const delMissing = await api(`/sets/${sid}`, { method: 'DELETE' });
-  ok('deleting an already-gone set reports not-deleted', delMissing.deleted === false);
+  const del = await api(`/sets/${sid}`, {
+    method: "DELETE",
+  })
+  ok(
+    "rotation channel deletes (no longer blocked)",
+    del.deleted === true,
+  )
+  reg = await api("/sets")
+  ok(
+    "deleted rotation channel is gone from the registry",
+    !reg.sets.find((set: JsonBody) => set.id === sid),
+  )
+  const delMissing = await api(`/sets/${sid}`, {
+    method: "DELETE",
+  })
+  ok(
+    "deleting an already-gone set reports not-deleted",
+    delMissing.deleted === false,
+  )
 } finally {
-  await stop(srv);
+  await stop(srv)
 }
-console.log('done');
+console.log("done")

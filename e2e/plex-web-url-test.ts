@@ -11,70 +11,90 @@
 //
 // Self-contained: stubs `./playback.js` under webLinks so nothing reaches a live Plex.
 // Run:  server/node_modules/.bin/tsx e2e/plex-web-url-test.ts
-import { registerHooks } from 'node:module';
-import assert from 'node:assert/strict';
-import { parentIs } from './stubs/module-id.mjs';
+import { registerHooks } from "node:module"
+import assert from "node:assert/strict"
+import { parentIs } from "./stubs/module-id.mjs"
 
 declare global {
-   
-  var __WEB_LINKS_MID: string | undefined;
+  var __WEB_LINKS_MID: string | undefined
 }
 
-const stub = (src: string): string => `data:text/javascript,${encodeURIComponent(src)}`;
+const stub = (src: string): string =>
+  `data:text/javascript,${encodeURIComponent(src)}`
 
 const PLAYBACK_STUB = stub(`
   export async function machineIdentifier() {
     return globalThis.__WEB_LINKS_MID === undefined ? 'server-mid' : globalThis.__WEB_LINKS_MID;
   }
-`);
+`)
 
-const fromWebLinks = parentIs('/server/src/webLinks');
+const fromWebLinks = parentIs("/server/src/webLinks")
 registerHooks({
   resolve(spec, ctx, next) {
-    if (fromWebLinks(ctx) && spec === './playback.js') {
-      return { url: PLAYBACK_STUB, shortCircuit: true };
+    if (fromWebLinks(ctx) && spec === "./playback.js") {
+      return { url: PLAYBACK_STUB, shortCircuit: true }
     }
-    return next(spec, ctx);
+    return next(spec, ctx)
   },
-});
+})
 
 // Force the placeholder host — an inherited PLEX_API_SERVER_URL would make a green run
 // against the live household value look like proof the code reads the env, when it would
 // also pass if the host were hard-coded to that same value.
-process.env.PLEX_API_SERVER_URL = 'https://plex.example.com';
-delete process.env.CONFIG_PATH;
+process.env.PLEX_API_SERVER_URL = "https://plex.example.com"
+delete process.env.CONFIG_PATH
 
-const { plexWebUrl } = await import('../server/src/webLinks.js');
+const { plexWebUrl } = await import(
+  "../server/src/webLinks.js"
+)
 
-let failed = 0;
-const check = (label: string, actual: unknown, expected: unknown) => {
+let failed = 0
+const check = (
+  label: string,
+  actual: unknown,
+  expected: unknown,
+) => {
   try {
-    assert.equal(actual, expected);
-    console.log(`PASS ${label}`);
+    assert.equal(actual, expected)
+    console.log(`PASS ${label}`)
   } catch {
-    console.log(`FAIL ${label} — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`);
-    failed++;
+    console.log(
+      `FAIL ${label} — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`,
+    )
+    failed++
   }
-};
+}
 
-const url = await plexWebUrl('12345');
+const url = await plexWebUrl("12345")
 check(
-  'webUrl uses PLEX_API_SERVER_URL + /web/index.html',
+  "webUrl uses PLEX_API_SERVER_URL + /web/index.html",
   url,
-  'https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fmetadata%2F12345',
-);
-check('webUrl does not point at app.plex.tv', url?.includes('app.plex.tv') ?? false, false);
+  "https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fmetadata%2F12345",
+)
+check(
+  "webUrl does not point at app.plex.tv",
+  url?.includes("app.plex.tv") ?? false,
+  false,
+)
 
 check(
-  'collection webUrl uses the Plex collection route',
-  await plexWebUrl('341063', 'collection'),
-  'https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fcollections%2F341063',
-);
+  "collection webUrl uses the Plex collection route",
+  await plexWebUrl("341063", "collection"),
+  "https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fcollections%2F341063",
+)
 
-check('null rating key → null', await plexWebUrl(null), null);
-check('empty rating key → null', await plexWebUrl(''), null);
+check(
+  "null rating key → null",
+  await plexWebUrl(null),
+  null,
+)
+check("empty rating key → null", await plexWebUrl(""), null)
 
-globalThis.__WEB_LINKS_MID = '';
-check('blank machine id → null', await plexWebUrl('99'), null);
+globalThis.__WEB_LINKS_MID = ""
+check(
+  "blank machine id → null",
+  await plexWebUrl("99"),
+  null,
+)
 
-if (failed) process.exit(1);
+if (failed) process.exit(1)

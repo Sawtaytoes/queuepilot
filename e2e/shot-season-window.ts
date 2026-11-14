@@ -13,19 +13,26 @@
 // itself. Every scratch path and both ports carry a suffix nothing else in the repo uses:
 // sibling agents run these harnesses at the same time, and a shared `/tmp/queues-harness.yaml`
 // is exactly the collision the workspace rule forbids.
-import { promises as fs } from 'node:fs';
+import { promises as fs } from "node:fs"
 
-import { startFakeMqtt } from './fake-mqtt.js';
-import { chromium } from './playwright.js';
-import { killServer, spawnServer, REPO_ROOT } from './stubs/server-process.mjs';
+import { startFakeMqtt } from "./fake-mqtt.js"
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+  REPO_ROOT,
+} from "./stubs/server-process.mjs"
 
-const TAG = process.env.SHOT_TAG || 'after';
-const PORT = parseInt(process.env.WEB_PORT || '18977', 10);
-const MQTT_PORT = parseInt(process.env.FAKE_MQTT_PORT || '11977', 10);
-const BASE = `http://localhost:${PORT}`;
-const OUT = '__screenshots__';
-const QUEUES = '/tmp/qp-season-window.queues.yaml';
-const SETS = '/tmp/qp-season-window.sets.yaml';
+const TAG = process.env.SHOT_TAG || "after"
+const PORT = parseInt(process.env.WEB_PORT || "18977", 10)
+const MQTT_PORT = parseInt(
+  process.env.FAKE_MQTT_PORT || "11977",
+  10,
+)
+const BASE = `http://localhost:${PORT}`
+const OUT = "__screenshots__"
+const QUEUES = "/tmp/qp-season-window.queues.yaml"
+const SETS = "/tmp/qp-season-window.sets.yaml"
 
 /**
  * `MM-DD` for a day `days` from today.
@@ -37,45 +44,57 @@ const SETS = '/tmp/qp-season-window.sets.yaml';
  * nothing to say it had.
  */
 function dayFromToday(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
+  const date = new Date()
+  date.setDate(date.getDate() + days)
 
-  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 }
 
-await fs.mkdir(OUT, { recursive: true });
-await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
-await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const file of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(file, { recursive: true, force: true });
+await fs.mkdir(OUT, { recursive: true })
+await fs.copyFile(
+  `${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`,
+  QUEUES,
+)
+await fs.copyFile(
+  `${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`,
+  SETS,
+)
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`])
+  await fs.rm(file, { recursive: true, force: true })
 
-let hasFailed = false;
-const fake = await startFakeMqtt({ port: MQTT_PORT });
+let hasFailed = false
+const fake = await startFakeMqtt({ port: MQTT_PORT })
 const srv = spawnServer({
   env: {
     ...process.env,
     QUEUES_PATH: QUEUES,
     SETS_PATH: SETS,
-    HISTORY_PATH: '/tmp/qp-season-window.history.json',
-    STORE_PATH: '/tmp/qp-season-window.sqlite',
+    HISTORY_PATH: "/tmp/qp-season-window.history.json",
+    STORE_PATH: "/tmp/qp-season-window.sqlite",
     WEB_PORT: String(PORT),
-    MQTT_HOST: '127.0.0.1',
+    MQTT_HOST: "127.0.0.1",
     MQTT_PORT: String(MQTT_PORT),
-    NODE_TLS_REJECT_UNAUTHORIZED: '0',
+    NODE_TLS_REJECT_UNAUTHORIZED: "0",
   },
-  stdio: 'ignore',
-});
+  stdio: "ignore",
+})
 
 const ready = async (): Promise<void> => {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 30_000
   for (;;) {
-    try { if ((await fetch(`${BASE}/api/sets`)).ok) return; } catch { /* not up yet */ }
-    if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    try {
+      if ((await fetch(`${BASE}/api/sets`)).ok) return
+    } catch {
+      /* not up yet */
+    }
+    if (Date.now() > deadline)
+      throw new Error("server never came up")
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-};
+}
 
 try {
-  await ready();
+  await ready()
 
   // The state the shot is ABOUT. Written through the API so the fixture on disk stays the
   // fixture. The SERVER is the same build on both tags — only `web/` differs — so the shelf
@@ -86,75 +105,134 @@ try {
       season_end: dayFromToday(80),
       season_start: dayFromToday(40),
     }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'PATCH',
-  });
+    headers: { "Content-Type": "application/json" },
+    method: "PATCH",
+  })
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch()
   const page = await browser.newPage({
-    colorScheme: 'dark',
+    colorScheme: "dark",
     viewport: { height: 1000, width: 1280 },
-  });
+  })
 
   // ── 1. The Picks shelf, with the out-of-season mark ────────────────────────────────────
-  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.shelf[data-set="bob_anime"]', { timeout: 30_000 });
-  await page.waitForTimeout(600);
-  await page.locator('.shelf[data-set="bob_anime"] h2').screenshot({
-    path: `${OUT}/season-window-shelf-${TAG}.png`,
-  });
-  console.log(`wrote ${OUT}/season-window-shelf-${TAG}.png`);
-  console.log('shelf heading says:', (await page.locator('.shelf[data-set="bob_anime"] h2').innerText()).replace(/\n+/g, ' / '));
+  await page.goto(`${BASE}/picks`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(
+    '.shelf[data-set="bob_anime"]',
+    { timeout: 30_000 },
+  )
+  await page.waitForTimeout(600)
+  await page
+    .locator('.shelf[data-set="bob_anime"] h2')
+    .screenshot({
+      path: `${OUT}/season-window-shelf-${TAG}.png`,
+    })
+  console.log(`wrote ${OUT}/season-window-shelf-${TAG}.png`)
+  console.log(
+    "shelf heading says:",
+    (
+      await page
+        .locator('.shelf[data-set="bob_anime"] h2')
+        .innerText()
+    ).replace(/\n+/g, " / "),
+  )
 
   // ── 2. The queue editor's season row ───────────────────────────────────────────────────
-  await page.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/q/bob_anime`, {
+    waitUntil: "domcontentloaded",
+  })
   // Wait for the GRID, not for the ⚙. The button paints before `/api/sets` answers, and
   // `SetModal` seeds its fields once from an effect keyed on the modal opening — open it in
   // that gap and every field prefills as if the queue were being CREATED, season row included.
-  await page.waitForSelector('#grid .tile .cap', { timeout: 30_000 });
-  await page.click('#qconfigure');
-  await page.waitForSelector('#setmodal', { timeout: 10_000 });
+  await page.waitForSelector("#grid .tile .cap", {
+    timeout: 30_000,
+  })
+  await page.click("#qconfigure")
+  await page.waitForSelector("#setmodal", {
+    timeout: 10_000,
+  })
   // The row sits below the promote window, so a shot of the modal's top says nothing about it.
-  await page.locator('#set-promote-window').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(400);
-  await page.locator('#setmodal').screenshot({ path: `${OUT}/season-window-editor-${TAG}.png` });
-  console.log(`wrote ${OUT}/season-window-editor-${TAG}.png`);
-  const hasRow = await page.locator('#set-season').count();
-  console.log(`queue editor: season row ${hasRow ? 'PRESENT ✓' : 'absent ✗'}`);
+  await page
+    .locator("#set-promote-window")
+    .scrollIntoViewIfNeeded()
+  await page.waitForTimeout(400)
+  await page.locator("#setmodal").screenshot({
+    path: `${OUT}/season-window-editor-${TAG}.png`,
+  })
+  console.log(
+    `wrote ${OUT}/season-window-editor-${TAG}.png`,
+  )
+  const hasRow = await page.locator("#set-season").count()
+  console.log(
+    `queue editor: season row ${hasRow ? "PRESENT ✓" : "absent ✗"}`,
+  )
 
   // ── 3. The same row in the NARROW VIEW ─────────────────────────────────────────────────
   // Four pickers and the word "to" cannot sit on one line at 390px, so the row WRAPS as
   // [month][day][to] / [month][day]. That break is the thing worth photographing: it has to
   // read as one sentence across it, and it must not make the page scroll sideways.
   const narrow = await browser.newPage({
-    colorScheme: 'dark',
+    colorScheme: "dark",
     viewport: { height: 844, width: 390 },
-  });
-  await narrow.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('#grid .tile .cap', { timeout: 30_000 });
-  await narrow.click('#qconfigure');
-  await narrow.waitForSelector('#set-season', { timeout: 10_000 });
-  await narrow.locator('#set-season').scrollIntoViewIfNeeded();
-  await narrow.waitForTimeout(400);
-  await narrow.locator('#setmodal').screenshot({ path: `${OUT}/season-window-narrow-${TAG}.png` });
-  console.log(`wrote ${OUT}/season-window-narrow-${TAG}.png`);
+  })
+  await narrow.goto(`${BASE}/q/bob_anime`, {
+    waitUntil: "domcontentloaded",
+  })
+  await narrow.waitForSelector("#grid .tile .cap", {
+    timeout: 30_000,
+  })
+  await narrow.click("#qconfigure")
+  await narrow.waitForSelector("#set-season", {
+    timeout: 10_000,
+  })
+  await narrow
+    .locator("#set-season")
+    .scrollIntoViewIfNeeded()
+  await narrow.waitForTimeout(400)
+  await narrow.locator("#setmodal").screenshot({
+    path: `${OUT}/season-window-narrow-${TAG}.png`,
+  })
+  console.log(
+    `wrote ${OUT}/season-window-narrow-${TAG}.png`,
+  )
   // A sideways scrollbar here is a FAILURE, not a cosmetic note — `e2e/narrow-scroll-test.ts`
   // gates the same property for the rest of the app.
-  const width = await narrow.evaluate(() => document.documentElement.scrollWidth);
-  console.log(`narrow view: scrollWidth ${width} (viewport 390)`);
-  if (width > 390) { console.log('NARROW VIEW SCROLLS SIDEWAYS ✗'); hasFailed = true; }
+  const width = await narrow.evaluate(
+    () => document.documentElement.scrollWidth,
+  )
+  console.log(
+    `narrow view: scrollWidth ${width} (viewport 390)`,
+  )
+  if (width > 390) {
+    console.log("NARROW VIEW SCROLLS SIDEWAYS ✗")
+    hasFailed = true
+  }
 
-  await browser.close();
+  await browser.close()
 } catch (error) {
-  console.log('SHOT FAILED:', error);
-  hasFailed = true;
+  console.log("SHOT FAILED:", error)
+  hasFailed = true
 } finally {
   // `process.exit` and not a fall-through: the fake broker's client keeps a live socket and
   // aedes keeps its own handles, so the event loop stays open and the script hangs after the
   // last PNG is already on disk.
-  killServer(srv);
-  try { fake.client.end(true); } catch { /* already down */ }
-  try { fake.server.close(); } catch { /* already down */ }
-  try { fake.aedes.close(); } catch { /* already down */ }
-  process.exit(hasFailed ? 1 : 0);
+  killServer(srv)
+  try {
+    fake.client.end(true)
+  } catch {
+    /* already down */
+  }
+  try {
+    fake.server.close()
+  } catch {
+    /* already down */
+  }
+  try {
+    fake.aedes.close()
+  } catch {
+    /* already down */
+  }
+  process.exit(hasFailed ? 1 : 0)
 }

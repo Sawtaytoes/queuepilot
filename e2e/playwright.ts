@@ -33,42 +33,48 @@
 //   * it is deliberately faithful on the parts that MATTER for correctness — the
 //     `evaluate`/`$eval`/`$$eval` overloads, which are where the Node/browser boundary
 //     lives and where the type system is actually earning its keep.
-import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { createRequire } from "node:module"
+import { existsSync } from "node:fs"
 
 // --- the API slice -----------------------------------------------------------------
 
 /** Options accepted by every action that can time out. */
 export interface TimeoutOptions {
-  timeout?: number;
+  timeout?: number
 }
 
 export interface ClickOptions extends TimeoutOptions {
-  button?: 'left' | 'right' | 'middle';
-  clickCount?: number;
-  force?: boolean;
-  position?: { x: number; y: number };
+  button?: "left" | "right" | "middle"
+  clickCount?: number
+  force?: boolean
+  position?: { x: number; y: number }
 }
 
-export interface WaitForSelectorOptions extends TimeoutOptions {
-  state?: 'attached' | 'detached' | 'visible' | 'hidden';
+export interface WaitForSelectorOptions
+  extends TimeoutOptions {
+  state?: "attached" | "detached" | "visible" | "hidden"
 }
 
 export interface ScreenshotOptions {
-  path?: string;
-  fullPage?: boolean;
-  clip?: { x: number; y: number; width: number; height: number };
-  type?: 'png' | 'jpeg';
+  path?: string
+  fullPage?: boolean
+  clip?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+  type?: "png" | "jpeg"
   /** `'disabled'` finishes CSS transitions and animations before the shot (VRT). */
-  animations?: 'disabled' | 'allow';
-  caret?: 'hide' | 'initial';
+  animations?: "disabled" | "allow"
+  caret?: "hide" | "initial"
 }
 
 export interface BoundingBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 /**
@@ -79,141 +85,205 @@ export interface BoundingBox {
  * not a compile error, so the split pair is the point.
  */
 export interface JSHandle<T = unknown> {
-  jsonValue(): Promise<T>;
-  dispose(): Promise<void>;
+  jsonValue(): Promise<T>
+  dispose(): Promise<void>
 }
 
-export interface ElementHandle<T extends Element = Element> extends JSHandle<T> {
-  click(options?: ClickOptions): Promise<void>;
-  hover(options?: TimeoutOptions): Promise<void>;
-  fill(value: string, options?: TimeoutOptions): Promise<void>;
-  check(options?: TimeoutOptions): Promise<void>;
-  focus(): Promise<void>;
-  textContent(): Promise<string | null>;
-  innerText(): Promise<string>;
-  inputValue(): Promise<string>;
-  getAttribute(name: string): Promise<string | null>;
-  boundingBox(): Promise<BoundingBox | null>;
-  isVisible(): Promise<boolean>;
-  isHidden(): Promise<boolean>;
-  isChecked(): Promise<boolean>;
-  scrollIntoViewIfNeeded(options?: TimeoutOptions): Promise<void>;
+export interface ElementHandle<T extends Element = Element>
+  extends JSHandle<T> {
+  click(options?: ClickOptions): Promise<void>
+  hover(options?: TimeoutOptions): Promise<void>
+  fill(
+    value: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  check(options?: TimeoutOptions): Promise<void>
+  focus(): Promise<void>
+  textContent(): Promise<string | null>
+  innerText(): Promise<string>
+  inputValue(): Promise<string>
+  getAttribute(name: string): Promise<string | null>
+  boundingBox(): Promise<BoundingBox | null>
+  isVisible(): Promise<boolean>
+  isHidden(): Promise<boolean>
+  isChecked(): Promise<boolean>
+  scrollIntoViewIfNeeded(
+    options?: TimeoutOptions,
+  ): Promise<void>
   /**
    * Shoot just this element. What a "before/after on the PR" capture wants: the fieldset that
    * changed, cropped by the DOM, rather than a full page the reader has to hunt through — and
    * unlike a hand-written `clip`, it does not silently frame the wrong box when the layout
    * moves. `Page` and `Locator` already declare it; the handle form was simply never used.
    */
-  screenshot(options?: ScreenshotOptions): Promise<Buffer>;
-  $<E extends Element = Element>(selector: string): Promise<ElementHandle<E> | null>;
-  $$<E extends Element = Element>(selector: string): Promise<ElementHandle<E>[]>;
-  evaluate<R>(fn: (element: T) => R | Promise<R>): Promise<R>;
-  evaluate<R, A>(fn: (element: T, arg: A) => R | Promise<R>, arg: A): Promise<R>;
+  screenshot(options?: ScreenshotOptions): Promise<Buffer>
+  $<E extends Element = Element>(
+    selector: string,
+  ): Promise<ElementHandle<E> | null>
+  $$<E extends Element = Element>(
+    selector: string,
+  ): Promise<ElementHandle<E>[]>
+  evaluate<R>(
+    fn: (element: T) => R | Promise<R>,
+  ): Promise<R>
+  evaluate<R, A>(
+    fn: (element: T, arg: A) => R | Promise<R>,
+    arg: A,
+  ): Promise<R>
 }
 
 /** The filtering form of `locator(selector, { hasText })` — how the suites pick a button
  * out of a menu by its label instead of by a positional nth(). */
 export interface LocatorOptions {
-  hasText?: string | RegExp;
-  hasNotText?: string | RegExp;
-  has?: Locator;
-  hasNot?: Locator;
+  hasText?: string | RegExp
+  hasNotText?: string | RegExp
+  has?: Locator
+  hasNot?: Locator
 }
 
 export interface Locator {
-  click(options?: ClickOptions): Promise<void>;
-  hover(options?: TimeoutOptions): Promise<void>;
-  fill(value: string, options?: TimeoutOptions): Promise<void>;
+  click(options?: ClickOptions): Promise<void>
+  hover(options?: TimeoutOptions): Promise<void>
+  fill(
+    value: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
   /** One key at this element. `Enter` is what commits a `TimecodeInput`, which is the only
    *  field in the app where typing alone deliberately does not write. */
-  press(key: string, options?: TimeoutOptions & { delay?: number }): Promise<void>;
-  check(options?: TimeoutOptions): Promise<void>;
+  press(
+    key: string,
+    options?: TimeoutOptions & { delay?: number },
+  ): Promise<void>
+  check(options?: TimeoutOptions): Promise<void>
   /** Hand a file to an `<input type="file">` — the person-photo harness picks a fixture photo
    *  through the people editor's `FileDropZone` this way. */
-  setInputFiles(files: string | string[], options?: TimeoutOptions): Promise<void>;
-  count(): Promise<number>;
-  first(): Locator;
-  last(): Locator;
-  nth(index: number): Locator;
-  locator(selector: string, options?: LocatorOptions): Locator;
-  getByRole(role: string, options?: { name?: string; exact?: boolean }): Locator;
-  textContent(options?: TimeoutOptions): Promise<string | null>;
-  innerText(options?: TimeoutOptions): Promise<string>;
-  inputValue(options?: TimeoutOptions): Promise<string>;
-  allInnerTexts(): Promise<string[]>;
-  allTextContents(): Promise<string[]>;
-  getAttribute(name: string, options?: TimeoutOptions): Promise<string | null>;
-  boundingBox(options?: TimeoutOptions): Promise<BoundingBox | null>;
-  isVisible(options?: TimeoutOptions): Promise<boolean>;
-  isHidden(options?: TimeoutOptions): Promise<boolean>;
-  isChecked(options?: TimeoutOptions): Promise<boolean>;
+  setInputFiles(
+    files: string | string[],
+    options?: TimeoutOptions,
+  ): Promise<void>
+  count(): Promise<number>
+  first(): Locator
+  last(): Locator
+  nth(index: number): Locator
+  locator(
+    selector: string,
+    options?: LocatorOptions,
+  ): Locator
+  getByRole(
+    role: string,
+    options?: { name?: string; exact?: boolean },
+  ): Locator
+  textContent(
+    options?: TimeoutOptions,
+  ): Promise<string | null>
+  innerText(options?: TimeoutOptions): Promise<string>
+  inputValue(options?: TimeoutOptions): Promise<string>
+  allInnerTexts(): Promise<string[]>
+  allTextContents(): Promise<string[]>
+  getAttribute(
+    name: string,
+    options?: TimeoutOptions,
+  ): Promise<string | null>
+  boundingBox(
+    options?: TimeoutOptions,
+  ): Promise<BoundingBox | null>
+  isVisible(options?: TimeoutOptions): Promise<boolean>
+  isHidden(options?: TimeoutOptions): Promise<boolean>
+  isChecked(options?: TimeoutOptions): Promise<boolean>
   /** The NATIVE `disabled` attribute, which is what Charcuterie's `MenuAction` writes for a
    * disabled row — it never sets `aria-disabled`, so an attribute check reads the wrong thing. */
-  isDisabled(options?: TimeoutOptions): Promise<boolean>;
-  scrollIntoViewIfNeeded(options?: TimeoutOptions): Promise<void>;
-  elementHandle(options?: TimeoutOptions): Promise<ElementHandle | null>;
-  elementHandles(): Promise<ElementHandle[]>;
-  waitFor(options?: WaitForSelectorOptions): Promise<void>;
-  screenshot(options?: ScreenshotOptions): Promise<Buffer>;
-  evaluate<R>(fn: (element: Element) => R | Promise<R>): Promise<R>;
-  evaluate<R, A>(fn: (element: Element, arg: A) => R | Promise<R>, arg: A): Promise<R>;
+  isDisabled(options?: TimeoutOptions): Promise<boolean>
+  scrollIntoViewIfNeeded(
+    options?: TimeoutOptions,
+  ): Promise<void>
+  elementHandle(
+    options?: TimeoutOptions,
+  ): Promise<ElementHandle | null>
+  elementHandles(): Promise<ElementHandle[]>
+  waitFor(options?: WaitForSelectorOptions): Promise<void>
+  screenshot(options?: ScreenshotOptions): Promise<Buffer>
+  evaluate<R>(
+    fn: (element: Element) => R | Promise<R>,
+  ): Promise<R>
+  evaluate<R, A>(
+    fn: (element: Element, arg: A) => R | Promise<R>,
+    arg: A,
+  ): Promise<R>
 }
 
 export interface Keyboard {
-  press(key: string, options?: { delay?: number }): Promise<void>;
-  type(text: string, options?: { delay?: number }): Promise<void>;
-  down(key: string): Promise<void>;
-  up(key: string): Promise<void>;
-  insertText(text: string): Promise<void>;
+  press(
+    key: string,
+    options?: { delay?: number },
+  ): Promise<void>
+  type(
+    text: string,
+    options?: { delay?: number },
+  ): Promise<void>
+  down(key: string): Promise<void>
+  up(key: string): Promise<void>
+  insertText(text: string): Promise<void>
 }
 
 export interface Mouse {
-  click(x: number, y: number, options?: ClickOptions): Promise<void>;
-  move(x: number, y: number, options?: { steps?: number }): Promise<void>;
-  down(options?: ClickOptions): Promise<void>;
-  up(options?: ClickOptions): Promise<void>;
-  wheel(deltaX: number, deltaY: number): Promise<void>;
+  click(
+    x: number,
+    y: number,
+    options?: ClickOptions,
+  ): Promise<void>
+  move(
+    x: number,
+    y: number,
+    options?: { steps?: number },
+  ): Promise<void>
+  down(options?: ClickOptions): Promise<void>
+  up(options?: ClickOptions): Promise<void>
+  wheel(deltaX: number, deltaY: number): Promise<void>
 }
 
 export interface ConsoleMessage {
-  type(): string;
-  text(): string;
-  location(): { url: string; lineNumber: number; columnNumber: number };
+  type(): string
+  text(): string
+  location(): {
+    url: string
+    lineNumber: number
+    columnNumber: number
+  }
 }
 
 export interface Dialog {
-  type(): string;
-  message(): string;
-  accept(promptText?: string): Promise<void>;
-  dismiss(): Promise<void>;
+  type(): string
+  message(): string
+  accept(promptText?: string): Promise<void>
+  dismiss(): Promise<void>
 }
 
 export interface Request {
-  url(): string;
-  method(): string;
-  postData(): string | null;
-  resourceType(): string;
+  url(): string
+  method(): string
+  postData(): string | null
+  resourceType(): string
 }
 
 export interface Response {
-  url(): string;
-  status(): number;
-  ok(): boolean;
-  text(): Promise<string>;
-  json(): Promise<unknown>;
+  url(): string
+  status(): number
+  ok(): boolean
+  text(): Promise<string>
+  json(): Promise<unknown>
   /** The request this answered — how a `waitForResponse` predicate reads the METHOD, which
    *  a URL alone cannot distinguish (a GET and a PATCH of one set share an address). */
-  request(): Request;
+  request(): Request
 }
 
 /** What `route.fulfill()` answers a request with. Everything is optional; an omitted
  *  status is 200. */
 export interface FulfillOptions {
-  status?: number;
-  headers?: Record<string, string>;
-  contentType?: string;
-  body?: string | Buffer;
-  json?: unknown;
+  status?: number
+  headers?: Record<string, string>
+  contentType?: string
+  body?: string | Buffer
+  json?: unknown
 }
 
 /**
@@ -226,91 +296,165 @@ export interface FulfillOptions {
  * waits forever.
  */
 export interface Route {
-  request(): Request;
-  fulfill(options?: FulfillOptions): Promise<void>;
-  continue(): Promise<void>;
-  abort(errorCode?: string): Promise<void>;
-  fetch(): Promise<Response>;
+  request(): Request
+  fulfill(options?: FulfillOptions): Promise<void>
+  continue(): Promise<void>
+  abort(errorCode?: string): Promise<void>
+  fetch(): Promise<Response>
 }
 
 /** The `page.on(...)` events these suites listen for, each with its real payload. */
 export interface PageEvents {
-  console: ConsoleMessage;
-  dialog: Dialog;
-  pageerror: Error;
-  request: Request;
-  requestfailed: Request;
+  console: ConsoleMessage
+  dialog: Dialog
+  pageerror: Error
+  request: Request
+  requestfailed: Request
   /** The response body has fully arrived. `vrt-capture` counts these to know the page is idle. */
-  requestfinished: Request;
-  response: Response;
-  crash: Page;
-  close: Page;
+  requestfinished: Request
+  response: Response
+  crash: Page
+  close: Page
   /** A real document load. `routing-test` counts these to prove a click routed
    *  CLIENT-side — a link that navigates the document still lands on the right
    *  URL, so the URL alone cannot tell the two apart. */
-  load: Page;
+  load: Page
 }
 
 export interface Page {
-  goto(url: string, options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
-  reload(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
+  goto(
+    url: string,
+    options?: TimeoutOptions & { waitUntil?: string },
+  ): Promise<Response | null>
+  reload(
+    options?: TimeoutOptions & { waitUntil?: string },
+  ): Promise<Response | null>
   /** The browser's own Back. Only meaningful since routing moved to real paths
    *  (2026-08-16) — under the hash router there was no history stack to walk. */
-  goBack(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
-  goForward(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
-  close(): Promise<void>;
-  content(): Promise<string>;
-  title(): Promise<string>;
-  url(): string;
-  setViewportSize(size: { width: number; height: number }): Promise<void>;
-  screenshot(options?: ScreenshotOptions): Promise<Buffer>;
-  addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
-  addInitScript(fn: () => void): Promise<void>;
-  addInitScript(script: string): Promise<void>;
+  goBack(
+    options?: TimeoutOptions & { waitUntil?: string },
+  ): Promise<Response | null>
+  goForward(
+    options?: TimeoutOptions & { waitUntil?: string },
+  ): Promise<Response | null>
+  close(): Promise<void>
+  content(): Promise<string>
+  title(): Promise<string>
+  url(): string
+  setViewportSize(size: {
+    width: number
+    height: number
+  }): Promise<void>
+  screenshot(options?: ScreenshotOptions): Promise<Buffer>
+  addInitScript<A>(
+    fn: (arg: A) => void,
+    arg: A,
+  ): Promise<void>
+  addInitScript(fn: () => void): Promise<void>
+  addInitScript(script: string): Promise<void>
 
   /** Intercept matching requests. The screenshot harnesses use it to serve FIXTURE
    *  payloads for the endpoints that would otherwise need a live Plex server — the repo
    *  is public, so a committed PNG must never show real library or queue names. */
   route(
     url: string | RegExp,
-    handler: (route: Route, request: Request) => void | Promise<void>,
-  ): Promise<void>;
-  unroute(url: string | RegExp): Promise<void>;
+    handler: (
+      route: Route,
+      request: Request,
+    ) => void | Promise<void>,
+  ): Promise<void>
+  unroute(url: string | RegExp): Promise<void>
 
-  click(selector: string, options?: ClickOptions): Promise<void>;
-  hover(selector: string, options?: TimeoutOptions): Promise<void>;
-  fill(selector: string, value: string, options?: TimeoutOptions): Promise<void>;
-  check(selector: string, options?: TimeoutOptions): Promise<void>;
-  uncheck(selector: string, options?: TimeoutOptions): Promise<void>;
-  focus(selector: string, options?: TimeoutOptions): Promise<void>;
-  textContent(selector: string, options?: TimeoutOptions): Promise<string | null>;
-  innerText(selector: string, options?: TimeoutOptions): Promise<string>;
-  inputValue(selector: string, options?: TimeoutOptions): Promise<string>;
-  getAttribute(selector: string, name: string, options?: TimeoutOptions): Promise<string | null>;
+  click(
+    selector: string,
+    options?: ClickOptions,
+  ): Promise<void>
+  hover(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  fill(
+    selector: string,
+    value: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  check(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  uncheck(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  focus(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  textContent(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<string | null>
+  innerText(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<string>
+  inputValue(
+    selector: string,
+    options?: TimeoutOptions,
+  ): Promise<string>
+  getAttribute(
+    selector: string,
+    name: string,
+    options?: TimeoutOptions,
+  ): Promise<string | null>
 
-  locator(selector: string, options?: LocatorOptions): Locator;
-  getByRole(role: string, options?: { name?: string | RegExp; exact?: boolean }): Locator;
-  getByText(text: string | RegExp, options?: { exact?: boolean }): Locator;
-  getByTestId(testId: string): Locator;
+  locator(
+    selector: string,
+    options?: LocatorOptions,
+  ): Locator
+  getByRole(
+    role: string,
+    options?: { name?: string | RegExp; exact?: boolean },
+  ): Locator
+  getByText(
+    text: string | RegExp,
+    options?: { exact?: boolean },
+  ): Locator
+  getByTestId(testId: string): Locator
 
-  $<E extends Element = Element>(selector: string): Promise<ElementHandle<E> | null>;
-  $$<E extends Element = Element>(selector: string): Promise<ElementHandle<E>[]>;
+  $<E extends Element = Element>(
+    selector: string,
+  ): Promise<ElementHandle<E> | null>
+  $$<E extends Element = Element>(
+    selector: string,
+  ): Promise<ElementHandle<E>[]>
 
   waitForSelector<E extends Element = Element>(
     selector: string,
     options?: WaitForSelectorOptions,
-  ): Promise<ElementHandle<E> | null>;
-  waitForTimeout(milliseconds: number): Promise<void>;
-  waitForLoadState(state?: string, options?: TimeoutOptions): Promise<void>;
-  waitForFunction<R>(fn: () => R, arg?: undefined, options?: TimeoutOptions): Promise<JSHandle<R>>;
-  waitForFunction<R, A>(fn: (arg: A) => R, arg: A, options?: TimeoutOptions): Promise<JSHandle<R>>;
+  ): Promise<ElementHandle<E> | null>
+  waitForTimeout(milliseconds: number): Promise<void>
+  waitForLoadState(
+    state?: string,
+    options?: TimeoutOptions,
+  ): Promise<void>
+  waitForFunction<R>(
+    fn: () => R,
+    arg?: undefined,
+    options?: TimeoutOptions,
+  ): Promise<JSHandle<R>>
+  waitForFunction<R, A>(
+    fn: (arg: A) => R,
+    arg: A,
+    options?: TimeoutOptions,
+  ): Promise<JSHandle<R>>
   /** Wait for a response the predicate accepts. This is the honest way to wait on a WRITE:
    *  a status message can be left over from the previous one, so `waitForFunction` over
    *  `#status` can return before the request under test has even been answered. */
   waitForResponse(
     predicate: (response: Response) => boolean,
     options?: TimeoutOptions,
-  ): Promise<Response>;
+  ): Promise<Response>
 
   // The browser boundary. `E` defaults to HTMLElement (Playwright's own default is
   // `HTMLElement | SVGElement`); a call site that needs `.value` narrows it explicitly —
@@ -318,23 +462,26 @@ export interface Page {
   $eval<R, E extends Element = HTMLElement>(
     selector: string,
     fn: (element: E) => R | Promise<R>,
-  ): Promise<R>;
+  ): Promise<R>
   $eval<R, A, E extends Element = HTMLElement>(
     selector: string,
     fn: (element: E, arg: A) => R | Promise<R>,
     arg: A,
-  ): Promise<R>;
+  ): Promise<R>
   $$eval<R, E extends Element = HTMLElement>(
     selector: string,
     fn: (elements: E[]) => R | Promise<R>,
-  ): Promise<R>;
+  ): Promise<R>
   $$eval<R, A, E extends Element = HTMLElement>(
     selector: string,
     fn: (elements: E[], arg: A) => R | Promise<R>,
     arg: A,
-  ): Promise<R>;
-  evaluate<R>(fn: () => R | Promise<R>): Promise<R>;
-  evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R>;
+  ): Promise<R>
+  evaluate<R>(fn: () => R | Promise<R>): Promise<R>
+  evaluate<R, A>(
+    fn: (arg: A) => R | Promise<R>,
+    arg: A,
+  ): Promise<R>
   /**
    * The STRING form, which Playwright has always accepted and which some suites need.
    *
@@ -345,38 +492,49 @@ export interface Page {
    * rather than a generic, because a string carries no type for the compiler to infer from
    * and pretending otherwise would be worse than an explicit parse at the call site.
    */
-  evaluate(expression: string): Promise<unknown>;
+  evaluate(expression: string): Promise<unknown>
 
-  keyboard: Keyboard;
-  mouse: Mouse;
+  keyboard: Keyboard
+  mouse: Mouse
 
-  on<K extends keyof PageEvents>(event: K, handler: (payload: PageEvents[K]) => void): Page;
-  off<K extends keyof PageEvents>(event: K, handler: (payload: PageEvents[K]) => void): Page;
+  on<K extends keyof PageEvents>(
+    event: K,
+    handler: (payload: PageEvents[K]) => void,
+  ): Page
+  off<K extends keyof PageEvents>(
+    event: K,
+    handler: (payload: PageEvents[K]) => void,
+  ): Page
 }
 
 export interface BrowserContext {
-  newPage(): Promise<Page>;
-  close(): Promise<void>;
-  addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
-  addInitScript(fn: () => void): Promise<void>;
-  addInitScript(script: string): Promise<void>;
-  addCookies(cookies: unknown[]): Promise<void>;
-  pages(): Page[];
+  newPage(): Promise<Page>
+  close(): Promise<void>
+  addInitScript<A>(
+    fn: (arg: A) => void,
+    arg: A,
+  ): Promise<void>
+  addInitScript(fn: () => void): Promise<void>
+  addInitScript(script: string): Promise<void>
+  addCookies(cookies: unknown[]): Promise<void>
+  pages(): Page[]
   /** Playwright's fake clock. `setFixedTime` pins `Date` and leaves the timers real. */
   clock: {
-    setFixedTime(time: number | string | Date): Promise<void>;
-  };
+    setFixedTime(
+      time: number | string | Date,
+    ): Promise<void>
+  }
 }
 
 export interface NewContextOptions {
-  viewport?: { width: number; height: number } | null;
-  colorScheme?: 'light' | 'dark' | 'no-preference';
-  ignoreHTTPSErrors?: boolean;
-  deviceScaleFactor?: number;
-  reducedMotion?: 'reduce' | 'no-preference';
-  locale?: string;
-  timezoneId?: string;
-  storageState?: unknown;
+  viewport?: { width: number; height: number } | null
+  colorScheme?: "light" | "dark" | "no-preference"
+  ignoreHTTPSErrors?: boolean
+  deviceScaleFactor?: number
+  reducedMotion?: "reduce" | "no-preference"
+  locale?: string
+  timezoneId?: string
+  storageState?: unknown
   /**
    * Real device emulation, which a narrow `viewport` alone is NOT. Only with `isMobile`
    * does Chromium honour `<meta name="viewport">` and widen the LAYOUT viewport when
@@ -388,39 +546,41 @@ export interface NewContextOptions {
    * Playwright's names, kept as-is: third-party API surface is not renamed to match the
    * house "Narrow View" vocabulary.
    */
-  isMobile?: boolean;
-  hasTouch?: boolean;
+  isMobile?: boolean
+  hasTouch?: boolean
 }
 
 export interface Browser {
-  newPage(options?: NewContextOptions): Promise<Page>;
-  newContext(options?: NewContextOptions): Promise<BrowserContext>;
-  close(): Promise<void>;
-  contexts(): BrowserContext[];
-  isConnected(): boolean;
+  newPage(options?: NewContextOptions): Promise<Page>
+  newContext(
+    options?: NewContextOptions,
+  ): Promise<BrowserContext>
+  close(): Promise<void>
+  contexts(): BrowserContext[]
+  isConnected(): boolean
 }
 
 export interface LaunchOptions {
-  headless?: boolean;
-  args?: string[];
-  ignoreDefaultArgs?: boolean | string[];
-  channel?: string;
-  executablePath?: string;
-  slowMo?: number;
-  timeout?: number;
-  devtools?: boolean;
+  headless?: boolean
+  args?: string[]
+  ignoreDefaultArgs?: boolean | string[]
+  channel?: string
+  executablePath?: string
+  slowMo?: number
+  timeout?: number
+  devtools?: boolean
 }
 
 export interface BrowserType {
-  launch(options?: LaunchOptions): Promise<Browser>;
-  executablePath(): string;
-  name(): string;
+  launch(options?: LaunchOptions): Promise<Browser>
+  executablePath(): string
+  name(): string
 }
 
 export interface PlaywrightModule {
-  chromium: BrowserType;
-  firefox: BrowserType;
-  webkit: BrowserType;
+  chromium: BrowserType
+  firefox: BrowserType
+  webkit: BrowserType
 }
 
 // --- the lookup ---------------------------------------------------------------------
@@ -435,41 +595,44 @@ const ROOTS = [
   // Node resolves a nonexistent `/mnt/...` prefix by walking up to `/`, never reaching the
   // checkout, which is why the old unpinned `npm install playwright` was unreachable from
   // here even when it had run.
-  new URL('./node_modules/', import.meta.url).pathname,
-  new URL('../node_modules/', import.meta.url).pathname,
-  '/mnt/TrueNAS-Apps/Repos/mux-magic/node_modules/',
-  '/mnt/TrueNAS-Apps/Repos/castkit/node_modules/',
-  '/mnt/TrueNAS-Apps/Repos/charcuterie/node_modules/',
-  '/mnt/TrueNAS-Apps/Repos/gallery-downloader/node_modules/',
-];
+  new URL("./node_modules/", import.meta.url).pathname,
+  new URL("../node_modules/", import.meta.url).pathname,
+  "/mnt/TrueNAS-Apps/Repos/mux-magic/node_modules/",
+  "/mnt/TrueNAS-Apps/Repos/castkit/node_modules/",
+  "/mnt/TrueNAS-Apps/Repos/charcuterie/node_modules/",
+  "/mnt/TrueNAS-Apps/Repos/gallery-downloader/node_modules/",
+]
 
 function resolve(): PlaywrightModule {
-  const tried: string[] = [];
+  const tried: string[] = []
   for (const root of ROOTS) {
-    let pw: PlaywrightModule;
+    let pw: PlaywrightModule
     try {
       // The one unavoidable assertion in this file: `createRequire` returns `any` by
       // construction (it is a runtime lookup of a package tsc cannot see), and the shape
       // it yields is asserted by the interfaces above. Everything downstream is typed.
-      pw = createRequire(root)('playwright') as PlaywrightModule;
+      pw = createRequire(root)(
+        "playwright",
+      ) as PlaywrightModule
     } catch {
-      continue; // sibling not checked out / no playwright installed
+      continue // sibling not checked out / no playwright installed
     }
-    let exe = '';
+    let exe = ""
     try {
-      exe = pw.chromium.executablePath();
+      exe = pw.chromium.executablePath()
     } catch {
-      continue;
+      continue
     }
-    if (existsSync(exe)) return pw;
-    tried.push(`${root} -> ${exe}`);
+    if (existsSync(exe)) return pw
+    tried.push(`${root} -> ${exe}`)
   }
   throw new Error(
-    'no usable Playwright found. Install browsers for one of:\n  ' + tried.join('\n  '),
-  );
+    "no usable Playwright found. Install browsers for one of:\n  " +
+      tried.join("\n  "),
+  )
 }
 
-const playwright = resolve();
+const playwright = resolve()
 
 // ---- Overlay motion is frozen in every harness -------------------------------------------
 //
@@ -506,27 +669,35 @@ const FREEZE_MOTION_SCRIPT = `(() => {
   };
   install();
   document.addEventListener('readystatechange', install);
-})();`;
+})();`
 
 const withFrozenMotion = (browser: Browser): Browser => {
-  const newContext = browser.newContext.bind(browser);
-  const newPage = browser.newPage.bind(browser);
-  browser.newContext = async (options?: NewContextOptions): Promise<BrowserContext> => {
-    const context = await newContext(options);
-    await context.addInitScript(FREEZE_MOTION_SCRIPT);
-    return context;
-  };
-  browser.newPage = async (options?: NewContextOptions): Promise<Page> => {
-    const page = await newPage(options);
-    await page.addInitScript(FREEZE_MOTION_SCRIPT);
-    return page;
-  };
-  return browser;
-};
+  const newContext = browser.newContext.bind(browser)
+  const newPage = browser.newPage.bind(browser)
+  browser.newContext = async (
+    options?: NewContextOptions,
+  ): Promise<BrowserContext> => {
+    const context = await newContext(options)
+    await context.addInitScript(FREEZE_MOTION_SCRIPT)
+    return context
+  }
+  browser.newPage = async (
+    options?: NewContextOptions,
+  ): Promise<Page> => {
+    const page = await newPage(options)
+    await page.addInitScript(FREEZE_MOTION_SCRIPT)
+    return page
+  }
+  return browser
+}
 
-const launch = playwright.chromium.launch.bind(playwright.chromium);
-playwright.chromium.launch = async (options?: LaunchOptions): Promise<Browser> =>
-  withFrozenMotion(await launch(options));
+const launch = playwright.chromium.launch.bind(
+  playwright.chromium,
+)
+playwright.chromium.launch = async (
+  options?: LaunchOptions,
+): Promise<Browser> =>
+  withFrozenMotion(await launch(options))
 
-export const { chromium } = playwright;
-export default playwright;
+export const { chromium } = playwright
+export default playwright

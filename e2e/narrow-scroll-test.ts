@@ -37,27 +37,31 @@
 // Runs against the shared e2e server (WEB_PORT, default 18768) like the other browser
 // suites. Needs no Plex token: the Play landing renders from queues.yaml on the degraded
 // no-Plex path, which is exactly the state the loop starts it in.
-import { chromium, type Page } from './playwright.js';
+import { chromium, type Page } from "./playwright.js"
 
-const PORT = process.env.WEB_PORT || 18768;
-const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`); if (!isPass) process.exitCode = 1; };
+const PORT = process.env.WEB_PORT || 18768
+const ok = (name: string, isPass: boolean) => {
+  console.log(`${isPass ? "PASS" : "FAIL"} ${name}`)
+  if (!isPass) process.exitCode = 1
+}
 
 // 390px is the reported width (iPhone 14/15 CSS width); 320px is the narrowest screen
 // still in the wild and the one a fixed `min-width` breaks first.
-const WIDTHS = [390, 320];
+const WIDTHS = [390, 320]
 
-const browser = await chromium.launch();
+const browser = await chromium.launch()
 
 /** Document scroll vs viewport size. The shell must never delegate either axis to it. */
-const measure = (page: Page) => page.evaluate(() => {
-  const de = document.documentElement;
-  return {
-    scrollWidth: de.scrollWidth,
-    clientWidth: de.clientWidth,
-    scrollHeight: de.scrollHeight,
-    clientHeight: de.clientHeight,
-  };
-});
+const measure = (page: Page) =>
+  page.evaluate(() => {
+    const de = document.documentElement
+    return {
+      scrollWidth: de.scrollWidth,
+      clientWidth: de.clientWidth,
+      scrollHeight: de.scrollHeight,
+      clientHeight: de.clientHeight,
+    }
+  })
 
 /**
  * Every element that scrolls on the INLINE axis it was not meant to. A document-level
@@ -74,81 +78,126 @@ const measure = (page: Page) => page.evaluate(() => {
  * shelf, which is a carousel and is supposed to run off the edge. Everything else that
  * scrolls sideways is a mistake.
  */
-const inlineScrollers = (page: Page, root?: string) => page.evaluate((rootSelector) => {
-  const scope = rootSelector ? document.querySelector(rootSelector) : document;
-  if (!scope) return [`(missing scope ${rootSelector})`];
-  return [...scope.querySelectorAll('*')]
-    .filter((el) => {
-      if (el.closest('.strip')) return false;
-      // `visible`/`clip` never scroll. `clip` is the fix this suite is holding in place.
-      if (!/auto|scroll/.test(getComputedStyle(el).overflowX)) return false;
-      return el.scrollWidth > el.clientWidth + 1;
-    })
-    .map((el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
-      typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).slice(0, 2).join('.')}` : ''
-    }@${el.scrollWidth}>${el.clientWidth}`)
-    .slice(0, 6);
-}, root);
+const inlineScrollers = (page: Page, root?: string) =>
+  page.evaluate((rootSelector) => {
+    const scope = rootSelector
+      ? document.querySelector(rootSelector)
+      : document
+    if (!scope) return [`(missing scope ${rootSelector})`]
+    return [...scope.querySelectorAll("*")]
+      .filter((el) => {
+        if (el.closest(".strip")) return false
+        // `visible`/`clip` never scroll. `clip` is the fix this suite is holding in place.
+        if (
+          !/auto|scroll/.test(
+            getComputedStyle(el).overflowX,
+          )
+        )
+          return false
+        return el.scrollWidth > el.clientWidth + 1
+      })
+      .map(
+        (el) =>
+          `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${
+            typeof el.className === "string" && el.className
+              ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+              : ""
+          }@${el.scrollWidth}>${el.clientWidth}`,
+      )
+      .slice(0, 6)
+  }, root)
 
 /** An open modal's box, in viewport coordinates — `null` when it isn't on screen. */
-const modalBox = (page: Page, id: string) => page.evaluate((boxId) => {
-  const el = document.getElementById(boxId);
-  if (!el) return null;
-  const rect = el.getBoundingClientRect();
-  return { left: Math.round(rect.left), right: Math.round(rect.right), viewport: window.innerWidth };
-}, id);
+const modalBox = (page: Page, id: string) =>
+  page.evaluate((boxId) => {
+    const el = document.getElementById(boxId)
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    return {
+      left: Math.round(rect.left),
+      right: Math.round(rect.right),
+      viewport: window.innerWidth,
+    }
+  }, id)
 
 /** Names the boxes that stick out, so a failure says WHICH element regressed. */
-const offenders = (page: Page) => page.evaluate(() => {
-  const vw = document.documentElement.clientWidth;
-  return [...document.querySelectorAll('*')]
-    .filter((el) => {
-      // `position: fixed` boxes never extend the document's scrollable area.
-      if (getComputedStyle(el).position === 'fixed') return false;
-      return el.getBoundingClientRect().right > vw + 0.5;
-    })
-    .map((el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
-      typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).slice(0, 3).join('.')}` : ''
-    }@${Math.round(el.getBoundingClientRect().right)}`)
-    .slice(0, 6);
-});
+const offenders = (page: Page) =>
+  page.evaluate(() => {
+    const vw = document.documentElement.clientWidth
+    return [...document.querySelectorAll("*")]
+      .filter((el) => {
+        // `position: fixed` boxes never extend the document's scrollable area.
+        if (getComputedStyle(el).position === "fixed")
+          return false
+        return el.getBoundingClientRect().right > vw + 0.5
+      })
+      .map(
+        (el) =>
+          `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${
+            typeof el.className === "string" && el.className
+              ? `.${el.className.trim().split(/\s+/).slice(0, 3).join(".")}`
+              : ""
+          }@${Math.round(el.getBoundingClientRect().right)}`,
+      )
+      .slice(0, 6)
+  })
 
 for (const width of WIDTHS) {
-  const page = await browser.newPage({ viewport: { width, height: 844 } });
-  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
-  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.playcard', { timeout: 30000 });
-  await page.waitForTimeout(400); // let the header's ResizeObserver settle --header-h
+  const page = await browser.newPage({
+    viewport: { width, height: 844 },
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
+  await page.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(".playcard", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(400) // let the header's ResizeObserver settle --header-h
 
   // 1. As rendered, menus closed. This is the reported bug.
   {
-    const { scrollWidth, clientWidth } = await measure(page);
+    const { scrollWidth, clientWidth } = await measure(page)
     ok(
       `${width}px: no horizontal scroll at rest (scrollWidth ${scrollWidth} <= clientWidth ${clientWidth})`,
       scrollWidth <= clientWidth,
-    );
-    if (scrollWidth > clientWidth) console.log('   overflowing:', (await offenders(page)).join(', '));
+    )
+    if (scrollWidth > clientWidth)
+      console.log(
+        "   overflowing:",
+        (await offenders(page)).join(", "),
+      )
   }
 
   // 2. With the ⋮ actions popover OPEN — an anchored panel must fit, not push the page.
   {
-    await page.click('#menu-actions');
-    await page.waitForSelector('.hmenu-right.open');
-    await page.waitForTimeout(300); // transition
-    const { scrollWidth, clientWidth } = await measure(page);
-    ok(`${width}px: no horizontal scroll with the actions menu open (${scrollWidth} <= ${clientWidth})`,
-      scrollWidth <= clientWidth);
-    if (scrollWidth > clientWidth) console.log('   overflowing:', (await offenders(page)).join(', '));
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    await page.click("#menu-actions")
+    await page.waitForSelector(".hmenu-right.open")
+    await page.waitForTimeout(300) // transition
+    const { scrollWidth, clientWidth } = await measure(page)
+    ok(
+      `${width}px: no horizontal scroll with the actions menu open (${scrollWidth} <= ${clientWidth})`,
+      scrollWidth <= clientWidth,
+    )
+    if (scrollWidth > clientWidth)
+      console.log(
+        "   overflowing:",
+        (await offenders(page)).join(", "),
+      )
+    await page.keyboard.press("Escape")
+    await page.waitForTimeout(300)
   }
 
   // 3. Closed again, after having been open — catches a closed state that only parks
   //    off-canvas once it has something to transition FROM.
   {
-    const { scrollWidth, clientWidth } = await measure(page);
-    ok(`${width}px: no horizontal scroll after closing the menu (${scrollWidth} <= ${clientWidth})`,
-      scrollWidth <= clientWidth);
+    const { scrollWidth, clientWidth } = await measure(page)
+    ok(
+      `${width}px: no horizontal scroll after closing the menu (${scrollWidth} <= ${clientWidth})`,
+      scrollWidth <= clientWidth,
+    )
   }
 
   // 4. The min-content case: a name with no break opportunity anywhere in it. Set on the
@@ -157,20 +206,31 @@ for (const width of WIDTHS) {
   //    test is identical either way.
   {
     const isApplied = await page.evaluate(() => {
-      const LONG = 'Supercalifragilisticexpialidocious'.repeat(3); // 99 chars, zero break opportunities
-      const name = document.querySelector('.playcard .rowname');
-      const meta = document.querySelector('.playcard .rowmeta');
-      if (!name) return false;
-      name.textContent = LONG;
-      if (meta) meta.textContent = `${LONG}-meta`;
-      return true;
-    });
-    ok(`${width}px: found a .rowname to stress`, isApplied);
-    await page.waitForTimeout(200);
-    const { scrollWidth, clientWidth } = await measure(page);
-    ok(`${width}px: a long unbroken channel name does not widen the page (${scrollWidth} <= ${clientWidth})`,
-      scrollWidth <= clientWidth);
-    if (scrollWidth > clientWidth) console.log('   overflowing:', (await offenders(page)).join(', '));
+      const LONG =
+        "Supercalifragilisticexpialidocious".repeat(3) // 99 chars, zero break opportunities
+      const name = document.querySelector(
+        ".playcard .rowname",
+      )
+      const meta = document.querySelector(
+        ".playcard .rowmeta",
+      )
+      if (!name) return false
+      name.textContent = LONG
+      if (meta) meta.textContent = `${LONG}-meta`
+      return true
+    })
+    ok(`${width}px: found a .rowname to stress`, isApplied)
+    await page.waitForTimeout(200)
+    const { scrollWidth, clientWidth } = await measure(page)
+    ok(
+      `${width}px: a long unbroken channel name does not widen the page (${scrollWidth} <= ${clientWidth})`,
+      scrollWidth <= clientWidth,
+    )
+    if (scrollWidth > clientWidth)
+      console.log(
+        "   overflowing:",
+        (await offenders(page)).join(", "),
+      )
   }
 
   // 5. EVERY route, not just the landing one. This is the check that was missing on
@@ -180,10 +240,18 @@ for (const width of WIDTHS) {
   //    suite keeps working against whatever `queues.fixture.yaml` holds. A route that
   //    yields no id is SKIPPED loudly rather than silently passing.
   const queueId = await page.evaluate(() => {
-    const link = document.querySelector<HTMLAnchorElement>('.playcard a[href^="/q/"]');
-    return link?.getAttribute('href')?.replace(/^\/q\//, '') ?? null;
-  });
-  ok(`${width}px: found a queue id on the landing to visit`, Boolean(queueId));
+    const link = document.querySelector<HTMLAnchorElement>(
+      '.playcard a[href^="/q/"]',
+    )
+    return (
+      link?.getAttribute("href")?.replace(/^\/q\//, "") ??
+      null
+    )
+  })
+  ok(
+    `${width}px: found a queue id on the landing to visit`,
+    Boolean(queueId),
+  )
 
   const routes = [
     // The landing's two starts are an `ActionTiles` now, so there is no
@@ -191,71 +259,111 @@ for (const width of WIDTHS) {
     // accessible name (decision
     // `2026-09-03-the-mode-landing-is-two-actiontiles-not-eight-hand-written-links`).
     // Named rather than a bare `[role="group"]`: the page has two of them.
-    ['/', '#mode-landing:not([hidden]) [role="group"][aria-label="Start something"]'],
-    ['/people', '#people'],
-    ['/overview', '#play:not([hidden]) .playcard'],
-    ['/pending', '#pending:not([hidden])'],
-    ['/queues', '.playcard, #newqueue, .shelf'],
-    ['/channels/shows', '#chbody'],
+    [
+      "/",
+      '#mode-landing:not([hidden]) [role="group"][aria-label="Start something"]',
+    ],
+    ["/people", "#people"],
+    ["/overview", "#play:not([hidden]) .playcard"],
+    ["/pending", "#pending:not([hidden])"],
+    ["/queues", ".playcard, #newqueue, .shelf"],
+    ["/channels/shows", "#chbody"],
     // What to Watch/Play, added with the route (WP-6). It carries three grids and a stepper row, and
     // every one of them is a `repeat(auto-fill, minmax(min(Xpx, 100%), 1fr))` — the
     // `min()` is what lets the last column collapse below its own floor on a screen
     // narrower than one card, and dropping it is how a grid pushes the page sideways.
     // Two of the three are Charcuterie's now (`RadioGroup itemShape="tile"`), which is
     // where that `min()` moved to rather than where it went.
-    ['/what-to-watch-play', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]'],
+    [
+      "/what-to-watch-play",
+      '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]',
+    ],
     // The collection shelf and the result card, added with their routes (WP-8). This
     // server has no board-game collection beside it, so both land on their EMPTY state —
     // which is the right thing to walk here anyway: the page chrome, the search row and
     // the `EmptyState` are what would push a 320px viewport sideways, and the populated
     // grids are measured by `board-game-play-test.ts` against its own fixture.
-    ['/board-game-collection', '#collection:not([hidden]) #collection-find'],
-    ['/result', '#result:not([hidden]) #result-none'],
-    ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
-  ] as const;
+    [
+      "/board-game-collection",
+      "#collection:not([hidden]) #collection-find",
+    ],
+    ["/result", "#result:not([hidden]) #result-none"],
+    ...(queueId
+      ? [[`/q/${queueId}`, "#queue:not([hidden]) .add"]]
+      : []),
+  ] as const
 
   for (const [hash, ready] of routes) {
     // `goto`, not a `location.hash` write: routing is react-router PATHS since
     // 2026-08-16, so there is no hash left to poke and the server has an SPA fallback.
-    await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(ready, { timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(500); // the view swap + the header's ResizeObserver
+    await page.goto(`http://localhost:${PORT}${hash}`, {
+      waitUntil: "domcontentloaded",
+    })
+    await page
+      .waitForSelector(ready, { timeout: 30000 })
+      .catch(() => {})
+    await page.waitForTimeout(500) // the view swap + the header's ResizeObserver
 
     const {
-      scrollWidth, clientWidth, scrollHeight, clientHeight,
-    } = await measure(page);
-    ok(`${width}px ${hash}: no horizontal scroll (${scrollWidth} <= ${clientWidth})`,
-      scrollWidth <= clientWidth);
-    if (scrollWidth > clientWidth) console.log('   overflowing:', (await offenders(page)).join(', '));
+      scrollWidth,
+      clientWidth,
+      scrollHeight,
+      clientHeight,
+    } = await measure(page)
+    ok(
+      `${width}px ${hash}: no horizontal scroll (${scrollWidth} <= ${clientWidth})`,
+      scrollWidth <= clientWidth,
+    )
+    if (scrollWidth > clientWidth)
+      console.log(
+        "   overflowing:",
+        (await offenders(page)).join(", "),
+      )
 
-    if (hash === '/pending') {
+    if (hash === "/pending") {
       // Pending's unbounded virtual grid scrolls in `Main`. If the document is taller than
       // the viewport too, the page has the two vertical scrollbars this gate was added for.
       // This caught the obsolete 80px body padding left from the pre-Shell selection bar.
-      ok(`${width}px ${hash}: Main is the only vertical scroll owner (${scrollHeight} <= ${clientHeight})`,
-        scrollHeight <= clientHeight);
+      ok(
+        `${width}px ${hash}: Main is the only vertical scroll owner (${scrollHeight} <= ${clientHeight})`,
+        scrollHeight <= clientHeight,
+      )
     }
 
-    const scrollers = await inlineScrollers(page);
-    ok(`${width}px ${hash}: nothing scrolls sideways inside its own box`, scrollers.length === 0);
-    if (scrollers.length) console.log('   inline scrollers:', scrollers.join(', '));
+    const scrollers = await inlineScrollers(page)
+    ok(
+      `${width}px ${hash}: nothing scrolls sideways inside its own box`,
+      scrollers.length === 0,
+    )
+    if (scrollers.length)
+      console.log(
+        "   inline scrollers:",
+        scrollers.join(", "),
+      )
 
-    if (hash === '/channels/shows') {
+    if (hash === "/channels/shows") {
       const order = await page.evaluate(() => {
-        const filters = document.querySelector('#chfilters');
-        const members = document.querySelector('.chmembers');
-        const eligible = document.querySelector('.chpool');
+        const filters = document.querySelector("#chfilters")
+        const members = document.querySelector(".chmembers")
+        const eligible = document.querySelector(".chpool")
 
         return {
-          eligibleTop: eligible?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
-          filtersTop: filters?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
-          membersTop: members?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
-        };
-      });
+          eligibleTop:
+            eligible?.getBoundingClientRect().top ??
+            Number.POSITIVE_INFINITY,
+          filtersTop:
+            filters?.getBoundingClientRect().top ??
+            Number.POSITIVE_INFINITY,
+          membersTop:
+            members?.getBoundingClientRect().top ??
+            Number.POSITIVE_INFINITY,
+        }
+      })
       ok(
         `${width}px ${hash}: eligibility filters appear before the long title lists`,
-        order.filtersTop < order.membersTop && order.filtersTop < order.eligibleTop,
-      );
+        order.filtersTop < order.membersTop &&
+          order.filtersTop < order.eligibleTop,
+      )
     }
   }
 
@@ -269,17 +377,43 @@ for (const width of WIDTHS) {
     // PR, so a landing that quietly loses its only create affordance again — which is how it
     // shipped for a month — would reach main unchallenged. The assertion is both halves at
     // once: the trigger exists on `/overview`, and the modal it opens lands inside the screen.
-    ['/overview', '#playnewqueue', 'setmodal', 'New picks queue (admin)', null],
-    ['/queues', '#newqueue', 'setmodal', 'New queue', '#queue-type-modal button:has-text("Picks")'],
+    [
+      "/overview",
+      "#playnewqueue",
+      "setmodal",
+      "New picks queue (admin)",
+      null,
+    ],
+    [
+      "/queues",
+      "#newqueue",
+      "setmodal",
+      "New queue",
+      '#queue-type-modal button:has-text("Picks")',
+    ],
     // `#newcurated` — ＋ Picks queue on the RULES page — was here until 2026-08-26. The Rules
     // page lists rules queues alone now, so a page that cannot show you what you made no
     // longer offers to make it; the two rows above are the app's Picks create affordances.
-    ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue', null],
-  ] as const;
+    [
+      "/channels/shows",
+      "#chconfigure",
+      "dynmodal",
+      "Configure a rules queue",
+      null,
+    ],
+  ] as const
 
-  for (const [hash, trigger, boxId, label, nextTrigger] of modals) {
-    await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(700);
+  for (const [
+    hash,
+    trigger,
+    boxId,
+    label,
+    nextTrigger,
+  ] of modals) {
+    await page.goto(`http://localhost:${PORT}${hash}`, {
+      waitUntil: "domcontentloaded",
+    })
+    await page.waitForTimeout(700)
     // `waitForSelector`, not a bare `$` after a fixed sleep. The channels view renders its
     // action buttons once the registry lands, and on a cold CI runner that took longer than
     // the 700ms wait above — the Rules page's `#newcurated` was reported missing at 320px
@@ -289,37 +423,57 @@ for (const width of WIDTHS) {
     const isTriggerThere = await page
       .waitForSelector(trigger, { timeout: 20000 })
       .then(() => true)
-      .catch(() => false);
-    ok(`${width}px: ${label} — its trigger (${trigger}) exists`, isTriggerThere);
-    if (!isTriggerThere) continue;
+      .catch(() => false)
+    ok(
+      `${width}px: ${label} — its trigger (${trigger}) exists`,
+      isTriggerThere,
+    )
+    if (!isTriggerThere) continue
 
-    await page.click(trigger);
+    await page.click(trigger)
     if (nextTrigger) {
-      await page.waitForSelector(nextTrigger, { timeout: 15000 });
-      await page.click(nextTrigger);
+      await page.waitForSelector(nextTrigger, {
+        timeout: 15000,
+      })
+      await page.click(nextTrigger)
     }
-    await page.waitForSelector(`#${boxId}`, { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(400); // the overlay's own mount + position
+    await page
+      .waitForSelector(`#${boxId}`, { timeout: 15000 })
+      .catch(() => {})
+    await page.waitForTimeout(400) // the overlay's own mount + position
 
-    const box = await modalBox(page, boxId);
-    ok(`${width}px: ${label} — the box is on screen`, Boolean(box));
+    const box = await modalBox(page, boxId)
+    ok(
+      `${width}px: ${label} — the box is on screen`,
+      Boolean(box),
+    )
 
     if (box) {
       ok(
         `${width}px: ${label} — inside the viewport (${box.left}→${box.right} within 0→${box.viewport})`,
         box.left >= 0 && box.right <= box.viewport,
-      );
+      )
     }
 
-    const scrollers = await inlineScrollers(page, `#${boxId}`);
-    ok(`${width}px: ${label} — nothing scrolls sideways inside it`, scrollers.length === 0);
-    if (scrollers.length) console.log('   inline scrollers:', scrollers.join(', '));
+    const scrollers = await inlineScrollers(
+      page,
+      `#${boxId}`,
+    )
+    ok(
+      `${width}px: ${label} — nothing scrolls sideways inside it`,
+      scrollers.length === 0,
+    )
+    if (scrollers.length)
+      console.log(
+        "   inline scrollers:",
+        scrollers.join(", "),
+      )
 
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    await page.keyboard.press("Escape")
+    await page.waitForTimeout(300)
   }
 
-  await page.close();
+  await page.close()
 }
 
 // 7. The same routes under REAL device emulation, which is a different test and not a
@@ -345,47 +499,76 @@ for (const width of WIDTHS) {
     hasTouch: true,
     isMobile: true,
     viewport: { width, height: 844 },
-  });
-  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
-  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.playcard', { timeout: 30000 });
-  await page.waitForTimeout(400);
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
+  await page.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(".playcard", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(400)
 
-  for (const hash of ['/', '/overview', '/people', '/queues', '/channels/shows'] as const) {
-    await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(700);
+  for (const hash of [
+    "/",
+    "/overview",
+    "/people",
+    "/queues",
+    "/channels/shows",
+  ] as const) {
+    await page.goto(`http://localhost:${PORT}${hash}`, {
+      waitUntil: "domcontentloaded",
+    })
+    await page.waitForTimeout(700)
 
     // `window.innerWidth`, NOT `documentElement.clientWidth`. Only the first one moves:
     // when the page overflowed, `innerWidth` went to 485 in a 390px screen while
     // `clientWidth` stayed at 390 and reported everything as fine. Measured both ways
     // against the real regression before picking this one.
-    const layout = await page.evaluate(() => window.innerWidth);
+    const layout = await page.evaluate(
+      () => window.innerWidth,
+    )
     ok(
       `${width}px (emulated) ${hash}: the layout viewport is ${layout}, and the screen is ${width}`,
       layout === width,
-    );
-    if (layout !== width) console.log('   overflowing:', (await offenders(page)).join(', '));
+    )
+    if (layout !== width)
+      console.log(
+        "   overflowing:",
+        (await offenders(page)).join(", "),
+      )
   }
 
   // And the modal that the widened viewport actually displaced.
-  await page.goto(`http://localhost:${PORT}/queues`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(700);
-  await page.click('#newqueue');
-  await page.click('#queue-type-modal button:has-text("Picks")');
-  await page.waitForSelector('#setmodal', { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(400);
+  await page.goto(`http://localhost:${PORT}/queues`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForTimeout(700)
+  await page.click("#newqueue")
+  await page.click(
+    '#queue-type-modal button:has-text("Picks")',
+  )
+  await page
+    .waitForSelector("#setmodal", { timeout: 15000 })
+    .catch(() => {})
+  await page.waitForTimeout(400)
 
-  const box = await modalBox(page, 'setmodal');
-  ok(`${width}px (emulated): New queue — the box is on screen`, Boolean(box));
+  const box = await modalBox(page, "setmodal")
+  ok(
+    `${width}px (emulated): New queue — the box is on screen`,
+    Boolean(box),
+  )
   if (box) {
     ok(
       `${width}px (emulated): New queue — inside the screen (${box.left}→${box.right} within 0→${width})`,
       box.left >= 0 && box.right <= width,
-    );
+    )
   }
 
-  await page.close();
+  await page.close()
 }
 
-await browser.close();
-console.log('done');
+await browser.close()
+console.log("done")

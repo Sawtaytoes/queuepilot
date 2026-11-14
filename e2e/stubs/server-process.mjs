@@ -9,16 +9,27 @@
 // tsx is a devDependency of server/, not a global, so the binary is addressed by absolute
 // path: a harness may be launched from anywhere, and `--import tsx` would be resolved against
 // the cwd, which has no node_modules of its own (there is no root manifest in this repo).
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawn } from "node:child_process"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 /** The repo root — e2e/stubs/ is two levels down. */
-export const REPO_ROOT = path.resolve(HERE, '..', '..');
-export const TSX_BIN = path.join(REPO_ROOT, 'server', 'node_modules', '.bin', 'tsx');
-export const SERVER_ENTRY = path.join(REPO_ROOT, 'server', 'src', 'index.ts');
+export const REPO_ROOT = path.resolve(HERE, "..", "..")
+export const TSX_BIN = path.join(
+  REPO_ROOT,
+  "server",
+  "node_modules",
+  ".bin",
+  "tsx",
+)
+export const SERVER_ENTRY = path.join(
+  REPO_ROOT,
+  "server",
+  "src",
+  "index.ts",
+)
 
 /**
  * Start the server exactly the way e2e/run.sh does. Options are passed straight to `spawn`,
@@ -39,7 +50,11 @@ export const SERVER_ENTRY = path.join(REPO_ROOT, 'server', 'src', 'index.ts');
  * Callers must therefore stop the server with `killServer(srv)` below, never `srv.kill()`.
  */
 export function spawnServer(options = {}) {
-  return spawn(TSX_BIN, [SERVER_ENTRY], { cwd: REPO_ROOT, detached: true, ...options });
+  return spawn(TSX_BIN, [SERVER_ENTRY], {
+    cwd: REPO_ROOT,
+    detached: true,
+    ...options,
+  })
 }
 
 /**
@@ -50,15 +65,15 @@ export function spawnServer(options = {}) {
  * the ordinary case where the server exited on its own, and an ESRCH there would abort a
  * harness during cleanup — after its assertions had already passed.
  */
-export function killServer(srv, signal = 'SIGKILL') {
-  if (!srv || srv.pid === undefined) return;
+export function killServer(srv, signal = "SIGKILL") {
+  if (!srv || srv.pid === undefined) return
   try {
-    process.kill(-srv.pid, signal);
+    process.kill(-srv.pid, signal)
   } catch {
     // Already reaped, or never made it into its own group: fall back to the direct kill so a
     // lone wrapper still goes away.
     try {
-      srv.kill(signal);
+      srv.kill(signal)
     } catch {
       /* nothing left to kill */
     }

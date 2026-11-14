@@ -14,18 +14,23 @@
 // A queue entry has two possible identities — a ratingKey or a bare TITLE — and nothing
 // reconciled them, so a title-only entry covered nothing and the duplicate check could not see
 // it. Watch state was never subtracted at all. All three are pinned below.
-import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
-import type { PlexClient, PlexMetadata } from '../server/src/types.js';
+import assert from "node:assert/strict"
+import { promises as fs } from "node:fs"
+import type {
+  PlexClient,
+  PlexMetadata,
+} from "../server/src/types.js"
 
-const SETS = '/tmp/sets-pending-test.yaml';
-const QUEUES = '/tmp/queues-pending-test.yaml';
-const STATE = '/tmp/pending-test.yaml';
+const SETS = "/tmp/sets-pending-test.yaml"
+const QUEUES = "/tmp/queues-pending-test.yaml"
+const STATE = "/tmp/pending-test.yaml"
 
 // A filtered pool over Shows (5) capped at TV-Y, a curated queue naming one film by
 // ratingKey, a curated pool naming a COLLECTION, and an anime queue over Shows (5) whose
 // entries name their shows by TITLE ALONE — the shape 84 of the owner's live entries use.
-await fs.writeFile(SETS, `sets:
+await fs.writeFile(
+  SETS,
+  `sets:
 - id: kid_pool
   label: Kid Pool
   kind: cartoons
@@ -53,162 +58,366 @@ await fs.writeFile(SETS, `sets:
   kind: anime
   source: queue
   sections: [ 5 ]
-`);
+`,
+)
 await fs.writeFile(
   QUEUES,
   [
-    'my_movies:',
+    "my_movies:",
     '- ratingKey: "901"',
-    '  title: Named Film (2020)',
+    "  title: Named Film (2020)",
     // A TITLE with no rating key, for a film that two library items answer to (see
     // COPY_OLD / COPY_NEW). Still a legal entry: a hand-added line has no key until the
     // editor writes one back.
     '- {title: "Copy Cat"}',
     // A title Plex no longer answers to — the fail-safe case.
     '- {title: "Gone From The Library"}',
-    'franchise:',
+    "franchise:",
     '- {collection: "Bunny Films"}',
-    'anime:',
+    "anime:",
     // The reported shape: a title, no ratingKey. This is the entry that covered nothing.
     '- {title: "Detective Days"}',
     // The same thing spelled as a block mapping, which is how the live file writes it.
-    '- title: Kurozuka',
-    '',
-  ].join('\n'),
-);
+    "- title: Kurozuka",
+    "",
+  ].join("\n"),
+)
 // A REAL watermark, not an empty file: with `seen_through: 0` every item is after it, so
 // "added before the watermark" would not be under test at all. `903` sits exactly ON it,
 // which pins the boundary as `<=` — the moment you mark everything seen, everything you just
 // saw must stay gone.
-await fs.writeFile(STATE, `seen_through: ${1_800_000_000 - 10_000}\ndismissed: []\n`);
+await fs.writeFile(
+  STATE,
+  `seen_through: ${1_800_000_000 - 10_000}\ndismissed: []\n`,
+)
 
-process.env.SETS_PATH = SETS;
-process.env.QUEUES_PATH = QUEUES;
-process.env.PENDING_PATH = STATE;
+process.env.SETS_PATH = SETS
+process.env.QUEUES_PATH = QUEUES
+process.env.PENDING_PATH = STATE
 
-const pending = await import('../server/src/pending.js');
-const queues = await import('../server/src/queues.js');
-const routing = await import('../server/src/engine/routing.js');
-const { findDuplicateItem } = await import('../server/src/entryIdentity.js');
+const pending = await import("../server/src/pending.js")
+const queues = await import("../server/src/queues.js")
+const routing = await import(
+  "../server/src/engine/routing.js"
+)
+const { findDuplicateItem } = await import(
+  "../server/src/entryIdentity.js"
+)
 
-const NOW = 1_800_000_000;
-const OLD = NOW - 10_000;
+const NOW = 1_800_000_000
+const OLD = NOW - 10_000
 
 // Every item is NEW (added after the watermark of 0). What differs is whether something
 // already covers it — or whether it has already been watched.
 const SHOWS: PlexMetadata[] = [
-  { ratingKey: '700', title: 'Covered By Rule', contentRating: 'TV-Y', addedAt: NOW, type: 'show' },
-  { ratingKey: '701', title: 'Too Old For The Pool', contentRating: 'TV-MA', addedAt: NOW, type: 'show' },
-  { ratingKey: '708', title: 'Blocked By That Pool', contentRating: 'TV-Y', addedAt: NOW, type: 'show' },
+  {
+    ratingKey: "700",
+    title: "Covered By Rule",
+    contentRating: "TV-Y",
+    addedAt: NOW,
+    type: "show",
+  },
+  {
+    ratingKey: "701",
+    title: "Too Old For The Pool",
+    contentRating: "TV-MA",
+    addedAt: NOW,
+    type: "show",
+  },
+  {
+    ratingKey: "708",
+    title: "Blocked By That Pool",
+    contentRating: "TV-Y",
+    addedAt: NOW,
+    type: "show",
+  },
   // Named by a bare-title entry and by a {title:} mapping respectively. Both TV-MA, so the
   // kid pool's rating cap does not cover them and only the title lookup can.
-  { ratingKey: '705', title: 'Detective Days', contentRating: 'TV-MA', addedAt: NOW, type: 'show' },
-  { ratingKey: '706', title: 'Kurozuka', contentRating: 'TV-MA', addedAt: NOW, type: 'show' },
+  {
+    ratingKey: "705",
+    title: "Detective Days",
+    contentRating: "TV-MA",
+    addedAt: NOW,
+    type: "show",
+  },
+  {
+    ratingKey: "706",
+    title: "Kurozuka",
+    contentRating: "TV-MA",
+    addedAt: NOW,
+    type: "show",
+  },
   // Watch state. Nothing names either, so ONLY the watched rule can remove one.
-  { ratingKey: '709', title: 'Every Episode Seen', contentRating: 'TV-MA', addedAt: NOW, type: 'show', leafCount: 12, viewedLeafCount: 12 },
-  { ratingKey: '710', title: 'One Episode Left', contentRating: 'TV-MA', addedAt: NOW, type: 'show', leafCount: 12, viewedLeafCount: 11 },
-];
+  {
+    ratingKey: "709",
+    title: "Every Episode Seen",
+    contentRating: "TV-MA",
+    addedAt: NOW,
+    type: "show",
+    leafCount: 12,
+    viewedLeafCount: 12,
+  },
+  {
+    ratingKey: "710",
+    title: "One Episode Left",
+    contentRating: "TV-MA",
+    addedAt: NOW,
+    type: "show",
+    leafCount: 12,
+    viewedLeafCount: 11,
+  },
+]
 /** Two library items answer to "Copy Cat"; the engine resolves the entry to the LOWER key. */
-const COPY_OLD = '904';
-const COPY_NEW = '905';
+const COPY_OLD = "904"
+const COPY_NEW = "905"
 const MOVIES: PlexMetadata[] = [
-  { ratingKey: '900', title: 'Nobody Wants Me', year: 2024, contentRating: 'PG', addedAt: NOW, type: 'movie' },
-  { ratingKey: '901', title: 'Named Film', year: 2020, contentRating: 'PG', addedAt: NOW, type: 'movie' },
-  { ratingKey: '902', title: 'In The Collection', year: 2019, contentRating: 'PG', addedAt: NOW, type: 'movie' },
-  { ratingKey: '903', title: 'Added Ages Ago', year: 2001, contentRating: 'PG', addedAt: OLD, type: 'movie' },
-  { ratingKey: COPY_OLD, title: 'Copy Cat', year: 1995, contentRating: 'PG', addedAt: NOW, type: 'movie' },
-  { ratingKey: COPY_NEW, title: 'Copy Cat', year: 2024, contentRating: 'PG', addedAt: NOW, type: 'movie' },
+  {
+    ratingKey: "900",
+    title: "Nobody Wants Me",
+    year: 2024,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
+  {
+    ratingKey: "901",
+    title: "Named Film",
+    year: 2020,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
+  {
+    ratingKey: "902",
+    title: "In The Collection",
+    year: 2019,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
+  {
+    ratingKey: "903",
+    title: "Added Ages Ago",
+    year: 2001,
+    contentRating: "PG",
+    addedAt: OLD,
+    type: "movie",
+  },
+  {
+    ratingKey: COPY_OLD,
+    title: "Copy Cat",
+    year: 1995,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
+  {
+    ratingKey: COPY_NEW,
+    title: "Copy Cat",
+    year: 2024,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
   // The fail-safe: the queue names this by title, and the title search below never answers.
-  { ratingKey: '906', title: 'Gone From The Library', year: 2010, contentRating: 'PG', addedAt: NOW, type: 'movie' },
+  {
+    ratingKey: "906",
+    title: "Gone From The Library",
+    year: 2010,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+  },
   // Watch state. Plex OMITS a count at 0, so an unwatched film simply has no viewCount.
-  { ratingKey: '907', title: 'Seen It', year: 2023, contentRating: 'PG', addedAt: NOW, type: 'movie', viewCount: 1 },
-  { ratingKey: '908', title: 'Started And Left', year: 2023, contentRating: 'PG', addedAt: NOW, type: 'movie', viewOffset: 900_000 },
-];
+  {
+    ratingKey: "907",
+    title: "Seen It",
+    year: 2023,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+    viewCount: 1,
+  },
+  {
+    ratingKey: "908",
+    title: "Started And Left",
+    year: 2023,
+    contentRating: "PG",
+    addedAt: NOW,
+    type: "movie",
+    viewOffset: 900_000,
+  },
+]
 
 const DEMOS: PlexMetadata[] = [
-  { ratingKey: '990', title: '[QC] test encode x265-10bit', addedAt: NOW, type: 'movie' },
-];
+  {
+    ratingKey: "990",
+    title: "[QC] test encode x265-10bit",
+    addedAt: NOW,
+    type: "movie",
+  },
+]
 
-const listSection = async (sectionId: number, type: 1 | 2): Promise<PlexMetadata[]> => {
-  if (sectionId === 5 && type === 2) return SHOWS;
-  if (sectionId === 1 && type === 1) return MOVIES;
-  if (sectionId === 8 && type === 1) return DEMOS;
-  return [];
-};
+const listSection = async (
+  sectionId: number,
+  type: 1 | 2,
+): Promise<PlexMetadata[]> => {
+  if (sectionId === 5 && type === 2) return SHOWS
+  if (sectionId === 1 && type === 1) return MOVIES
+  if (sectionId === 8 && type === 1) return DEMOS
+  return []
+}
 
 /**
  * Titles Plex does NOT answer to, however they got into queues.yaml — a hand-typed entry, a
  * metadata-agent rename, a deleted-and-re-added item. The fail-safe under test is that such an
  * entry covers NOTHING, so its item stays on the list rather than being hidden by a guess.
  */
-const UNANSWERED = new Set(['gone from the library']);
+const UNANSWERED = new Set(["gone from the library"])
 
 /** Every title lookup the resolver makes, so a "costs no Plex call" claim can be asserted. */
-const titleLookups: string[] = [];
+const titleLookups: string[] = []
 
 const fakeClient = {
-  async accountToken() { return null; },
+  async accountToken() {
+    return null
+  },
   async container(path: string) {
-    if (path.startsWith('/library/sections/1/collections')) {
-      return { Metadata: [{ ratingKey: '5500', title: 'Bunny Films', type: 'collection' }] };
+    if (
+      path.startsWith("/library/sections/1/collections")
+    ) {
+      return {
+        Metadata: [
+          {
+            ratingKey: "5500",
+            title: "Bunny Films",
+            type: "collection",
+          },
+        ],
+      }
     }
-    if (path === '/library/collections/5500/children') {
-      return { Metadata: [{ ratingKey: '902', title: 'In The Collection', type: 'movie' }] };
+    if (path === "/library/collections/5500/children") {
+      return {
+        Metadata: [
+          {
+            ratingKey: "902",
+            title: "In The Collection",
+            type: "movie",
+          },
+        ],
+      }
     }
     // A collection NOTHING names, holding one PENDING film (900, which no queue covers) and
     // one the queue already names by ratingKey (901). One pending child is what makes it news.
-    if (path === '/library/collections/5501/children') {
+    if (path === "/library/collections/5501/children") {
       return {
         Metadata: [
-          { ratingKey: '900', title: 'Nobody Wants Me', type: 'movie' },
-          { ratingKey: '901', title: 'Named Film', type: 'movie' },
+          {
+            ratingKey: "900",
+            title: "Nobody Wants Me",
+            type: "movie",
+          },
+          {
+            ratingKey: "901",
+            title: "Named Film",
+            type: "movie",
+          },
         ],
-      };
+      }
     }
     // A collection whose every film is already covered — the case that must NOT be offered.
-    if (path === '/library/collections/5502/children') {
-      return { Metadata: [{ ratingKey: '901', title: 'Named Film', type: 'movie' }] };
+    if (path === "/library/collections/5502/children") {
+      return {
+        Metadata: [
+          {
+            ratingKey: "901",
+            title: "Named Film",
+            type: "movie",
+          },
+        ],
+      }
     }
     // The section title search `resolve.resolveTitle` makes. Plex matches loosely and the
     // resolver scores the candidates, so this answers with a substring match and lets the
     // real scoring (exact title, year, lowest-ratingKey tie-break) do the deciding.
-    const sec = /^\/library\/sections\/(\d+)\/all\?/.exec(path);
+    const sec = /^\/library\/sections\/(\d+)\/all\?/.exec(
+      path,
+    )
     if (sec) {
-      const wanted = String(new URL(`http://x${path}`).searchParams.get('title') || '').toLowerCase();
-      titleLookups.push(wanted);
-      if (!wanted || UNANSWERED.has(wanted)) return { Metadata: [] };
-      const pool = sec[1] === '5' ? SHOWS : sec[1] === '1' ? MOVIES : [];
-      return { Metadata: pool.filter((metadata) => String(metadata.title).toLowerCase().includes(wanted)) };
+      const wanted = String(
+        new URL(`http://x${path}`).searchParams.get(
+          "title",
+        ) || "",
+      ).toLowerCase()
+      titleLookups.push(wanted)
+      if (!wanted || UNANSWERED.has(wanted))
+        return { Metadata: [] }
+      const pool =
+        sec[1] === "5"
+          ? SHOWS
+          : sec[1] === "1"
+            ? MOVIES
+            : []
+      return {
+        Metadata: pool.filter((metadata) =>
+          String(metadata.title)
+            .toLowerCase()
+            .includes(wanted),
+        ),
+      }
     }
-    return { Metadata: [] };
+    return { Metadata: [] }
   },
-} as unknown as PlexClient;
+} as unknown as PlexClient
 
 // The libraries are a PARAMETER, so this needs no server and no stubbing of an ES module.
 // Music Videos is here to prove a non-video library is never scanned at all.
 const LIBRARIES = [
-  { id: 5, title: 'Shows', video: true, type: 'show' },
-  { id: 1, title: 'Movies', video: true, type: 'movie' },
-  { id: 7, title: 'Music Videos', video: false, type: 'movie' },
+  { id: 5, title: "Shows", video: true, type: "show" },
+  { id: 1, title: "Movies", video: true, type: "movie" },
+  {
+    id: 7,
+    title: "Music Videos",
+    video: false,
+    type: "movie",
+  },
   // "Other Videos" — Personal Media. Kept OUT by default however it is used elsewhere:
   // on the first real run these were 7 of 11 rows, every one a test encode of one clip,
   // and on the owner's live server 1,097 of 2,162.
-  { id: 8, title: 'Demos', video: true, type: 'movie', other: true },
-];
+  {
+    id: 8,
+    title: "Demos",
+    video: true,
+    type: "movie",
+    other: true,
+  },
+]
 
-let failed = 0;
-const check = (label: string, actual: unknown, expected: unknown): void => {
+let failed = 0
+const check = (
+  label: string,
+  actual: unknown,
+  expected: unknown,
+): void => {
   try {
-    assert.deepEqual(actual, expected);
-    console.log(`PASS ${label} — ${JSON.stringify(actual)}`);
+    assert.deepEqual(actual, expected)
+    console.log(`PASS ${label} — ${JSON.stringify(actual)}`)
   } catch {
-    console.log(`FAIL ${label} — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`);
-    failed++;
+    console.log(
+      `FAIL ${label} — got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`,
+    )
+    failed++
   }
-};
+}
 
 const keysNow = async () =>
-  (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items.map((item) => item.ratingKey);
+  (
+    await pending.pendingItems(
+      fakeClient,
+      LIBRARIES,
+      listSection,
+    )
+  ).items.map((item) => item.ratingKey)
 
 /**
  * The collections each library holds, as the route's own lister answers.
@@ -217,84 +426,224 @@ const keysNow = async () =>
  * `5500` is the one a queue already names (`Collection: Bunny Films`), `5501` holds one
  * pending film, `5502` holds only covered ones.
  */
-const listCollections = async (sectionId: number) => (
+const listCollections = async (sectionId: number) =>
   sectionId === 1
     ? [
-      { ratingKey: '5500', title: 'Bunny Films', sectionId: 1, childCount: 1 },
-      { ratingKey: '5501', title: 'New Franchise', sectionId: 1, childCount: 2 },
-      { ratingKey: '5502', title: 'All Covered', sectionId: 1, childCount: 1 },
-    ]
+        {
+          ratingKey: "5500",
+          title: "Bunny Films",
+          sectionId: 1,
+          childCount: 1,
+        },
+        {
+          ratingKey: "5501",
+          title: "New Franchise",
+          sectionId: 1,
+          childCount: 2,
+        },
+        {
+          ratingKey: "5502",
+          title: "All Covered",
+          sectionId: 1,
+          childCount: 1,
+        },
+      ]
     : []
-);
 
-const withCollections = async () => (
-  await pending.pendingItems(fakeClient, LIBRARIES, listSection, listCollections)
-).items;
+const withCollections = async () =>
+  (
+    await pending.pendingItems(
+      fakeClient,
+      LIBRARIES,
+      listSection,
+      listCollections,
+    )
+  ).items
 
 // --- the subtraction ----------------------------------------------------------- //
-const first = await keysNow();
-check('only what nothing plays is pending', first.sort(),
-  ['701', '708', '710', '900', COPY_NEW, '906']);
-check('a show the pool RULE already sweeps up is not pending', first.includes('700'), false);
-check('a film a queue names by ratingKey is not pending', first.includes('901'), false);
-check('a film inside a named COLLECTION is not pending', first.includes('902'), false);
-check('an item added ON the watermark is not pending (the boundary is <=)', first.includes('903'), false);
+const first = await keysNow()
+check("only what nothing plays is pending", first.sort(), [
+  "701",
+  "708",
+  "710",
+  "900",
+  COPY_NEW,
+  "906",
+])
+check(
+  "a show the pool RULE already sweeps up is not pending",
+  first.includes("700"),
+  false,
+)
+check(
+  "a film a queue names by ratingKey is not pending",
+  first.includes("901"),
+  false,
+)
+check(
+  "a film inside a named COLLECTION is not pending",
+  first.includes("902"),
+  false,
+)
+check(
+  "an item added ON the watermark is not pending (the boundary is <=)",
+  first.includes("903"),
+  false,
+)
 // The two that SHOULD surface, and why each one is not covered:
-check('a show outside the pool\'s rating cap IS pending', first.includes('701'), true);
-check('a show the pool BLOCKED is pending — blocked means nothing plays it', first.includes('708'), true);
-check('a library no set draws from is pending', first.includes('900'), true);
+check(
+  "a show outside the pool's rating cap IS pending",
+  first.includes("701"),
+  true,
+)
+check(
+  "a show the pool BLOCKED is pending — blocked means nothing plays it",
+  first.includes("708"),
+  true,
+)
+check(
+  "a library no set draws from is pending",
+  first.includes("900"),
+  true,
+)
 
 // A non-video library is never listed at all.
-check('a non-video library is not scanned', first.includes('999'), false);
-check('an Other Videos library is not reported', first.includes('990'), false);
+check(
+  "a non-video library is not scanned",
+  first.includes("999"),
+  false,
+)
+check(
+  "an Other Videos library is not reported",
+  first.includes("990"),
+  false,
+)
 
 // --- coverage by TITLE (the reported bug) -------------------------------------- //
 // The entry is `- "Detective Days"`: a bare string, no ratingKey. It used to contribute
 // nothing at all, so the show it names was reported as new and could be added a second time.
-check('a BARE TITLE entry covers the show it names', first.includes('705'), false);
-check('a {title:} mapping with no ratingKey covers its show too', first.includes('706'), false);
+check(
+  "a BARE TITLE entry covers the show it names",
+  first.includes("705"),
+  false,
+)
+check(
+  "a {title:} mapping with no ratingKey covers its show too",
+  first.includes("706"),
+  false,
+)
 // The collection arm has to keep working, unchanged — it is the other title-shaped entry.
-check('a collection entry still covers its children', first.includes('902'), false);
+check(
+  "a collection entry still covers its children",
+  first.includes("902"),
+  false,
+)
 
 // COVERED means what the ENGINE would play, not "some item shares this title". Two films
 // answer to "Copy Cat"; the resolver's tie-break takes the LOWER ratingKey, so the new
 // arrival is genuinely not what that entry plays and stays on the list.
-check('a title entry covers the item the engine resolves it to', first.includes(COPY_OLD), false);
-check('…and not a same-titled NEW arrival the engine would never pick', first.includes(COPY_NEW), true);
+check(
+  "a title entry covers the item the engine resolves it to",
+  first.includes(COPY_OLD),
+  false,
+)
+check(
+  "…and not a same-titled NEW arrival the engine would never pick",
+  first.includes(COPY_NEW),
+  true,
+)
 
 // FAIL-SAFE: a title nothing in Plex answers to covers nothing, so its item stays visible.
 // A hand-typed title that no longer matches the library is a broken entry — nothing is going
 // to play it, which is exactly what this screen reports.
-check('a title Plex cannot resolve leaves its item PENDING', first.includes('906'), true);
+check(
+  "a title Plex cannot resolve leaves its item PENDING",
+  first.includes("906"),
+  true,
+)
 
 // The pre-filter is what keeps this affordable: a title entry is only looked up when some new
 // arrival could plausibly be the thing it names.
-check('only the title entries a new arrival could match are looked up',
-  [...new Set(titleLookups)].sort(), ['copy cat', 'detective days', 'gone from the library', 'kurozuka']);
+check(
+  "only the title entries a new arrival could match are looked up",
+  [...new Set(titleLookups)].sort(),
+  [
+    "copy cat",
+    "detective days",
+    "gone from the library",
+    "kurozuka",
+  ],
+)
 
 // --- already watched ----------------------------------------------------------- //
-check('a watched MOVIE is not pending', first.includes('907'), false);
-check('a movie left at a resume point is not pending either', first.includes('908'), false);
-check('a FULLY watched show is not pending', first.includes('709'), false);
-check('a show with one unplayed episode IS still pending', first.includes('710'), true);
+check(
+  "a watched MOVIE is not pending",
+  first.includes("907"),
+  false,
+)
+check(
+  "a movie left at a resume point is not pending either",
+  first.includes("908"),
+  false,
+)
+check(
+  "a FULLY watched show is not pending",
+  first.includes("709"),
+  false,
+)
+check(
+  "a show with one unplayed episode IS still pending",
+  first.includes("710"),
+  true,
+)
 
 // --- dismiss ------------------------------------------------------------------- //
-await pending.dismiss('900');
-check('a dismissed item leaves the list', (await keysNow()).includes('900'), false);
-check('…and its neighbours stay', (await keysNow()).sort(), ['701', '708', '710', COPY_NEW, '906']);
-await pending.dismiss('900');
-check('dismissing twice is a double-click, not an error',
-  (await pending.readState()).dismissed.filter((key) => key === '900').length, 1);
+await pending.dismiss("900")
+check(
+  "a dismissed item leaves the list",
+  (await keysNow()).includes("900"),
+  false,
+)
+check(
+  "…and its neighbours stay",
+  (await keysNow()).sort(),
+  ["701", "708", "710", COPY_NEW, "906"],
+)
+await pending.dismiss("900")
+check(
+  "dismissing twice is a double-click, not an error",
+  (await pending.readState()).dismissed.filter(
+    (key) => key === "900",
+  ).length,
+  1,
+)
 
 // --- mark all seen ------------------------------------------------------------- //
-await pending.markSeen(NOW);
-check('marking seen empties the list in one gesture', await keysNow(), []);
-check('the watermark is what did it', (await pending.readState()).seen_through, NOW);
+await pending.markSeen(NOW)
+check(
+  "marking seen empties the list in one gesture",
+  await keysNow(),
+  [],
+)
+check(
+  "the watermark is what did it",
+  (await pending.readState()).seen_through,
+  NOW,
+)
 
 // Something that arrives AFTER the watermark is new again — the watermark is a floor, not an
 // off switch.
-MOVIES.push({ ratingKey: '910', title: 'Arrived Later', year: 2025, contentRating: 'PG', addedAt: NOW + 500, type: 'movie' });
-check('a later arrival is new again', await keysNow(), ['910']);
+MOVIES.push({
+  ratingKey: "910",
+  title: "Arrived Later",
+  year: 2025,
+  contentRating: "PG",
+  addedAt: NOW + 500,
+  type: "movie",
+})
+check("a later arrival is new again", await keysNow(), [
+  "910",
+])
 
 // --- the double-add ------------------------------------------------------------ //
 // The owner added a show his anime queue ALREADY held, because the queue named it by title
@@ -306,43 +655,97 @@ check('a later arrival is new again', await keysNow(), ['910']);
 // oracles that hold it there, whatever this comment used to say: `queue_builder/` was deleted
 // in `7bf01e0`, and no golden file contains an `rk:` or `title:` key.) The duplicate test is a
 // SECOND, looser identity check that asks which ITEM an entry names.
-const animeCfg = routing.loadSets()!.sets.anime!;
-const asAdded = { ratingKey: '705', title: 'Detective Days' };
+const animeCfg = routing.loadSets()!.sets.anime!
+const asAdded = {
+  ratingKey: "705",
+  title: "Detective Days",
+}
 
-const dup = await findDuplicateItem(fakeClient, animeCfg, await queues.listSet('anime'), asAdded);
-check('adding a ratingKey a TITLE entry already names is a duplicate', dup?.key, 'title:Detective Days');
-check('…and it reports the item both entries resolve to', dup?.ratingKey, '705');
+const dup = await findDuplicateItem(
+  fakeClient,
+  animeCfg,
+  await queues.listSet("anime"),
+  asAdded,
+)
+check(
+  "adding a ratingKey a TITLE entry already names is a duplicate",
+  dup?.key,
+  "title:Detective Days",
+)
+check(
+  "…and it reports the item both entries resolve to",
+  dup?.ratingKey,
+  "705",
+)
 
 const notDup = await findDuplicateItem(
-  fakeClient, animeCfg, await queues.listSet('anime'), { ratingKey: '710', title: 'One Episode Left' },
-);
-check('a show the queue does NOT hold is not a duplicate', notDup, null);
+  fakeClient,
+  animeCfg,
+  await queues.listSet("anime"),
+  { ratingKey: "710", title: "One Episode Left" },
+)
+check(
+  "a show the queue does NOT hold is not a duplicate",
+  notDup,
+  null,
+)
 
 // `entryKey` alone still cannot see it — which is the whole reason the second check exists.
-check('entryKey still keys the two forms differently (unchanged, on purpose)',
-  [queues.entryKey('Detective Days'), queues.entryKey(asAdded)],
-  ['title:Detective Days', 'rk:705']);
+check(
+  "entryKey still keys the two forms differently (unchanged, on purpose)",
+  [
+    queues.entryKey("Detective Days"),
+    queues.entryKey(asAdded),
+  ],
+  ["title:Detective Days", "rk:705"],
+)
 
 // And the file: one copy before, one copy after. The route refuses the add; `addItem` is
 // never reached, so nothing is written.
-const beforeAdd = await queues.listSet('anime');
-if (!dup) await queues.addItem('anime', asAdded, 'bottom');
-const afterAdd = await queues.listSet('anime');
-check('the queue still holds ONE copy of the show', afterAdd.length, beforeAdd.length);
-check('…and it is still the original title line', afterAdd.map((entry) => entry.key).includes('title:Detective Days'), true);
+const beforeAdd = await queues.listSet("anime")
+if (!dup) await queues.addItem("anime", asAdded, "bottom")
+const afterAdd = await queues.listSet("anime")
+check(
+  "the queue still holds ONE copy of the show",
+  afterAdd.length,
+  beforeAdd.length,
+)
+check(
+  "…and it is still the original title line",
+  afterAdd
+    .map((entry) => entry.key)
+    .includes("title:Detective Days"),
+  true,
+)
 
 // A genuinely new item still lands.
-await queues.addItem('anime', { ratingKey: '710', title: 'One Episode Left' }, 'bottom');
-check('a show the queue did not hold is still added',
-  (await queues.listSet('anime')).map((entry) => entry.key).includes('rk:710'), true);
+await queues.addItem(
+  "anime",
+  { ratingKey: "710", title: "One Episode Left" },
+  "bottom",
+)
+check(
+  "a show the queue did not hold is still added",
+  (await queues.listSet("anime"))
+    .map((entry) => entry.key)
+    .includes("rk:710"),
+  true,
+)
 
 // A COLLECTION is not an item, and adding one is never reported as a duplicate: whether a
 // queued collection should block adding one of its films is a coverage question, not an
 // identity one, and answering it here would refuse an add the owner may well mean.
 const collDup = await findDuplicateItem(
-  fakeClient, routing.loadSets()!.sets.franchise!, await queues.listSet('franchise'), 'Collection: Bunny Films',
-);
-check('a collection add is never an item duplicate', collDup, null);
+  fakeClient,
+  routing.loadSets()!.sets.franchise!,
+  await queues.listSet("franchise"),
+  "Collection: Bunny Films",
+)
+check(
+  "a collection add is never an item duplicate",
+  collDup,
+  null,
+)
 
 // --- WHICH libraries the screen draws from -------------------------------------- //
 // "Pending is for new additions not in a queue, not watched, from specific libraries (not
@@ -353,100 +756,232 @@ check('a collection add is never an item duplicate', collDup, null);
 // `Movie Clips` between them, so 1,097 of his 2,162 rows were clips and test encodes.
 
 // The default, as a fold — no state, no Plex.
-check('the default is every video library that is not Other Videos',
-  pending.defaultLibraries(LIBRARIES).map((defaultLibrary) => defaultLibrary.id).sort(), [1, 5]);
+check(
+  "the default is every video library that is not Other Videos",
+  pending
+    .defaultLibraries(LIBRARIES)
+    .map((defaultLibrary) => defaultLibrary.id)
+    .sort(),
+  [1, 5],
+)
 
 // An explicit choice OVERRIDES the default in both directions. Naming the clips library is
 // allowed: the default is a default, and a household that wants it says so.
-check('an explicit list wins, Other Videos included',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 8] }).map((selectedLibrary) => selectedLibrary.id).sort(), [1, 8]);
-check('an explicit list can also NARROW past the default',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1] }).map((selectedLibrary) => selectedLibrary.id), [1]);
+check(
+  "an explicit list wins, Other Videos included",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: [1, 8] })
+    .map((selectedLibrary) => selectedLibrary.id)
+    .sort(),
+  [1, 8],
+)
+check(
+  "an explicit list can also NARROW past the default",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: [1] })
+    .map((selectedLibrary) => selectedLibrary.id),
+  [1],
+)
 
 // `[]` and `null` are different answers and must stay different: one is "I said none", the
 // other is "I have not said". Collapsing them would make the reset button clear the screen.
-check('an EMPTY list is a real answer — no libraries',
-  pending.selectedLibraries(LIBRARIES, { libraries: [] }).map((selectedLibrary) => selectedLibrary.id), []);
-check('null is not an empty list — it means unconfigured, so the default',
-  pending.selectedLibraries(LIBRARIES, { libraries: null }).map((selectedLibrary) => selectedLibrary.id).sort(), [1, 5]);
+check(
+  "an EMPTY list is a real answer — no libraries",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: [] })
+    .map((selectedLibrary) => selectedLibrary.id),
+  [],
+)
+check(
+  "null is not an empty list — it means unconfigured, so the default",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: null })
+    .map((selectedLibrary) => selectedLibrary.id)
+    .sort(),
+  [1, 5],
+)
 
 // `video` is enforced even against an explicit choice. Nothing this app builds can queue a
 // photo or music section, so naming one is a mistake and not a preference.
-check('a non-video library named explicitly is still refused',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 7] }).map((selectedLibrary) => selectedLibrary.id), [1]);
-check('an id matching no library is dropped rather than throwing',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 4242] }).map((selectedLibrary) => selectedLibrary.id), [1]);
+check(
+  "a non-video library named explicitly is still refused",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: [1, 7] })
+    .map((selectedLibrary) => selectedLibrary.id),
+  [1],
+)
+check(
+  "an id matching no library is dropped rather than throwing",
+  pending
+    .selectedLibraries(LIBRARIES, { libraries: [1, 4242] })
+    .map((selectedLibrary) => selectedLibrary.id),
+  [1],
+)
 
 // End to end, through the state file: only the chosen library's items are on the screen.
-await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 1 ]\n`);
-const moviesOnly = await keysNow();
-check('choosing Movies alone leaves the shows off the screen',
-  moviesOnly.some((key) => key.startsWith('7')), false);
-check('…and keeps the movies that nothing plays', moviesOnly.includes('900'), true);
+await fs.writeFile(
+  STATE,
+  `seen_through: 0\ndismissed: []\nlibraries: [ 1 ]\n`,
+)
+const moviesOnly = await keysNow()
+check(
+  "choosing Movies alone leaves the shows off the screen",
+  moviesOnly.some((key) => key.startsWith("7")),
+  false,
+)
+check(
+  "…and keeps the movies that nothing plays",
+  moviesOnly.includes("900"),
+  true,
+)
 
 // Naming the clips library puts its test encode on the screen, which is the point of the
 // override: it is the owner's call and not the app's.
-await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 8 ]\n`);
-check('naming Other Videos DOES report it', (await keysNow()).includes('990'), true);
+await fs.writeFile(
+  STATE,
+  `seen_through: 0\ndismissed: []\nlibraries: [ 8 ]\n`,
+)
+check(
+  "naming Other Videos DOES report it",
+  (await keysNow()).includes("990"),
+  true,
+)
 
 // `[]` written to the file is honoured rather than read as "unset".
-await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: []\n`);
-check('an empty list in the file empties the screen', await keysNow(), []);
+await fs.writeFile(
+  STATE,
+  `seen_through: 0\ndismissed: []\nlibraries: []\n`,
+)
+check(
+  "an empty list in the file empties the screen",
+  await keysNow(),
+  [],
+)
 
 // --- writing the choice back ---------------------------------------------------- //
 // Ids are de-duplicated and sorted, so a re-save that changed nothing does not churn the
 // file and a hand-edited one looks like a UI-written one.
-check('ids are de-duplicated and sorted on save',
-  (await pending.setLibraries([8, 1, 8, 5])).libraries, [1, 5, 8]);
-check('…and a round trip reads back what was written',
-  (await pending.readState()).libraries, [1, 5, 8]);
+check(
+  "ids are de-duplicated and sorted on save",
+  (await pending.setLibraries([8, 1, 8, 5])).libraries,
+  [1, 5, 8],
+)
+check(
+  "…and a round trip reads back what was written",
+  (await pending.readState()).libraries,
+  [1, 5, 8],
+)
 
 // `null` clears the choice, which is a different write from `[]`.
-check('null clears the choice', (await pending.setLibraries(null)).libraries, null);
-check('…and the cleared file falls back to the default',
-  (await keysNow()).includes('990'), false);
+check(
+  "null clears the choice",
+  (await pending.setLibraries(null)).libraries,
+  null,
+)
+check(
+  "…and the cleared file falls back to the default",
+  (await keysNow()).includes("990"),
+  false,
+)
 // The KEY is gone, not written as an explicit null. Anchored to the start of a line: the
 // file's header comment documents `libraries`, so a bare text search matches the
 // documentation rather than the data.
-check('…and the key is gone from the file, not written as null',
-  /^libraries:/m.test(await fs.readFile(STATE, 'utf8')), false);
+check(
+  "…and the key is gone from the file, not written as null",
+  /^libraries:/m.test(await fs.readFile(STATE, "utf8")),
+  false,
+)
 
 // Clearing the choice must not clear the rest of the file.
-check('clearing the libraries leaves the watermark alone',
-  (await pending.readState()).seen_through, 0);
+check(
+  "clearing the libraries leaves the watermark alone",
+  (await pending.readState()).seen_through,
+  0,
+)
 
 // --- collections ---------------------------------------------------------------- //
 // "There are no collections here. I'd really like those to show up too. Often, I wanna add
 // the collection, not a single or set of movies to retain order." A collection is a row of
 // its OWN, beside its members — never instead of them.
-await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 5, 1 ]\n`);
+await fs.writeFile(
+  STATE,
+  `seen_through: 0\ndismissed: []\nlibraries: [ 5, 1 ]\n`,
+)
 
-const withCols = await withCollections();
-const colKeys = withCols.filter((withCol) => withCol.type === 'collection').map((withCol) => withCol.ratingKey);
+const withCols = await withCollections()
+const colKeys = withCols
+  .filter((withCol) => withCol.type === "collection")
+  .map((withCol) => withCol.ratingKey)
 
-check('a collection holding something pending is offered', colKeys.includes('5501'), true);
-check('a collection a queue already names is NOT', colKeys.includes('5500'), false);
-check('a collection whose every film is covered is NOT', colKeys.includes('5502'), false);
-check('the collection carries its size',
-  withCols.find((withCol) => withCol.ratingKey === '5501')?.childCount, 2);
-check('…and the pending child stays on the list beside it',
-  withCols.some((withCol) => withCol.ratingKey === '900' && withCol.type === 'movie'), true);
-check('…sorted among the items by the newest pending child',
-  withCols.find((withCol) => withCol.ratingKey === '5501')?.addedAt,
-  withCols.find((withCol) => withCol.ratingKey === '900')?.addedAt);
+check(
+  "a collection holding something pending is offered",
+  colKeys.includes("5501"),
+  true,
+)
+check(
+  "a collection a queue already names is NOT",
+  colKeys.includes("5500"),
+  false,
+)
+check(
+  "a collection whose every film is covered is NOT",
+  colKeys.includes("5502"),
+  false,
+)
+check(
+  "the collection carries its size",
+  withCols.find((withCol) => withCol.ratingKey === "5501")
+    ?.childCount,
+  2,
+)
+check(
+  "…and the pending child stays on the list beside it",
+  withCols.some(
+    (withCol) =>
+      withCol.ratingKey === "900" &&
+      withCol.type === "movie",
+  ),
+  true,
+)
+check(
+  "…sorted among the items by the newest pending child",
+  withCols.find((withCol) => withCol.ratingKey === "5501")
+    ?.addedAt,
+  withCols.find((withCol) => withCol.ratingKey === "900")
+    ?.addedAt,
+)
 
 // The lister is optional, and without it the page is exactly what it was.
-check('no lister means no collections at all',
-  (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items
-    .some((item) => item.type === 'collection'),
-  false);
+check(
+  "no lister means no collections at all",
+  (
+    await pending.pendingItems(
+      fakeClient,
+      LIBRARIES,
+      listSection,
+    )
+  ).items.some((item) => item.type === "collection"),
+  false,
+)
 
 // Dismiss addresses a collection by its ratingKey, like everything else on the screen.
-await pending.dismiss('5501');
-check('a dismissed collection leaves the screen',
-  (await withCollections()).some((withCollection) => withCollection.ratingKey === '5501'), false);
-check('…and its pending film stays',
-  (await withCollections()).some((withCollection) => withCollection.ratingKey === '900'), true);
+await pending.dismiss("5501")
+check(
+  "a dismissed collection leaves the screen",
+  (await withCollections()).some(
+    (withCollection) => withCollection.ratingKey === "5501",
+  ),
+  false,
+)
+check(
+  "…and its pending film stays",
+  (await withCollections()).some(
+    (withCollection) => withCollection.ratingKey === "900",
+  ),
+  true,
+)
 
-console.log(failed ? `pending FAILED (${failed})` : 'pending OK');
-process.exit(failed ? 1 : 0);
+console.log(
+  failed ? `pending FAILED (${failed})` : "pending OK",
+)
+process.exit(failed ? 1 : 0)

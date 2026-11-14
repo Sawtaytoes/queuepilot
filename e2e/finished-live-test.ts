@@ -23,25 +23,50 @@
 // server against a stub Plex on 127.0.0.1. No token, no network.
 //
 // Run:  server/node_modules/.bin/tsx e2e/finished-live-test.ts   (from the repo root; non-zero on failure)
-process.env.PLAYBACK_FSM = 'true';
-process.env.RESUME_ON_ADVANCE = 'false';
-process.env.ADB_ENABLED = 'false';
-process.env.MQTT_HOST = ''; // no import-time broker connect (mqttc.js guards on HOST)
+process.env.PLAYBACK_FSM = "true"
+process.env.RESUME_ON_ADVANCE = "false"
+process.env.ADB_ENABLED = "false"
+process.env.MQTT_HOST = "" // no import-time broker connect (mqttc.js guards on HOST)
 
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
-import path from 'node:path';
-import { SESSION_CTL, stubSessionDeps, useFixtures, resetSession } from './stubs/session-harness.mjs';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
 import {
-  FRESH_RK, QUEUES_YAML, RESUMING_RK, SETS_YAML, WATCHED_RK, startStubPlex,
-} from './stubs/plex-watch-state.mjs';
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs"
+import path from "node:path"
+import {
+  SESSION_CTL,
+  stubSessionDeps,
+  useFixtures,
+  resetSession,
+} from "./stubs/session-harness.mjs"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
+import {
+  FRESH_RK,
+  QUEUES_YAML,
+  RESUMING_RK,
+  SETS_YAML,
+  WATCHED_RK,
+  startStubPlex,
+} from "./stubs/plex-watch-state.mjs"
 
-stubSessionDeps();
+stubSessionDeps()
 
-const FAILS: string[] = [];
-function ok(name: string, isPassing: boolean, detail = ''): void {
-  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
-  if (!isPassing) FAILS.push(name);
+const FAILS: string[] = []
+function ok(
+  name: string,
+  isPassing: boolean,
+  detail = "",
+): void {
+  console.log(
+    (isPassing ? "PASS " : "FAIL ") +
+      name +
+      (!isPassing && detail ? `  -- ${detail}` : ""),
+  )
+  if (!isPassing) FAILS.push(name)
 }
 
 // --------------------------------------------------------------------------- //
@@ -65,50 +90,81 @@ const SETS = `sets:
     source: queue
     sections: [1, 5]
     reel: true
-`;
-const ENTRIES = ['  - {title: "Movie A (2001)"}', '  - {title: "Movie C (2003)"}'].join('\n');
-const QUEUES = ['consuming:', ENTRIES, 'keeper:', ENTRIES, 'reelset:', ENTRIES, ''].join('\n');
-const FX = useFixtures({ sets: SETS, queues: QUEUES });
+`
+const ENTRIES = [
+  '  - {title: "Movie A (2001)"}',
+  '  - {title: "Movie C (2003)"}',
+].join("\n")
+const QUEUES = [
+  "consuming:",
+  ENTRIES,
+  "keeper:",
+  ENTRIES,
+  "reelset:",
+  ENTRIES,
+  "",
+].join("\n")
+const FX = useFixtures({ sets: SETS, queues: QUEUES })
 
-const finished = await import('../server/src/finished.js');
+const finished = await import("../server/src/finished.js")
 
 async function reconcile(setName: string) {
-  writeFileSync(FX.queuesPath, QUEUES);
-  resetSession();
-  const res = await finished.reconcileQueue(setName);
-  return { res, yaml: readFileSync(FX.queuesPath, 'utf8') };
+  writeFileSync(FX.queuesPath, QUEUES)
+  resetSession()
+  const res = await finished.reconcileQueue(setName)
+  return { res, yaml: readFileSync(FX.queuesPath, "utf8") }
 }
 
-const consuming = await reconcile('consuming');
-ok('a finished entry is marked done with no session at all',
-  consuming.yaml.includes('done: true'), consuming.yaml);
-ok('reconciling plays NOTHING',
-  SESSION_CTL.drives.length === 0 && SESSION_CTL.plays.length === 0,
-  JSON.stringify({ drives: SESSION_CTL.drives, plays: SESSION_CTL.plays }));
+const consuming = await reconcile("consuming")
+ok(
+  "a finished entry is marked done with no session at all",
+  consuming.yaml.includes("done: true"),
+  consuming.yaml,
+)
+ok(
+  "reconciling plays NOTHING",
+  SESSION_CTL.drives.length === 0 &&
+    SESSION_CTL.plays.length === 0,
+  JSON.stringify({
+    drives: SESSION_CTL.drives,
+    plays: SESSION_CTL.plays,
+  }),
+)
 
-const keeper = await reconcile('keeper');
-ok('a keep_completed set is still never marked', !keeper.yaml.includes('done: true'), keeper.yaml);
+const keeper = await reconcile("keeper")
+ok(
+  "a keep_completed set is still never marked",
+  !keeper.yaml.includes("done: true"),
+  keeper.yaml,
+)
 
-const reelset = await reconcile('reelset');
-ok('a reel is still never marked', !reelset.yaml.includes('done: true'), reelset.yaml);
+const reelset = await reconcile("reelset")
+ok(
+  "a reel is still never marked",
+  !reelset.yaml.includes("done: true"),
+  reelset.yaml,
+)
 
-const unknown = await finished.reconcileQueue('no-such-set');
-ok('an unknown set reconciles to nothing rather than throwing', unknown.reconciled === false);
+const unknown = await finished.reconcileQueue("no-such-set")
+ok(
+  "an unknown set reconciles to nothing rather than throwing",
+  unknown.reconciled === false,
+)
 
 // --------------------------------------------------------------------------- //
 // 2. /api/queues reports isFinished, from LIVE state rather than the tile cache
 // --------------------------------------------------------------------------- //
-const PORT = 18793;
-const PLEX_PORT = 18794;
-const Q_PATH = '/tmp/queues-finished-live.yaml';
-const S_PATH = '/tmp/sets-finished-live.yaml';
+const PORT = 18793
+const PLEX_PORT = 18794
+const Q_PATH = "/tmp/queues-finished-live.yaml"
+const S_PATH = "/tmp/sets-finished-live.yaml"
 
-const plex = startStubPlex(PLEX_PORT);
-await plex.ready;
+const plex = startStubPlex(PLEX_PORT)
+await plex.ready
 
-writeFileSync(S_PATH, SETS_YAML);
-writeFileSync(Q_PATH, QUEUES_YAML);
-rmSync('/tmp/cache-finished-live.sqlite', { force: true });
+writeFileSync(S_PATH, SETS_YAML)
+writeFileSync(Q_PATH, QUEUES_YAML)
+rmSync("/tmp/cache-finished-live.sqlite", { force: true })
 
 const child = spawnServer({
   env: {
@@ -116,60 +172,99 @@ const child = spawnServer({
     WEB_PORT: String(PORT),
     QUEUES_PATH: Q_PATH,
     SETS_PATH: S_PATH,
-    HISTORY_PATH: '/tmp/history-finished-live.json',
-    CACHE_PATH: '/tmp/cache-finished-live.sqlite',
+    HISTORY_PATH: "/tmp/history-finished-live.json",
+    CACHE_PATH: "/tmp/cache-finished-live.sqlite",
     PLEX_API_SERVER_URL: `http://127.0.0.1:${PLEX_PORT}`,
-    PLEX_TOKEN: 'offline-test-token',
-    MQTT_HOST: '',
+    PLEX_TOKEN: "offline-test-token",
+    MQTT_HOST: "",
     NODE_OPTIONS: [
       process.env.NODE_OPTIONS,
-      `--import=${path.resolve('e2e/stubs/plex-tv-profile-fetch.mjs')}`,
-    ].filter(Boolean).join(' '),
+      `--import=${path.resolve("e2e/stubs/plex-tv-profile-fetch.mjs")}`,
+    ]
+      .filter(Boolean)
+      .join(" "),
   },
-  stdio: 'ignore',
-});
+  stdio: "ignore",
+})
 
 try {
-  let items: Record<string, any>[] = [];
+  let items: Record<string, any>[] = []
   for (let attempt = 0; attempt < 50; attempt++) {
     try {
-      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((response) => response.json()) as any;
-      items = body.sets.movies.items;
-      break;
+      const body = (await fetch(
+        `http://localhost:${PORT}/api/queues`,
+      ).then((response) => response.json())) as any
+      items = body.sets.movies.items
+      break
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 200),
+      )
     }
   }
-  const byKey = (rk: string) => items.find((item) => String(item.ratingKey) === rk) || {};
-  ok(`the queue resolves its three entries (${items.length})`, items.length === 3);
+  const byKey = (rk: string) =>
+    items.find((item) => String(item.ratingKey) === rk) ||
+    {}
+  ok(
+    `the queue resolves its three entries (${items.length})`,
+    items.length === 3,
+  )
 
-  const watched = byKey(WATCHED_RK);
-  ok('a film finished since the last scan reads Completed', watched.isFinished === true,
-    JSON.stringify(watched));
-  ok('…and the file still says nothing — this is the LIVE answer, not the flag',
-    watched.done === false && !readFileSync(Q_PATH, 'utf8').includes('done: true'));
+  const watched = byKey(WATCHED_RK)
+  ok(
+    "a film finished since the last scan reads Completed",
+    watched.isFinished === true,
+    JSON.stringify(watched),
+  )
+  ok(
+    "…and the file still says nothing — this is the LIVE answer, not the flag",
+    watched.done === false &&
+      !readFileSync(Q_PATH, "utf8").includes("done: true"),
+  )
 
-  ok('an unwatched film is not Completed', byKey(FRESH_RK).isFinished === false);
+  ok(
+    "an unwatched film is not Completed",
+    byKey(FRESH_RK).isFinished === false,
+  )
 
   // The Prison School rule, at the movie level: in history, but sitting at a resume point.
   // "In Progress" wins, and a rewatch must never be reported as finished.
-  const resuming = byKey(RESUMING_RK);
-  ok('a film being watched again is In Progress, not Completed',
-    resuming.isFinished === false && resuming.partiallyWatched === true, JSON.stringify(resuming));
-  ok('…and it carries the live resume offset',
-    resuming.viewOffset === 1060898, JSON.stringify(resuming));
+  const resuming = byKey(RESUMING_RK)
+  ok(
+    "a film being watched again is In Progress, not Completed",
+    resuming.isFinished === false &&
+      resuming.partiallyWatched === true,
+    JSON.stringify(resuming),
+  )
+  ok(
+    "…and it carries the live resume offset",
+    resuming.viewOffset === 1060898,
+    JSON.stringify(resuming),
+  )
 
-  ok('the live view state came from the batched metadata read',
-    plex.hits.some((hit: string) => /^\/library\/metadata\/[\d,]+$/.test(hit)), plex.hits.join(' '));
+  ok(
+    "the live view state came from the batched metadata read",
+    plex.hits.some((hit: string) =>
+      /^\/library\/metadata\/[\d,]+$/.test(hit),
+    ),
+    plex.hits.join(" "),
+  )
 
-  const body = await fetch(`http://localhost:${PORT}/api/queues?fresh=1`).then((response) => response.json()) as any;
-  const kidItem = body.sets.kids.items[0] || {};
-  ok('a kid queue does not inherit the owner\'s Completed state',
-    kidItem.isFinished === false && kidItem.done === false, JSON.stringify(kidItem));
+  const body = (await fetch(
+    `http://localhost:${PORT}/api/queues?fresh=1`,
+  ).then((response) => response.json())) as any
+  const kidItem = body.sets.kids.items[0] || {}
+  ok(
+    "a kid queue does not inherit the owner's Completed state",
+    kidItem.isFinished === false && kidItem.done === false,
+    JSON.stringify(kidItem),
+  )
 } finally {
-  killServer(child);
-  await plex.close();
+  killServer(child)
+  await plex.close()
 }
 
-console.log(FAILS.length ? `FAILURES: ${FAILS.length}` : 'done');
-process.exit(FAILS.length ? 1 : 0);
+console.log(
+  FAILS.length ? `FAILURES: ${FAILS.length}` : "done",
+)
+process.exit(FAILS.length ? 1 : 0)

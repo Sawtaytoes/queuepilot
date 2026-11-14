@@ -22,37 +22,61 @@
 // the output as `art/<seriesId>.png` — see the header of that folder's README-less contents:
 // they are fetched by hand with the Kavita apiKey, because embedding a key in a committed
 // preview page is exactly the thing AGENTS.md forbids.
-import { mkdirSync, copyFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
-import { chromium } from './playwright.js';
+import {
+  mkdirSync,
+  copyFileSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+} from "node:fs"
+import { chromium } from "./playwright.js"
 
-const OUT = '__screenshots__/list-cover';
-const ART = `${OUT}/art`;
-const FONTS = '/mnt/TrueNAS-Apps/Repos/charcuterie/packages/tokens/fonts';
+const OUT = "__screenshots__/list-cover"
+const ART = `${OUT}/art`
+const FONTS =
+  "/mnt/TrueNAS-Apps/Repos/charcuterie/packages/tokens/fonts"
 
-const SET_LABEL = process.env.COVER_SET_LABEL || 'Manga & Webtoons';
+const SET_LABEL =
+  process.env.COVER_SET_LABEL || "Manga & Webtoons"
 
 // Design C sets the name at poster scale, so it needs explicit line breaks — an ampersand
 // hangs at the end of its line ("Manga &" / "Webtoons"), and anything else breaks before the
 // last word. Automatic wrapping would strand the "&" on a line of its own.
-const STACKED_LABEL = SET_LABEL.includes(' & ')
-  ? SET_LABEL.replace(/ & /g, ' &<br>')
-  : SET_LABEL.replace(/ (?=[^ ]+$)/, '<br>');
+const STACKED_LABEL = SET_LABEL.includes(" & ")
+  ? SET_LABEL.replace(/ & /g, " &<br>")
+  : SET_LABEL.replace(/ (?=[^ ]+$)/, "<br>")
 
-mkdirSync(OUT, { recursive: true });
-mkdirSync(ART, { recursive: true });
+mkdirSync(OUT, { recursive: true })
+mkdirSync(ART, { recursive: true })
 
-for (const fontFile of ['baloo2-1.woff2', 'outfit-1.woff2']) {
-  if (existsSync(`${FONTS}/${fontFile}`)) copyFileSync(`${FONTS}/${fontFile}`, `${OUT}/${fontFile}`);
+for (const fontFile of [
+  "baloo2-1.woff2",
+  "outfit-1.woff2",
+]) {
+  if (existsSync(`${FONTS}/${fontFile}`))
+    copyFileSync(
+      `${FONTS}/${fontFile}`,
+      `${OUT}/${fontFile}`,
+    )
 }
 
 // The mosaic wants nine 2:3 tiles for a 3x3 that lands on 640x960 exactly. Take whatever
 // real covers were downloaded, in a stable order, so a re-run is deterministic.
-const art = readdirSync(ART).filter((artFile) => artFile.endsWith('.png') && artFile !== 'current-153.png');
-const mosaic = art.slice(0, 9);
+const art = readdirSync(ART).filter(
+  (artFile) =>
+    artFile.endsWith(".png") &&
+    artFile !== "current-153.png",
+)
+const mosaic = art.slice(0, 9)
 
 /** The app icon, recoloured for the provider. Dark ink on the green solid is what
  *  `web/src/styles/app.css` already settled on for Kavita (#111 on #4AC694, 8.9:1). */
-const mark = (size: number, solid: string, ink: string, radius = 5.5) => `
+const mark = (
+  size: number,
+  solid: string,
+  ink: string,
+  radius = 5.5,
+) => `
 <svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">
   <rect width="24" height="24" rx="${radius}" fill="${solid}"/>
   <g transform="translate(12 12) scale(0.86) translate(-12 -12)" fill="none" stroke="${ink}"
@@ -62,7 +86,7 @@ const mark = (size: number, solid: string, ink: string, radius = 5.5) => `
     <line x1="13.6" y1="12" x2="20.6" y2="12"/>
     <line x1="13.6" y1="16.8" x2="20.6" y2="16.8"/>
   </g>
-</svg>`;
+</svg>`
 
 const CSS = `
 @font-face { font-family: "Baloo 2"; font-weight: 400 800; src: url(./baloo2-1.woff2) format("woff2"); }
@@ -158,17 +182,23 @@ const CSS = `
 .c-blur .kicker { margin-top: 46px; font-size: 24px; color: #EAF6F1; }
 .c-blur h1 { margin-top: 20px; font-size: 74px; text-shadow: 0 6px 30px rgba(0,0,0,.55); }
 .c-blur .caption { margin-top: 30px; font-size: 25px; color: rgba(234,246,241,.78); }
-`;
+`
 
-const covers: { id: string; name: string; note: string; html: string }[] = [
+const covers: {
+  id: string
+  name: string
+  note: string
+  html: string
+}[] = [
   {
-    id: 'plate',
-    name: 'A — Plate',
-    note: 'The app mark, in the queue’s provider colour. Set name in the design system’s '
-      + 'own heading face. Never goes stale; reads at any size.',
+    id: "plate",
+    name: "A — Plate",
+    note:
+      "The app mark, in the queue’s provider colour. Set name in the design system’s " +
+      "own heading face. Never goes stale; reads at any size.",
     html: `
 <div class="cover c-plate">
-  <div class="mark">${mark(216, '#4AC694', '#111111', 5.0)}</div>
+  <div class="mark">${mark(216, "#4AC694", "#111111", 5.0)}</div>
   <div class="kicker">QueuePilot</div>
   <h1>${SET_LABEL}</h1>
   <div class="rule"></div>
@@ -176,30 +206,32 @@ const covers: { id: string; name: string; note: string; html: string }[] = [
 </div>`,
   },
   {
-    id: 'mosaic',
-    name: 'B — Mosaic',
-    note: 'Nine real covers from the queue behind a dark veil. Looks like the shelf it is — '
-      + 'but it is a SNAPSHOT: the lineup is rebuilt every launch, so the art dates.',
+    id: "mosaic",
+    name: "B — Mosaic",
+    note:
+      "Nine real covers from the queue behind a dark veil. Looks like the shelf it is — " +
+      "but it is a SNAPSHOT: the lineup is rebuilt every launch, so the art dates.",
     html: `
 <div class="cover c-mosaic">
-  <div class="grid">${mosaic.map((artFile) => `<img src="./art/${artFile}" alt="">`).join('')}</div>
+  <div class="grid">${mosaic.map((artFile) => `<img src="./art/${artFile}" alt="">`).join("")}</div>
   <div class="veil"></div>
   <div class="foot">
-    <div class="row">${mark(46, '#4AC694', '#111111', 6.5)}<span class="kicker">QueuePilot</span></div>
+    <div class="row">${mark(46, "#4AC694", "#111111", 6.5)}<span class="kicker">QueuePilot</span></div>
     <h1>${SET_LABEL}</h1>
   </div>
 </div>`,
   },
   {
-    id: 'type',
-    name: 'C — Type',
-    note: 'Kavita green carrying the whole frame, set name as the artwork. Loudest of the '
-      + 'four in a grid of muted manga covers.',
+    id: "type",
+    name: "C — Type",
+    note:
+      "Kavita green carrying the whole frame, set name as the artwork. Loudest of the " +
+      "four in a grid of muted manga covers.",
     html: `
 <div class="cover c-type">
   <div class="top">
     <span class="kicker">QueuePilot</span>
-    ${mark(72, 'rgba(8,36,26,.86)', '#5BD3A2', 6.5)}
+    ${mark(72, "rgba(8,36,26,.86)", "#5BD3A2", 6.5)}
   </div>
   <h1>${STACKED_LABEL}</h1>
   <div>
@@ -209,50 +241,69 @@ const covers: { id: string; name: string; note: string; html: string }[] = [
 </div>`,
   },
   {
-    id: 'blur',
-    name: 'D — Blur',
-    note: 'B’s art, out of focus, under A’s plate. Keeps the shelf’s colour without naming '
-      + 'any title — so a lineup that changes next launch does not date it.',
+    id: "blur",
+    name: "D — Blur",
+    note:
+      "B’s art, out of focus, under A’s plate. Keeps the shelf’s colour without naming " +
+      "any title — so a lineup that changes next launch does not date it.",
     html: `
 <div class="cover c-blur">
-  <div class="grid">${mosaic.slice(0, 4).map((artFile) => `<img src="./art/${artFile}" alt="">`).join('')}</div>
+  <div class="grid">${mosaic
+    .slice(0, 4)
+    .map((artFile) => `<img src="./art/${artFile}" alt="">`)
+    .join("")}</div>
   <div class="veil"></div>
   <div class="body">
-    <div class="mark">${mark(180, '#4AC694', '#111111', 5.0)}</div>
+    <div class="mark">${mark(180, "#4AC694", "#111111", 5.0)}</div>
     <div class="kicker">QueuePilot</div>
     <h1>${SET_LABEL}</h1>
     <div class="caption">Reading queue</div>
   </div>
 </div>`,
   },
-];
+]
 
 const page = `<!doctype html><meta charset="utf-8"><title>cover render</title>
 <style>${CSS} body { margin: 0; background: #222; display: flex; gap: 40px; padding: 40px; }</style>
-${covers.map((cover) => `<div id="${cover.id}">${cover.html}</div>`).join('\n')}`;
+${covers.map((cover) => `<div id="${cover.id}">${cover.html}</div>`).join("\n")}`
 
-writeFileSync(`${OUT}/render.html`, page);
+writeFileSync(`${OUT}/render.html`, page)
 
-const browser = await chromium.launch();
-const browserPage = await browser.newPage({ viewport: { width: 3200, height: 1100 }, deviceScaleFactor: 1 });
-await browserPage.goto(`file://${process.cwd()}/${OUT}/render.html`, { waitUntil: 'load' });
-await browserPage.evaluate(() => (document as unknown as { fonts: { ready: Promise<unknown> } }).fonts.ready);
-await browserPage.waitForTimeout(400);
+const browser = await chromium.launch()
+const browserPage = await browser.newPage({
+  viewport: { width: 3200, height: 1100 },
+  deviceScaleFactor: 1,
+})
+await browserPage.goto(
+  `file://${process.cwd()}/${OUT}/render.html`,
+  { waitUntil: "load" },
+)
+await browserPage.evaluate(
+  () =>
+    (
+      document as unknown as {
+        fonts: { ready: Promise<unknown> }
+      }
+    ).fonts.ready,
+)
+await browserPage.waitForTimeout(400)
 for (const cover of covers) {
-  await browserPage.locator(`#${cover.id} .cover`).screenshot({ path: `${OUT}/cover-${cover.id}.png` });
-  console.log('wrote', `${OUT}/cover-${cover.id}.png`);
+  await browserPage
+    .locator(`#${cover.id} .cover`)
+    .screenshot({ path: `${OUT}/cover-${cover.id}.png` })
+  console.log("wrote", `${OUT}/cover-${cover.id}.png`)
 }
-await browser.close();
+await browser.close()
 
 // --- the gallery the owner actually looks at --------------------------------------- //
 // Two readings of the same four: at Kavita's real card size (which is the ONLY size that
 // matters — that is where he sees it) and full-bleed for the detail.
-const hasCurrent = existsSync(`${ART}/current-153.png`);
+const hasCurrent = existsSync(`${ART}/current-153.png`)
 const card = (src: string, label: string, sub: string) => `
   <figure class="card">
     <img src="${src}" alt="">
     <figcaption><b>${label}</b><span>${sub}</span></figcaption>
-  </figure>`;
+  </figure>`
 
 const gallery = `<!doctype html><meta charset="utf-8"><title>Kavita list cover — options</title>
 <style>
@@ -283,15 +334,21 @@ every launch and is usually an interior page. Pick one — or say what to change
 <h2>At Kavita’s card size</h2>
 <p class="lede">This is the size that decides it: the list grid at <code>/lists</code>.</p>
 <div class="shelf">
-${hasCurrent ? card('./art/current-153.png', 'Today', 'auto-generated') : ''}
-${covers.map((cover) => card(`./cover-${cover.id}.png`, cover.name, `${cover.id}`)).join('')}
+${hasCurrent ? card("./art/current-153.png", "Today", "auto-generated") : ""}
+${covers.map((cover) => card(`./cover-${cover.id}.png`, cover.name, `${cover.id}`)).join("")}
 </div>
 
 <h2>Full size</h2>
 <div class="big">
-${covers.map((cover) => `<figure><img src="./cover-${cover.id}.png" alt="">
-  <figcaption><b>${cover.name}</b>${cover.note}</figcaption></figure>`).join('')}
+${covers
+  .map(
+    (
+      cover,
+    ) => `<figure><img src="./cover-${cover.id}.png" alt="">
+  <figcaption><b>${cover.name}</b>${cover.note}</figcaption></figure>`,
+  )
+  .join("")}
 </div>
-`;
-writeFileSync(`${OUT}/index.html`, gallery);
-console.log('wrote', `${OUT}/index.html`);
+`
+writeFileSync(`${OUT}/index.html`, gallery)
+console.log("wrote", `${OUT}/index.html`)

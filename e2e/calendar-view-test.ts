@@ -32,106 +32,165 @@
 //
 // Usage: `PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers server/node_modules/.bin/tsx
 //         e2e/calendar-view-test.ts`   (spawns its own server)
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-import { pickValue } from './pick.js';
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { pickValue } from "./pick.js"
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = parseInt(process.env.WEB_PORT || '19300', 10);
-const BASE = `http://localhost:${PORT}`;
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+)
+const PORT = parseInt(process.env.WEB_PORT || "19300", 10)
+const BASE = `http://localhost:${PORT}`
 
-let failed = 0;
-const check = (name: string, isOk: boolean, detail = '') => {
-  console.log(`  ${isOk ? 'ok  ' : 'FAIL'} ${name}${isOk ? '' : ` — ${detail}`}`);
-  if (!isOk) failed += 1;
-};
+let failed = 0
+const check = (
+  name: string,
+  isOk: boolean,
+  detail = "",
+) => {
+  console.log(
+    `  ${isOk ? "ok  " : "FAIL"} ${name}${isOk ? "" : ` — ${detail}`}`,
+  )
+  if (!isOk) failed += 1
+}
 
 const waitReady = async (url: string, ms = 30000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + ms
   for (;;) {
     try {
-      if ((await fetch(url)).ok) return;
+      if ((await fetch(url)).ok) return
     } catch {
       /* not up yet */
     }
-    if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (Date.now() > end)
+      throw new Error(`not ready: ${url}`)
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-};
+}
 
 // ── 8. No timer, and the grep is the gate ──────────────────────────────────────────────── //
 // The view is a READER of two settings that are both evaluated on a read. A poll here would
 // be a timer wearing a different hat, and it is the one regression nothing else could see: a
 // `setInterval` that re-fetches looks exactly like a page that works.
 {
-  const source = await fs.readFile(`${ROOT}/web/src/views/CalendarView.tsx`, 'utf8');
+  const source = await fs.readFile(
+    `${ROOT}/web/src/views/CalendarView.tsx`,
+    "utf8",
+  )
   // The CALL, not the word: this file's own header says "there is no `setInterval`", and a
   // grep that cannot tell a ban from its explanation is a gate that fails on its own comment.
-  for (const banned of ['setInterval(', 'setTimeout(', 'requestAnimationFrame(']) {
-    check(`the calendar view has no ${banned})`, !source.includes(banned));
+  for (const banned of [
+    "setInterval(",
+    "setTimeout(",
+    "requestAnimationFrame(",
+  ]) {
+    check(
+      `the calendar view has no ${banned})`,
+      !source.includes(banned),
+    )
   }
 }
 
-await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-calendar.yaml');
-await fs.copyFile(`${ROOT}/e2e/fixtures/calendar.sets.yaml`, '/tmp/sets-calendar.yaml');
-for (const lock of ['/tmp/queues-calendar.yaml.lock', '/tmp/sets-calendar.yaml.lock']) {
-  await fs.rm(lock, { force: true });
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/queues.harness.yaml`,
+  "/tmp/queues-calendar.yaml",
+)
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/calendar.sets.yaml`,
+  "/tmp/sets-calendar.yaml",
+)
+for (const lock of [
+  "/tmp/queues-calendar.yaml.lock",
+  "/tmp/sets-calendar.yaml.lock",
+]) {
+  await fs.rm(lock, { force: true })
 }
-await fs.rm('/tmp/queuepilot-calendar.sqlite', { force: true });
+await fs.rm("/tmp/queuepilot-calendar.sqlite", {
+  force: true,
+})
 
 const srv = spawnServer({
   env: {
     ...process.env,
-    HISTORY_PATH: '/tmp/.history-calendar.json',
-    MQTT_HOST: '',
-    NODE_TLS_REJECT_UNAUTHORIZED: '0',
-    QUEUES_PATH: '/tmp/queues-calendar.yaml',
-    SETS_PATH: '/tmp/sets-calendar.yaml',
-    STORE_PATH: '/tmp/queuepilot-calendar.sqlite',
+    HISTORY_PATH: "/tmp/.history-calendar.json",
+    MQTT_HOST: "",
+    NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    QUEUES_PATH: "/tmp/queues-calendar.yaml",
+    SETS_PATH: "/tmp/sets-calendar.yaml",
+    STORE_PATH: "/tmp/queuepilot-calendar.sqlite",
     WEB_PORT: String(PORT),
   },
-  stdio: ['ignore', 'ignore', 'inherit'],
-});
+  stdio: ["ignore", "ignore", "inherit"],
+})
 
-const setById = async (id: string): Promise<Record<string, unknown>> => {
-  const body = (await (await fetch(`${BASE}/api/sets`)).json()) as {
-    sets: Record<string, unknown>[];
-  };
+const setById = async (
+  id: string,
+): Promise<Record<string, unknown>> => {
+  const body = (await (
+    await fetch(`${BASE}/api/sets`)
+  ).json()) as {
+    sets: Record<string, unknown>[]
+  }
 
-  return body.sets.find((set) => set.id === id) ?? {};
-};
+  return body.sets.find((set) => set.id === id) ?? {}
+}
 
 try {
-  await waitReady(`${BASE}/api/queues`);
+  await waitReady(`${BASE}/api/queues`)
 
   // ⚠️ A PORT THAT ANSWERS IS NOT PROOF IT IS OUR SERVER. Sibling agents run these harnesses
   // from their own worktrees, and a port one of theirs already holds answers with a 200 — so
   // this suite would assert against somebody else's build and report their result as ours.
   // The fixture's own queue label is the identity check, and it is a hard stop.
-  const registry = (await (await fetch(`${BASE}/api/sets`)).json()) as {
-    sets: { label?: string }[];
-  };
-  if (!registry.sets.some((set) => set.label === 'Bob — Halloween')) {
+  const registry = (await (
+    await fetch(`${BASE}/api/sets`)
+  ).json()) as {
+    sets: { label?: string }[]
+  }
+  if (
+    !registry.sets.some(
+      (set) => set.label === "Bob — Halloween",
+    )
+  ) {
     throw new Error(
       `port ${PORT} answers, but it is not this harness's server — another worktree holds it`,
-    );
+    )
   }
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
+  const browser = await chromium.launch()
+  const page = await browser.newPage({
+    viewport: { width: 1400, height: 1100 },
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
 
   /** Every write the page makes, so "it sent nothing" is assertable rather than assumed. */
-  const writes: { body: string; method: string; url: string }[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'PATCH' && request.url().includes('/api/sets/')) {
-      writes.push({ body: request.postData() ?? '', method: request.method(), url: request.url() });
+  const writes: {
+    body: string
+    method: string
+    url: string
+  }[] = []
+  page.on("request", (request) => {
+    if (
+      request.method() === "PATCH" &&
+      request.url().includes("/api/sets/")
+    ) {
+      writes.push({
+        body: request.postData() ?? "",
+        method: request.method(),
+        url: request.url(),
+      })
     }
-  });
+  })
 
   /**
    * WAIT FOR THE FIRST LOAD TO SETTLE before touching anything.
@@ -144,138 +203,212 @@ try {
   const settle = async (target = page) =>
     target
       .waitForFunction(
-        () => (document.querySelector('#status')?.textContent ?? '') === 'Ready',
+        () =>
+          (document.querySelector("#status")?.textContent ??
+            "") === "Ready",
         undefined,
         { timeout: 90000 },
       )
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      )
 
-  await page.goto(`${BASE}/calendar`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#calendar-rows', { timeout: 30000 });
-  await settle();
+  await page.goto(`${BASE}/calendar`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#calendar-rows", {
+    timeout: 30000,
+  })
+  await settle()
 
   // ── 1. Which queues are listed ───────────────────────────────────────────────────────── //
-  const listed = await page.$$eval('#calendar-rows [data-set]', (els) =>
-    els.map((el) => el.getAttribute('data-set')),
-  );
+  const listed = await page.$$eval(
+    "#calendar-rows [data-set]",
+    (els) => els.map((el) => el.getAttribute("data-set")),
+  )
   check(
-    'every queue with a date is listed',
-    ['bob', 'bob_alice', 'bob_anime', 'younger'].every((id) => listed.includes(id)),
-    listed.join(', '),
-  );
+    "every queue with a date is listed",
+    ["bob", "bob_alice", "bob_anime", "younger"].every(
+      (id) => listed.includes(id),
+    ),
+    listed.join(", "),
+  )
   check(
-    'a queue with NO date does not appear',
-    !listed.includes('family') && !listed.includes('older'),
-    listed.join(', '),
-  );
+    "a queue with NO date does not appear",
+    !listed.includes("family") && !listed.includes("older"),
+    listed.join(", "),
+  )
 
   // Calendar order, on the earliest date each row carries: bob_anime 04-01, younger 06-01,
   // bob 10-01, bob_alice 12-01. It asks nothing about today, so the order is the same at
   // every hour and this assertion cannot flake at midnight.
   check(
-    'the rows are in calendar order, January to December',
-    listed.join(',') === 'bob_anime,younger,bob,bob_alice',
-    listed.join(','),
-  );
+    "the rows are in calendar order, January to December",
+    listed.join(",") === "bob_anime,younger,bob,bob_alice",
+    listed.join(","),
+  )
 
   // ── 2. ONE COLUMN at every width ─────────────────────────────────────────────────────── //
   const tracks = await page.$eval(
-    '#calendar-rows',
-    (ul) => getComputedStyle(ul).gridTemplateColumns.split(' ').length,
-  );
-  check('the list is one column at 1400px', tracks === 1, `${tracks} tracks`);
+    "#calendar-rows",
+    (ul) =>
+      getComputedStyle(ul).gridTemplateColumns.split(" ")
+        .length,
+  )
+  check(
+    "the list is one column at 1400px",
+    tracks === 1,
+    `${tracks} tracks`,
+  )
 
   // ── 4. A rotation pool has a season window and no reset date ─────────────────────────── //
   check(
-    'a curated queue offers the reset date',
-    (await page.locator('[data-testid="calendar-bob-reset-month"]').count()) === 1,
-  );
+    "a curated queue offers the reset date",
+    (await page
+      .locator('[data-testid="calendar-bob-reset-month"]')
+      .count()) === 1,
+  )
   check(
-    'a rotation pool offers the season window',
-    (await page.locator('[data-testid="calendar-younger-season-start-month"]').count()) === 1,
-  );
+    "a rotation pool offers the season window",
+    (await page
+      .locator(
+        '[data-testid="calendar-younger-season-start-month"]',
+      )
+      .count()) === 1,
+  )
   check(
-    'a rotation pool is NOT offered the reset date the server would refuse',
-    (await page.locator('[data-testid="calendar-younger-reset-month"]').count()) === 0,
-  );
+    "a rotation pool is NOT offered the reset date the server would refuse",
+    (await page
+      .locator(
+        '[data-testid="calendar-younger-reset-month"]',
+      )
+      .count()) === 0,
+  )
 
   // ── 6. The Add control, and what it offers ───────────────────────────────────────────── //
-  await page.click('[data-testid="calendar-add"]');
-  await page.waitForSelector('[role="listbox"] [role="option"]');
-  const addValues = await page.$$eval('[role="listbox"] [role="option"] [data-value]', (els) =>
-    els.map((el) => el.getAttribute('data-value')),
-  );
+  await page.click('[data-testid="calendar-add"]')
+  await page.waitForSelector(
+    '[role="listbox"] [role="option"]',
+  )
+  const addValues = await page.$$eval(
+    '[role="listbox"] [role="option"] [data-value]',
+    (els) => els.map((el) => el.getAttribute("data-value")),
+  )
   check(
-    'the Add picker offers exactly the queues that are not on the calendar',
-    addValues.join(',') === ',family,older',
-    addValues.join(','),
-  );
-  await page.click('[role="listbox"] [role="option"] [data-value="family"]');
-  await page.click('#calendar-add-go');
-  await page.waitForSelector('[data-set="family"]', { timeout: 30000 });
-  check('adding a queue opens a row for it', true);
+    "the Add picker offers exactly the queues that are not on the calendar",
+    addValues.join(",") === ",family,older",
+    addValues.join(","),
+  )
+  await page.click(
+    '[role="listbox"] [role="option"] [data-value="family"]',
+  )
+  await page.click("#calendar-add-go")
+  await page.waitForSelector('[data-set="family"]', {
+    timeout: 30000,
+  })
+  check("adding a queue opens a row for it", true)
   check(
-    '…and nothing was written by the add itself',
+    "…and nothing was written by the add itself",
     writes.length === 0,
     JSON.stringify(writes),
-  );
+  )
 
   // ── 5. Half a season window is refused, and nothing is sent ──────────────────────────── //
-  await pickValue(page, '[data-testid="calendar-family-season-start-month"]', '3');
-  await page.click('#calendar-family-save');
+  await pickValue(
+    page,
+    '[data-testid="calendar-family-season-start-month"]',
+    "3",
+  )
+  await page.click("#calendar-family-save")
   const isRefused = await page
     .waitForFunction(
-      () => (document.querySelector('#status')?.textContent ?? '').includes('BOTH'),
+      () =>
+        (
+          document.querySelector("#status")?.textContent ??
+          ""
+        ).includes("BOTH"),
       undefined,
       { timeout: 10000 },
     )
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    )
   check(
-    'half a season window is refused, naming both ends',
+    "half a season window is refused, naming both ends",
     isRefused,
-    await page.locator('#status').innerText().catch(() => ''),
-  );
+    await page
+      .locator("#status")
+      .innerText()
+      .catch(() => ""),
+  )
   check(
-    '…and nothing reached the API',
+    "…and nothing reached the API",
     writes.length === 0,
     JSON.stringify(writes),
-  );
+  )
 
   // ── 3. It EDITS: the value reaches the SET ───────────────────────────────────────────── //
   // The reset date on a curated queue. `bob_anime` carries 04-01; move it to 1 May.
-  await pickValue(page, '[data-testid="calendar-bob_anime-reset-month"]', '5');
-  await page.click('#calendar-bob_anime-save');
+  await pickValue(
+    page,
+    '[data-testid="calendar-bob_anime-reset-month"]',
+    "5",
+  )
+  await page.click("#calendar-bob_anime-save")
   const isSaved = await page
     .waitForFunction(
-      () => (document.querySelector('#status')?.textContent ?? '').includes('dates saved'),
+      () =>
+        (
+          document.querySelector("#status")?.textContent ??
+          ""
+        ).includes("dates saved"),
       undefined,
       { timeout: 90000 },
     )
-    .then(() => true, () => false);
-  check('a saved date reports itself', isSaved);
+    .then(
+      () => true,
+      () => false,
+    )
+  check("a saved date reports itself", isSaved)
 
-  const anime = await setById('bob_anime');
+  const anime = await setById("bob_anime")
   check(
-    'the reset date reached the SET, in the one spelling the server stores',
-    anime.reset_watched_on === '05-01',
+    "the reset date reached the SET, in the one spelling the server stores",
+    anime.reset_watched_on === "05-01",
     String(anime.reset_watched_on),
-  );
+  )
   check(
-    'and the row re-reads it from the server',
-    (await page.locator('[data-set="bob_anime"]').innerText()).includes('1 May'),
-  );
+    "and the row re-reads it from the server",
+    (
+      await page
+        .locator('[data-set="bob_anime"]')
+        .innerText()
+    ).includes("1 May"),
+  )
   check(
-    'a curated save patches only the date fields',
+    "a curated save patches only the date fields",
     writes.length === 1 &&
-      Object.keys(JSON.parse(writes[0]?.body ?? '{}')).sort().join(',') ===
-        'reset_watched_on,season_end,season_start',
+      Object.keys(JSON.parse(writes[0]?.body ?? "{}"))
+        .sort()
+        .join(",") ===
+        "reset_watched_on,season_end,season_start",
     JSON.stringify(writes),
-  );
+  )
 
   // A whole season window, on a rotation pool, which is the other kind of set and the other
   // setting. Moving `younger` to 1 Jun → 30 Sep.
-  await pickValue(page, '[data-testid="calendar-younger-season-end-month"]', '9');
-  await pickValue(page, '[data-testid="calendar-younger-season-end-day"]', '30');
+  await pickValue(
+    page,
+    '[data-testid="calendar-younger-season-end-month"]',
+    "9",
+  )
+  await pickValue(
+    page,
+    '[data-testid="calendar-younger-season-end-day"]',
+    "30",
+  )
   // ⚠️ WAIT FOR THE PATCH, NOT FOR `#status`. The message is `${title} — dates saved`, so the
   // one the bob_anime save left on screen ALREADY matches `includes('dates saved')` — the
   // wait returned immediately on stale text and `setById` read the server before this PATCH
@@ -284,70 +417,118 @@ try {
   // untouched end. The old `.catch(() => null)` made it worse by discarding the timeout, so
   // a save that never reported could not be told from a value that was wrong.
   const isYoungerPatched = await Promise.all([
-    page.waitForResponse(
-      (response) => response.url().includes('/api/sets/younger') && response.request().method() === 'PATCH',
-      { timeout: 90000 },
-    ).then((response) => response.ok(), () => false),
-    page.click('#calendar-younger-save'),
-  ]).then(([isPatched]) => isPatched);
-  check('the rotation pool save reached the server', isYoungerPatched);
+    page
+      .waitForResponse(
+        (response) =>
+          response.url().includes("/api/sets/younger") &&
+          response.request().method() === "PATCH",
+        { timeout: 90000 },
+      )
+      .then(
+        (response) => response.ok(),
+        () => false,
+      ),
+    page.click("#calendar-younger-save"),
+  ]).then(([isPatched]) => isPatched)
+  check(
+    "the rotation pool save reached the server",
+    isYoungerPatched,
+  )
 
-  const younger = await setById('younger');
+  const younger = await setById("younger")
   check(
-    'a rotation pool keeps its season window, both ends',
-    younger.season_start === '06-01' && younger.season_end === '09-30',
+    "a rotation pool keeps its season window, both ends",
+    younger.season_start === "06-01" &&
+      younger.season_end === "09-30",
     `${String(younger.season_start)} → ${String(younger.season_end)}`,
-  );
+  )
   check(
-    '…and no reset date was invented for it',
+    "…and no reset date was invented for it",
     younger.reset_watched_on == null,
     String(younger.reset_watched_on),
-  );
+  )
 
   // The day picker is keyed on the MONTH, so a 31 chosen in a 31-day month cannot survive a
   // move to February. `bob` is 1 Oct → 5 Nov; take the window's end to 31 Dec, then to Feb.
-  await pickValue(page, '[data-testid="calendar-bob-season-end-month"]', '12');
-  await pickValue(page, '[data-testid="calendar-bob-season-end-day"]', '31');
-  await pickValue(page, '[data-testid="calendar-bob-season-end-month"]', '2');
-  await page.click('[data-testid="calendar-bob-season-end-day"]');
-  await page.waitForSelector('[role="listbox"] [role="option"]');
-  const febDays = await page.$$eval('[role="listbox"] [role="option"] [data-value]', (els) =>
-    els.map((el) => el.getAttribute('data-value')),
-  );
+  await pickValue(
+    page,
+    '[data-testid="calendar-bob-season-end-month"]',
+    "12",
+  )
+  await pickValue(
+    page,
+    '[data-testid="calendar-bob-season-end-day"]',
+    "31",
+  )
+  await pickValue(
+    page,
+    '[data-testid="calendar-bob-season-end-month"]',
+    "2",
+  )
+  await page.click(
+    '[data-testid="calendar-bob-season-end-day"]',
+  )
+  await page.waitForSelector(
+    '[role="listbox"] [role="option"]',
+  )
+  const febDays = await page.$$eval(
+    '[role="listbox"] [role="option"] [data-value]',
+    (els) => els.map((el) => el.getAttribute("data-value")),
+  )
   check(
-    'choosing February clamps 31 and offers 29 days, never 30 or 31',
-    febDays.length === 29 && febDays.at(-1) === '29',
+    "choosing February clamps 31 and offers 29 days, never 30 or 31",
+    febDays.length === 29 && febDays.at(-1) === "29",
     `${febDays.length} days`,
-  );
+  )
   // Close by RE-CLICKING the trigger, never Escape — the house rule `pick.ts` states.
-  await page.click('[data-testid="calendar-bob-season-end-day"]');
+  await page.click(
+    '[data-testid="calendar-bob-season-end-day"]',
+  )
 
   // ── 7. The Narrow View does not scroll sideways ──────────────────────────────────────── //
-  const narrow = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  narrow.on('pageerror', (error) => console.log('PAGEERROR', error.message));
-  await narrow.goto(`${BASE}/calendar`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('#calendar-rows', { timeout: 30000 });
-  await settle(narrow);
+  const narrow = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+  })
+  narrow.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
+  await narrow.goto(`${BASE}/calendar`, {
+    waitUntil: "domcontentloaded",
+  })
+  await narrow.waitForSelector("#calendar-rows", {
+    timeout: 30000,
+  })
+  await settle(narrow)
   const overflow = await narrow.evaluate(() => ({
     client: document.documentElement.clientWidth,
     scroll: document.documentElement.scrollWidth,
-  }));
+  }))
   check(
-    'the Narrow View does not scroll horizontally',
+    "the Narrow View does not scroll horizontally",
     overflow.scroll <= overflow.client,
     `${overflow.scroll} > ${overflow.client}`,
-  );
+  )
   const narrowTracks = await narrow.$eval(
-    '#calendar-rows',
-    (ul) => getComputedStyle(ul).gridTemplateColumns.split(' ').length,
-  );
-  check('…and the list is still one column', narrowTracks === 1, `${narrowTracks} tracks`);
+    "#calendar-rows",
+    (ul) =>
+      getComputedStyle(ul).gridTemplateColumns.split(" ")
+        .length,
+  )
+  check(
+    "…and the list is still one column",
+    narrowTracks === 1,
+    `${narrowTracks} tracks`,
+  )
 
-  await narrow.close();
-  await browser.close();
+  await narrow.close()
+  await browser.close()
 } finally {
-  killServer(srv);
+  killServer(srv)
 }
 
-console.log(failed === 0 ? 'PASS calendar-view-test' : `FAIL calendar-view-test (${failed})`);
-process.exit(failed === 0 ? 0 : 1);
+console.log(
+  failed === 0
+    ? "PASS calendar-view-test"
+    : `FAIL calendar-view-test (${failed})`,
+)
+process.exit(failed === 0 ? 0 : 1)

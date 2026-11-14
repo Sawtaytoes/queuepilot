@@ -16,21 +16,29 @@
 //
 // Run:  server/node_modules/.bin/tsx e2e/fsm-wake-and-skip-test.ts   (from the repo root; exits non-zero on failure)
 
-process.env.ADB_ENABLED = 'true';
-process.env.ADB_PLEX_LAUNCH_WAIT_SECONDS = '1'; // bound the post-launch poll in tests
-process.env.PLAYBACK_FSM_SWITCH_ATTEMPTS = '2';
-process.env.PLAYBACK_FSM_RETRY_BACKOFF = '0';
+process.env.ADB_ENABLED = "true"
+process.env.ADB_PLEX_LAUNCH_WAIT_SECONDS = "1" // bound the post-launch poll in tests
+process.env.PLAYBACK_FSM_SWITCH_ATTEMPTS = "2"
+process.env.PLAYBACK_FSM_RETRY_BACKOFF = "0"
 
-import { stubAdbShell, stubDriverDeps } from './stubs/hooks.mjs';
+import {
+  stubAdbShell,
+  stubDriverDeps,
+} from "./stubs/hooks.mjs"
 
-stubAdbShell();
-stubDriverDeps();
+stubAdbShell()
+stubDriverDeps()
 const {
-  ADB_SCRIPT: RAW_ADB_SCRIPT, resetScript: RAW_RESET_SCRIPT,
-} = await import('./stubs/child-process.stub.mjs');
-const { CTL: RAW_CTL, reset, observe } = await import('./stubs/control.mjs');
-const adb = await import('../server/src/adb.js'); // REAL module, faked shell
-const driver = await import('../server/src/driver.js'); // stubbed adb/playback/profiles
+  ADB_SCRIPT: RAW_ADB_SCRIPT,
+  resetScript: RAW_RESET_SCRIPT,
+} = await import("./stubs/child-process.stub.mjs")
+const {
+  CTL: RAW_CTL,
+  reset,
+  observe,
+} = await import("./stubs/control.mjs")
+const adb = await import("../server/src/adb.js") // REAL module, faked shell
+const driver = await import("../server/src/driver.js") // stubbed adb/playback/profiles
 
 /**
  * The two stub control surfaces, typed.
@@ -44,97 +52,146 @@ const driver = await import('../server/src/driver.js'); // stubbed adb/playback/
  */
 interface AdbScript {
   /** 'wake' / 'launch', in the order adb.js issued them. */
-  order: string[];
-  awake: boolean;
+  order: string[]
+  awake: boolean
   /** Queue of foreground activities; the last one repeats once drained. */
-  foreground: (string | null)[];
-  _lastForeground: string | null;
+  foreground: (string | null)[]
+  _lastForeground: string | null
 }
 interface DriverCtl {
   /** `[name, ...args]` per recorded primitive — read positionally by the assertions. */
-  calls: unknown[][];
-  foreground: string;
-  onboarding: boolean;
-  companionUp: boolean;
-  switchResult: [boolean, string];
+  calls: unknown[][]
+  foreground: string
+  onboarding: boolean
+  companionUp: boolean
+  switchResult: [boolean, string]
   /** `"a|b"` -> the sameProfile answer to force. */
-  same: Map<string, boolean>;
-  playResults: unknown[];
-  lastSeen: { title: string | null; isObserved: boolean; observedAt: number | null };
-  observationTtlSeconds: number;
-  awake: boolean;
-  onSwitch: (() => void) | null;
+  same: Map<string, boolean>
+  playResults: unknown[]
+  lastSeen: {
+    title: string | null
+    isObserved: boolean
+    observedAt: number | null
+  }
+  observationTtlSeconds: number
+  awake: boolean
+  onSwitch: (() => void) | null
 }
-const ADB_SCRIPT = RAW_ADB_SCRIPT as unknown as AdbScript;
-const resetScript = RAW_RESET_SCRIPT as unknown as
-  (opts?: { awake?: boolean; foreground?: (string | null)[] }) => void;
-const CTL = RAW_CTL as unknown as DriverCtl;
+const ADB_SCRIPT = RAW_ADB_SCRIPT as unknown as AdbScript
+const resetScript = RAW_RESET_SCRIPT as unknown as (opts?: {
+  awake?: boolean
+  foreground?: (string | null)[]
+}) => void
+const CTL = RAW_CTL as unknown as DriverCtl
 
-const FAILS: string[] = [];
-function ok(name: string, isPassing: boolean, detail = ''): void {
-  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
-  if (!isPassing) FAILS.push(name);
+const FAILS: string[] = []
+function ok(
+  name: string,
+  isPassing: boolean,
+  detail = "",
+): void {
+  console.log(
+    (isPassing ? "PASS " : "FAIL ") +
+      name +
+      (!isPassing && detail ? `  -- ${detail}` : ""),
+  )
+  if (!isPassing) FAILS.push(name)
 }
 
 // =========================================================================== //
 // Bug 1 — ensurePlexOpen wakes a dozing Shield BEFORE launching Plex
 // =========================================================================== //
-const PLEX = 'com.plexapp.android/.HomeActivityTV';
-const LAUNCHER = 'com.google.android.tvlauncher/.MainActivity';
+const PLEX = "com.plexapp.android/.HomeActivityTV"
+const LAUNCHER =
+  "com.google.android.tvlauncher/.MainActivity"
 
 // Asleep/dozing: foreground reads null, then null after the wake, then Plex once launched.
-resetScript({ awake: false, foreground: [null, null, PLEX] });
-let isPlexOpen = await adb.ensurePlexOpen();
-ok('(bug1) asleep: WAKEUP is sent', ADB_SCRIPT.order.includes('wake'));
-ok('(bug1) asleep: launch happens', ADB_SCRIPT.order.includes('launch'));
+resetScript({
+  awake: false,
+  foreground: [null, null, PLEX],
+})
+let isPlexOpen = await adb.ensurePlexOpen()
 ok(
-  '(bug1) asleep: WAKEUP is sent BEFORE the plex:// launch',
-  ADB_SCRIPT.order.indexOf('wake') >= 0
-    && ADB_SCRIPT.order.indexOf('wake') < ADB_SCRIPT.order.indexOf('launch'),
+  "(bug1) asleep: WAKEUP is sent",
+  ADB_SCRIPT.order.includes("wake"),
+)
+ok(
+  "(bug1) asleep: launch happens",
+  ADB_SCRIPT.order.includes("launch"),
+)
+ok(
+  "(bug1) asleep: WAKEUP is sent BEFORE the plex:// launch",
+  ADB_SCRIPT.order.indexOf("wake") >= 0 &&
+    ADB_SCRIPT.order.indexOf("wake") <
+      ADB_SCRIPT.order.indexOf("launch"),
   JSON.stringify(ADB_SCRIPT.order),
-);
-ok('(bug1) asleep: ends foreground on Plex -> true', isPlexOpen === true);
+)
+ok(
+  "(bug1) asleep: ends foreground on Plex -> true",
+  isPlexOpen === true,
+)
 
 // Wake alone brings Plex back (the screensaver was over Plex): no launch needed.
-resetScript({ awake: false, foreground: [null, PLEX] });
-isPlexOpen = await adb.ensurePlexOpen();
+resetScript({ awake: false, foreground: [null, PLEX] })
+isPlexOpen = await adb.ensurePlexOpen()
 ok(
-  '(bug1) asleep-over-plex: wakes and returns true without launching',
-  ADB_SCRIPT.order.includes('wake') && !ADB_SCRIPT.order.includes('launch') && isPlexOpen === true,
+  "(bug1) asleep-over-plex: wakes and returns true without launching",
+  ADB_SCRIPT.order.includes("wake") &&
+    !ADB_SCRIPT.order.includes("launch") &&
+    isPlexOpen === true,
   JSON.stringify(ADB_SCRIPT.order),
-);
+)
 
 // Awake on the launcher: no needless WAKEUP, straight to launch.
-resetScript({ awake: true, foreground: [LAUNCHER, PLEX] });
-isPlexOpen = await adb.ensurePlexOpen();
-ok('(bug1) awake-on-launcher: does NOT send a needless WAKEUP',
-  !ADB_SCRIPT.order.includes('wake'), JSON.stringify(ADB_SCRIPT.order));
-ok('(bug1) awake-on-launcher: launches and returns true',
-  ADB_SCRIPT.order.includes('launch') && isPlexOpen === true);
+resetScript({ awake: true, foreground: [LAUNCHER, PLEX] })
+isPlexOpen = await adb.ensurePlexOpen()
+ok(
+  "(bug1) awake-on-launcher: does NOT send a needless WAKEUP",
+  !ADB_SCRIPT.order.includes("wake"),
+  JSON.stringify(ADB_SCRIPT.order),
+)
+ok(
+  "(bug1) awake-on-launcher: launches and returns true",
+  ADB_SCRIPT.order.includes("launch") &&
+    isPlexOpen === true,
+)
 
 // Already on Plex: returns immediately, no wake, no launch.
-resetScript({ awake: true, foreground: [PLEX] });
-isPlexOpen = await adb.ensurePlexOpen();
-ok('(bug1) already-on-plex: no wake, no launch, true',
-  ADB_SCRIPT.order.length === 0 && isPlexOpen === true, JSON.stringify(ADB_SCRIPT.order));
+resetScript({ awake: true, foreground: [PLEX] })
+isPlexOpen = await adb.ensurePlexOpen()
+ok(
+  "(bug1) already-on-plex: no wake, no launch, true",
+  ADB_SCRIPT.order.length === 0 && isPlexOpen === true,
+  JSON.stringify(ADB_SCRIPT.order),
+)
 
 // =========================================================================== //
 // Bug 2 — driveProfile skips the picker when already on `required` (alias-aware),
 //         and records the confirmed profile so the NEXT scan skips too.
 // =========================================================================== //
-const { driveProfile } = driver._internals;
+const { driveProfile } = driver._internals
 
 // Wire the stubbed adb.sameProfile with alias groups, and count switchTo calls.
-function wireDriver(aliasGroups: readonly (readonly string[])[] = [], isSwitchOk = true): void {
-  reset();
-  CTL.switchResult = [isSwitchOk, isSwitchOk ? 'selected on the picker' : 'ran out of time'];
+function wireDriver(
+  aliasGroups: readonly (readonly string[])[] = [],
+  isSwitchOk = true,
+): void {
+  reset()
+  CTL.switchResult = [
+    isSwitchOk,
+    isSwitchOk
+      ? "selected on the picker"
+      : "ran out of time",
+  ]
   for (const group of aliasGroups) {
     for (const alias of group) {
-      for (const otherAlias of group) CTL.same.set(`${alias}|${otherAlias}`, true);
+      for (const otherAlias of group)
+        CTL.same.set(`${alias}|${otherAlias}`, true)
     }
   }
 }
-const switches = () => CTL.calls.filter((call) => call[0] === 'switch_to');
+const switches = () =>
+  CTL.calls.filter((call) => call[0] === "switch_to")
 
 // Every scenario below now turns on PROVENANCE as well as the title, because the skip is
 // only sound for a profile Plex itself identified. `profiles.waitForProfile()` and the
@@ -143,40 +200,64 @@ const switches = () => CTL.calls.filter((call) => call[0] === 'switch_to');
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 
 // (a) An OBSERVED LAST_SEEN == required exactly -> no picker walk.
-wireDriver();
-observe('sawtaytoes');
-let result = await driveProfile('sawtaytoes', null);
-ok('(bug2a) observed LAST_SEEN==required: gate satisfied (null)', result === null);
-ok('(bug2a) observed LAST_SEEN==required: NO switchTo call', switches().length === 0);
+wireDriver()
+observe("sawtaytoes")
+let result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2a) observed LAST_SEEN==required: gate satisfied (null)",
+  result === null,
+)
+ok(
+  "(bug2a) observed LAST_SEEN==required: NO switchTo call",
+  switches().length === 0,
+)
 
 // (b) An OBSERVED LAST_SEEN is the DISPLAY name, required the USERNAME — alias short-circuits.
-wireDriver([['Bob Smith', 'sawtaytoes']]);
-observe('Bob Smith');
-result = await driveProfile('sawtaytoes', null);
-ok('(bug2b) display-name==username alias: gate satisfied (null)', result === null);
-ok('(bug2b) display-name==username alias: NO picker/switch call', switches().length === 0);
+wireDriver([["Bob Smith", "sawtaytoes"]])
+observe("Bob Smith")
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2b) display-name==username alias: gate satisfied (null)",
+  result === null,
+)
+ok(
+  "(bug2b) display-name==username alias: NO picker/switch call",
+  switches().length === 0,
+)
 
 // (b2) The SAME title, UNOBSERVED, must NOT satisfy the gate. This is the whole fix: the only
 //      thing separating this case from (a) is where the knowledge came from.
-wireDriver();
-CTL.lastSeen.title = 'sawtaytoes';
-CTL.lastSeen.isObserved = false;
-result = await driveProfile('sawtaytoes', null);
-ok('(bug2b2) UNOBSERVED LAST_SEEN==required: still walks the picker',
-  result === null && switches().length === 1, JSON.stringify(switches()));
+wireDriver()
+CTL.lastSeen.title = "sawtaytoes"
+CTL.lastSeen.isObserved = false
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2b2) UNOBSERVED LAST_SEEN==required: still walks the picker",
+  result === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
 
 // (c) A real change: LAST_SEEN cold (null) -> switch once, and the switch RECORDS the profile
 //     as a picker hint — but as a CLAIM, so it cannot clear the next gate by itself.
-wireDriver([['Bob Smith', 'sawtaytoes']], true);
-CTL.lastSeen.title = null;
-CTL.lastSeen.isObserved = false;
-const r1 = await driveProfile('sawtaytoes', null);
-ok('(bug2c) cold cache: switch runs once', r1 === null && switches().length === 1,
-  JSON.stringify(switches()));
-ok('(bug2c) switch records the profile into LAST_SEEN', CTL.lastSeen.title === 'sawtaytoes',
-  String(CTL.lastSeen.title));
-ok('(bug2c) ...but records it as a CLAIM, not an observation',
-  CTL.lastSeen.isObserved === false, String(CTL.lastSeen.isObserved));
+wireDriver([["Bob Smith", "sawtaytoes"]], true)
+CTL.lastSeen.title = null
+CTL.lastSeen.isObserved = false
+const r1 = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2c) cold cache: switch runs once",
+  r1 === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
+ok(
+  "(bug2c) switch records the profile into LAST_SEEN",
+  CTL.lastSeen.title === "sawtaytoes",
+  String(CTL.lastSeen.title),
+)
+ok(
+  "(bug2c) ...but records it as a CLAIM, not an observation",
+  CTL.lastSeen.isObserved === false,
+  String(CTL.lastSeen.isObserved),
+)
 
 // (c2) THE REGRESSION THIS FIX EXISTS FOR. A second gated scan must walk the picker AGAIN
 //      rather than trust what the first one wrote. `adb.switchTo` reports success on the
@@ -185,37 +266,54 @@ ok('(bug2c) ...but records it as a CLAIM, not an observation',
 //      stays wrong on every later play, silently. Live on 2026-08-18: the Younger Kids Shorts
 //      pool published `profile: Younger Kids, played: true` while Plex scrobbled all three
 //      shorts to the OWNER's account.
-const r2 = await driveProfile('sawtaytoes', null);
-ok('(bug2c2) second gated scan does NOT trust the claim: it walks again',
-  r2 === null && switches().length === 2, JSON.stringify(switches()));
+const r2 = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2c2) second gated scan does NOT trust the claim: it walks again",
+  r2 === null && switches().length === 2,
+  JSON.stringify(switches()),
+)
 
 // (d) Cold cache + a DIFFERENT signed-in profile -> a real switch is still driven.
-wireDriver([['Bob Smith', 'sawtaytoes'], ['Younger Kids']]);
-observe('Younger Kids'); // signed in as someone else
-result = await driveProfile('sawtaytoes', null);
-ok('(bug2d) genuinely-wrong profile: drives the switch once',
-  result === null && switches().length === 1, JSON.stringify(switches()));
+wireDriver([["Bob Smith", "sawtaytoes"], ["Younger Kids"]])
+observe("Younger Kids") // signed in as someone else
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2d) genuinely-wrong profile: drives the switch once",
+  result === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
 
 // (e) THE SCREEN OUTRANKS THE MEMORY. An OBSERVED LAST_SEEN == required, and the profile
 //     picker is on screen anyway — Plex's cold launch put it up and is waiting for a pick.
 //     On 2026-09-23 the skip fired here, play landed on top of the picker, and the Shield
 //     tore the player down. The walk must run; the observation is true and irrelevant.
-wireDriver();
-observe('sawtaytoes');
-CTL.foreground = 'com.plexapp.android/com.plexapp.shared.ui.userpicker.PickUserActivity';
-result = await driveProfile('sawtaytoes', null);
-ok('(bug2e) picker on screen + observed match: walks the picker anyway',
-  result === null && switches().length === 1, JSON.stringify(switches()));
-ok('(bug2e) picker on screen: the walk starts from the remembered profile as its hint',
-  switches()[0]?.[2] === 'sawtaytoes', JSON.stringify(switches()));
+wireDriver()
+observe("sawtaytoes")
+CTL.foreground =
+  "com.plexapp.android/com.plexapp.shared.ui.userpicker.PickUserActivity"
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2e) picker on screen + observed match: walks the picker anyway",
+  result === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
+ok(
+  "(bug2e) picker on screen: the walk starts from the remembered profile as its hint",
+  switches()[0]?.[2] === "sawtaytoes",
+  JSON.stringify(switches()),
+)
 
 // (e2) ...and with Plex on Home (no picker), the same observation still skips the walk.
-wireDriver();
-observe('sawtaytoes');
-CTL.foreground = 'com.plexapp.android/com.plexapp.plex.home.tv.HomeActivityTV';
-result = await driveProfile('sawtaytoes', null);
-ok('(bug2e2) no picker + observed match: still no walk', result === null && switches().length === 0,
-  JSON.stringify(switches()));
+wireDriver()
+observe("sawtaytoes")
+CTL.foreground =
+  "com.plexapp.android/com.plexapp.plex.home.tv.HomeActivityTV"
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug2e2) no picker + observed match: still no walk",
+  result === null && switches().length === 0,
+  JSON.stringify(switches()),
+)
 
 // (f) AGE OUTRANKS THE MEMORY TOO. An observation is true about the moment Plex made it and
 //     about nothing after it: a person can pick another profile on the TV and no signal
@@ -223,57 +321,84 @@ ok('(bug2e2) no picker + observed match: still no walk', result === null && swit
 //     two-hour-old observation behind, the midday scan skipped the walk on it, and both
 //     `younger_kids_shows` and then `older_kids_shorts_shows` scrobbled to the OWNER.
 //     (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
-wireDriver();
-observe('sawtaytoes', 2 * 60 * 60); // two hours old, and still an exact match
-result = await driveProfile('sawtaytoes', null);
-ok('(bug3f) a STALE observation does not clear the gate: walks the picker',
-  result === null && switches().length === 1, JSON.stringify(switches()));
-ok('(bug3f) the stale title is still handed over as the picker hint',
-  switches()[0]?.[2] === 'sawtaytoes', JSON.stringify(switches()));
+wireDriver()
+observe("sawtaytoes", 2 * 60 * 60) // two hours old, and still an exact match
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug3f) a STALE observation does not clear the gate: walks the picker",
+  result === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
+ok(
+  "(bug3f) the stale title is still handed over as the picker hint",
+  switches()[0]?.[2] === "sawtaytoes",
+  JSON.stringify(switches()),
+)
 
 // (f2) Just inside the window, the fast path survives — this is the queue-to-queue case the
 //      remembered observation exists for, and the owner's latency complaint of 2026-09-07.
-wireDriver();
-observe('sawtaytoes', 60); // a minute old
-result = await driveProfile('sawtaytoes', null);
-ok('(bug3f2) a FRESH observation still skips the walk', result === null && switches().length === 0,
-  JSON.stringify(switches()));
+wireDriver()
+observe("sawtaytoes", 60) // a minute old
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug3f2) a FRESH observation still skips the walk",
+  result === null && switches().length === 0,
+  JSON.stringify(switches()),
+)
 
 // (f3) A TTL of 0 turns the fast path off outright, for a deployment that would rather spend
 //      the walk every time. A brand-new observation must not clear the gate either.
-wireDriver();
-observe('sawtaytoes');
-CTL.observationTtlSeconds = 0;
-result = await driveProfile('sawtaytoes', null);
-ok('(bug3f3) ttl 0 disables the skip even for a fresh observation',
-  result === null && switches().length === 1, JSON.stringify(switches()));
-CTL.observationTtlSeconds = 600;
+wireDriver()
+observe("sawtaytoes")
+CTL.observationTtlSeconds = 0
+result = await driveProfile("sawtaytoes", null)
+ok(
+  "(bug3f3) ttl 0 disables the skip even for a fresh observation",
+  result === null && switches().length === 1,
+  JSON.stringify(switches()),
+)
+CTL.observationTtlSeconds = 600
 
 // (f4) The ADB claim carries NO timestamp, so it cannot become fresh by being recent. This
 //      pins the claim path against the new field as well as against `isObserved`.
-wireDriver([['Bob Smith', 'sawtaytoes']], true);
-CTL.lastSeen.title = null;
-CTL.lastSeen.isObserved = false;
-CTL.lastSeen.observedAt = null;
-await driveProfile('sawtaytoes', null);
-ok('(bug3f4) a switch claim records no observation time',
-  CTL.lastSeen.title === 'sawtaytoes' && CTL.lastSeen.isObserved === false
-    && CTL.lastSeen.observedAt === null,
-  JSON.stringify(CTL.lastSeen));
+wireDriver([["Bob Smith", "sawtaytoes"]], true)
+CTL.lastSeen.title = null
+CTL.lastSeen.isObserved = false
+CTL.lastSeen.observedAt = null
+await driveProfile("sawtaytoes", null)
+ok(
+  "(bug3f4) a switch claim records no observation time",
+  CTL.lastSeen.title === "sawtaytoes" &&
+    CTL.lastSeen.isObserved === false &&
+    CTL.lastSeen.observedAt === null,
+  JSON.stringify(CTL.lastSeen),
+)
 
 // The new UI's onboarding must never be bypassed by a remembered account, or retried
 // into answering the owner's questions. It blocks playback with an actionable error.
-const { PLEX_SETUP_REQUIRED } = await import('../server/src/plexControlModern.js');
-wireDriver();
-observe('Bob');
-CTL.onboarding = true;
-result = await driveProfile('Bob', null);
-ok('onboarding blocks a remembered profile without navigating', result?.error === PLEX_SETUP_REQUIRED && switches().length === 0);
+const { PLEX_SETUP_REQUIRED } = await import(
+  "../server/src/plexControlModern.js"
+)
+wireDriver()
+observe("Bob")
+CTL.onboarding = true
+result = await driveProfile("Bob", null)
+ok(
+  "onboarding blocks a remembered profile without navigating",
+  result?.error === PLEX_SETUP_REQUIRED &&
+    switches().length === 0,
+)
 
-wireDriver();
-CTL.switchResult = [false, PLEX_SETUP_REQUIRED];
-result = await driveProfile('Bob', null);
-ok('onboarding encountered after a pick returns immediately without retry', result?.error === PLEX_SETUP_REQUIRED && switches().length === 1);
+wireDriver()
+CTL.switchResult = [false, PLEX_SETUP_REQUIRED]
+result = await driveProfile("Bob", null)
+ok(
+  "onboarding encountered after a pick returns immediately without retry",
+  result?.error === PLEX_SETUP_REQUIRED &&
+    switches().length === 1,
+)
 
-console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
-process.exit(FAILS.length ? 1 : 0);
+console.log(
+  FAILS.length ? `\nFAILURES: ${FAILS.length}` : "\ndone",
+)
+process.exit(FAILS.length ? 1 : 0)

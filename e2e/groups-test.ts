@@ -18,22 +18,34 @@
 // (this file is edited over SMB as often as it is saved from the app).
 //
 // Run:  server/node_modules/.bin/tsx e2e/groups-test.ts   (repo root; non-zero on failure)
-import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import assert from "node:assert/strict"
+import {
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 
-import { errMessage } from '../server/src/errors.js';
+import { errMessage } from "../server/src/errors.js"
 
-const SCRATCH = mkdtempSync(path.join(tmpdir(), 'qpgroups-'));
-const GROUPS_PATH = path.join(SCRATCH, 'groups.yaml');
-const SETS_PATH = path.join(SCRATCH, 'sets.yaml');
-process.env.GROUPS_PATH = GROUPS_PATH;
-process.env.SETS_PATH = SETS_PATH;
-process.env.QUEUES_PATH = path.join(SCRATCH, 'queues.yaml');
-process.env.CACHE_PATH = path.join(SCRATCH, 'cache.sqlite');
-process.env.PROVIDERS_PATH = path.join(SCRATCH, 'providers.yaml');
-process.env.PROVIDERS_SECRETS_PATH = path.join(SCRATCH, 'providers.secrets.yaml');
+const SCRATCH = mkdtempSync(
+  path.join(tmpdir(), "qpgroups-"),
+)
+const GROUPS_PATH = path.join(SCRATCH, "groups.yaml")
+const SETS_PATH = path.join(SCRATCH, "sets.yaml")
+process.env.GROUPS_PATH = GROUPS_PATH
+process.env.SETS_PATH = SETS_PATH
+process.env.QUEUES_PATH = path.join(SCRATCH, "queues.yaml")
+process.env.CACHE_PATH = path.join(SCRATCH, "cache.sqlite")
+process.env.PROVIDERS_PATH = path.join(
+  SCRATCH,
+  "providers.yaml",
+)
+process.env.PROVIDERS_SECRETS_PATH = path.join(
+  SCRATCH,
+  "providers.secrets.yaml",
+)
 
 // A miniature of the live registry, with the one shape that matters: three curated queues
 // that ALL play as `sawtaytoes`, and two rotation pools bound to the kid accounts.
@@ -84,9 +96,9 @@ writeFileSync(
   - plex_user: Younger Kids
     account_id: 220339333
 `,
-);
+)
 
-const HEADER = '# hand-written header nobody should lose\n';
+const HEADER = "# hand-written header nobody should lose\n"
 writeFileSync(
   GROUPS_PATH,
   `${HEADER}
@@ -105,106 +117,187 @@ groups:
   accounts:
     plex: [Older Kids, Younger Kids]
 `,
-);
+)
 
-const groups = await import('../server/src/groups.js');
-const sets = await import('../server/src/sets.js');
+const groups = await import("../server/src/groups.js")
+const sets = await import("../server/src/sets.js")
 
-let failures = 0;
+let failures = 0
 
-async function check(name: string, run: () => void | Promise<void>): Promise<void> {
+async function check(
+  name: string,
+  run: () => void | Promise<void>,
+): Promise<void> {
   try {
-    await run();
-    console.log(`PASS ${name}`);
+    await run()
+    console.log(`PASS ${name}`)
   } catch (error) {
-    failures += 1;
-    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
+    failures += 1
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`)
   }
 }
 
 const resolve = async () => {
   // Re-read from disk every time: the registry memo is stat-keyed and the writer below
   // changes the file under it, so a cached read here would test the previous state.
-  const reg = await sets.getRegistry();
-  const byId = new Map(groups.resolveGroups(reg.sets).map((resolveGroup) => [resolveGroup.id, resolveGroup]));
-  return byId;
-};
+  const reg = await sets.getRegistry()
+  const byId = new Map(
+    groups
+      .resolveGroups(reg.sets)
+      .map((resolveGroup) => [
+        resolveGroup.id,
+        resolveGroup,
+      ]),
+  )
+  return byId
+}
 
-await check('a named set goes to the group that named it, not to the account match', async () => {
-  const byId = await resolve();
-  // `bob_alice_anime` plays as sawtaytoes, which "Bob" claims by account — but
-  // "Bob & Alice" NAMES it, so only Bob & Alice gets it.
-  assert.deepEqual(byId.get('bob-alice')?.setIds, ['bob_alice_anime']);
-  assert.ok(!byId.get('bob')?.setIds.includes('bob_alice_anime'));
-});
+await check(
+  "a named set goes to the group that named it, not to the account match",
+  async () => {
+    const byId = await resolve()
+    // `bob_alice_anime` plays as sawtaytoes, which "Bob" claims by account — but
+    // "Bob & Alice" NAMES it, so only Bob & Alice gets it.
+    assert.deepEqual(byId.get("bob-alice")?.setIds, [
+      "bob_alice_anime",
+    ])
+    assert.ok(
+      !byId.get("bob")?.setIds.includes("bob_alice_anime"),
+    )
+  },
+)
 
-await check('an UNnamed set falls to whichever group claims its account', async () => {
-  const byId = await resolve();
-  // `family_anime` is named by nobody and plays as sawtaytoes, so it derives into Bob.
-  assert.ok(byId.get('bob')?.setIds.includes('family_anime'));
-  // …and the two kid pools derive into Kids, which names no set ids at all.
-  assert.deepEqual(byId.get('kids')?.setIds, ['shows', 'shows_shorts']);
-});
+await check(
+  "an UNnamed set falls to whichever group claims its account",
+  async () => {
+    const byId = await resolve()
+    // `family_anime` is named by nobody and plays as sawtaytoes, so it derives into Bob.
+    assert.ok(
+      byId.get("bob")?.setIds.includes("family_anime"),
+    )
+    // …and the two kid pools derive into Kids, which names no set ids at all.
+    assert.deepEqual(byId.get("kids")?.setIds, [
+      "shows",
+      "shows_shorts",
+    ])
+  },
+)
 
-await check('a superseded tier is in no group and in no count', async () => {
-  const byId = await resolve();
-  for (const group of byId.values()) assert.ok(!group.setIds.includes('retired'), `${group.id} holds it`);
-});
+await check(
+  "a superseded tier is in no group and in no count",
+  async () => {
+    const byId = await resolve()
+    for (const group of byId.values())
+      assert.ok(
+        !group.setIds.includes("retired"),
+        `${group.id} holds it`,
+      )
+  },
+)
 
-await check('`all` holds everything visible and is not editable', async () => {
-  const byId = await resolve();
-  const all = byId.get(groups.ALL_ID);
-  assert.equal(all?.isAll, true);
-  assert.equal(all?.setIds.length, 5); // six sets, one superseded
-});
+await check(
+  "`all` holds everything visible and is not editable",
+  async () => {
+    const byId = await resolve()
+    const all = byId.get(groups.ALL_ID)
+    assert.equal(all?.isAll, true)
+    assert.equal(all?.setIds.length, 5) // six sets, one superseded
+  },
+)
 
-await check('nothing is left unfiled in this fixture', async () => {
-  const reg = await sets.getRegistry();
-  assert.deepEqual(groups.unassignedSetIds(reg.sets), []);
-});
+await check(
+  "nothing is left unfiled in this fixture",
+  async () => {
+    const reg = await sets.getRegistry()
+    assert.deepEqual(groups.unassignedSetIds(reg.sets), [])
+  },
+)
 
-await check('a rename keeps the id — the URL is a promise', async () => {
-  await groups.updateGroup('bob-alice', { label: 'Bob and Alice' });
-  const stored = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob-alice');
-  assert.equal(stored?.label, 'Bob and Alice');
-  assert.deepEqual(stored?.sets, ['bob_alice_anime']);
-});
+await check(
+  "a rename keeps the id — the URL is a promise",
+  async () => {
+    await groups.updateGroup("bob-alice", {
+      label: "Bob and Alice",
+    })
+    const stored = groups
+      .storedGroups()
+      .find((storedGroup) => storedGroup.id === "bob-alice")
+    assert.equal(stored?.label, "Bob and Alice")
+    assert.deepEqual(stored?.sets, ["bob_alice_anime"])
+  },
+)
 
-await check('a PATCH that omits a field leaves it alone', async () => {
-  await groups.updateGroup('bob', { label: 'Bob' });
-  const stored = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob');
-  // Neither accounts nor sets were in the body, so both survive.
-  assert.deepEqual(stored?.accounts.plex, ['sawtaytoes']);
-  assert.deepEqual(stored?.sets, ['bob_anime']);
-});
+await check(
+  "a PATCH that omits a field leaves it alone",
+  async () => {
+    await groups.updateGroup("bob", { label: "Bob" })
+    const stored = groups
+      .storedGroups()
+      .find((storedGroup) => storedGroup.id === "bob")
+    // Neither accounts nor sets were in the body, so both survive.
+    assert.deepEqual(stored?.accounts.plex, ["sawtaytoes"])
+    assert.deepEqual(stored?.sets, ["bob_anime"])
+  },
+)
 
-await check('an explicitly empty sets[] does clear it', async () => {
-  await groups.updateGroup('bob', { sets: [] });
-  assert.deepEqual(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets, []);
-  await groups.updateGroup('bob', { sets: ['bob_anime'] });
-});
+await check(
+  "an explicitly empty sets[] does clear it",
+  async () => {
+    await groups.updateGroup("bob", { sets: [] })
+    assert.deepEqual(
+      groups
+        .storedGroups()
+        .find((storedGroup) => storedGroup.id === "bob")
+        ?.sets,
+      [],
+    )
+    await groups.updateGroup("bob", { sets: ["bob_anime"] })
+  },
+)
 
-await check('a duplicate label gets a de-duplicated id rather than failing', async () => {
-  const made = await groups.createGroup({ label: 'Bob' });
-  assert.equal(made.id, 'bob-2');
-  await groups.deleteGroup('bob-2');
-});
+await check(
+  "a duplicate label gets a de-duplicated id rather than failing",
+  async () => {
+    const made = await groups.createGroup({ label: "Bob" })
+    assert.equal(made.id, "bob-2")
+    await groups.deleteGroup("bob-2")
+  },
+)
 
-await check('`all` cannot be created', async () => {
-  await assert.rejects(() => groups.createGroup({ label: 'All' }), /reserved/);
-});
+await check("`all` cannot be created", async () => {
+  await assert.rejects(
+    () => groups.createGroup({ label: "All" }),
+    /reserved/,
+  )
+})
 
-await check('a label with nothing to slugify is refused, not silently id-less', async () => {
-  await assert.rejects(() => groups.createGroup({ label: '—' }), /no letters or digits/);
-  await assert.rejects(() => groups.createGroup({ label: '   ' }), /needs a label/);
-});
+await check(
+  "a label with nothing to slugify is refused, not silently id-less",
+  async () => {
+    await assert.rejects(
+      () => groups.createGroup({ label: "—" }),
+      /no letters or digits/,
+    )
+    await assert.rejects(
+      () => groups.createGroup({ label: "   " }),
+      /needs a label/,
+    )
+  },
+)
 
-await check('reorder never drops a group the caller did not mention', async () => {
-  const { order } = await groups.reorderGroups(['kids']);
-  assert.equal(order[0], 'kids');
-  assert.equal(order.length, groups.storedGroups().length);
-  assert.deepEqual([...order].sort(), ['bob', 'bob-alice', 'kids']);
-});
+await check(
+  "reorder never drops a group the caller did not mention",
+  async () => {
+    const { order } = await groups.reorderGroups(["kids"])
+    assert.equal(order[0], "kids")
+    assert.equal(order.length, groups.storedGroups().length)
+    assert.deepEqual([...order].sort(), [
+      "bob",
+      "bob-alice",
+      "kids",
+    ])
+  },
+)
 
 // --- filing a NEW set into the group that was on screen -------------------------------- //
 //
@@ -213,58 +306,145 @@ await check('reorder never drops a group the caller did not mention', async () =
 // and has nowhere to be written. Four things are pinned, and the last two are the ones a
 // refactor breaks silently.
 
-await check('a set created inside a group joins that group', async () => {
-  const made = await sets.createSet({ label: 'Made In Bob', kind: 'movies', sections: [11] });
-  const filed = await groups.fileSetIntoGroup('bob', made.id);
-  assert.equal(filed, 'bob');
-  assert.ok(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets.includes(made.id));
-  const byId = await resolve();
-  assert.ok(byId.get('bob')?.setIds.includes(made.id), 'not in the resolved membership');
-  assert.ok(!byId.get('kids')?.setIds.includes(made.id), 'leaked into another group');
-});
+await check(
+  "a set created inside a group joins that group",
+  async () => {
+    const made = await sets.createSet({
+      label: "Made In Bob",
+      kind: "movies",
+      sections: [11],
+    })
+    const filed = await groups.fileSetIntoGroup(
+      "bob",
+      made.id,
+    )
+    assert.equal(filed, "bob")
+    assert.ok(
+      groups
+        .storedGroups()
+        .find((storedGroup) => storedGroup.id === "bob")
+        ?.sets.includes(made.id),
+    )
+    const byId = await resolve()
+    assert.ok(
+      byId.get("bob")?.setIds.includes(made.id),
+      "not in the resolved membership",
+    )
+    assert.ok(
+      !byId.get("kids")?.setIds.includes(made.id),
+      "leaked into another group",
+    )
+  },
+)
 
-await check('filing into an ACCOUNTS-only group works and settles the set there', async () => {
-  // `Kids` names no set ids at all — its membership derives from `accounts:`. Filing is
-  // still an append to `sets:`, and the appended set is now NAMED, so explicit-beats-derived
-  // keeps it in Kids even though it plays as sawtaytoes, which Bob claims by account. That
-  // is the rule working, not a bug: the person chose Kids by being there.
-  const made = await sets.createSet({
-    label: 'Made In Kids', kind: 'movies', sections: [11], requires_profile: 'sawtaytoes',
-  });
-  assert.equal(await groups.fileSetIntoGroup('kids', made.id), 'kids');
-  const byId = await resolve();
-  assert.ok(byId.get('kids')?.setIds.includes(made.id));
-  assert.ok(!byId.get('bob')?.setIds.includes(made.id), 'the account match beat the name');
-});
+await check(
+  "filing into an ACCOUNTS-only group works and settles the set there",
+  async () => {
+    // `Kids` names no set ids at all — its membership derives from `accounts:`. Filing is
+    // still an append to `sets:`, and the appended set is now NAMED, so explicit-beats-derived
+    // keeps it in Kids even though it plays as sawtaytoes, which Bob claims by account. That
+    // is the rule working, not a bug: the person chose Kids by being there.
+    const made = await sets.createSet({
+      label: "Made In Kids",
+      kind: "movies",
+      sections: [11],
+      requires_profile: "sawtaytoes",
+    })
+    assert.equal(
+      await groups.fileSetIntoGroup("kids", made.id),
+      "kids",
+    )
+    const byId = await resolve()
+    assert.ok(byId.get("kids")?.setIds.includes(made.id))
+    assert.ok(
+      !byId.get("bob")?.setIds.includes(made.id),
+      "the account match beat the name",
+    )
+  },
+)
 
-await check('filing is idempotent — a retried save cannot double-list a set', async () => {
-  const before = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets ?? [];
-  assert.equal(await groups.fileSetIntoGroup('bob', 'bob_anime'), 'bob');
-  assert.deepEqual(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets, before);
-});
+await check(
+  "filing is idempotent — a retried save cannot double-list a set",
+  async () => {
+    const before =
+      groups
+        .storedGroups()
+        .find((storedGroup) => storedGroup.id === "bob")
+        ?.sets ?? []
+    assert.equal(
+      await groups.fileSetIntoGroup("bob", "bob_anime"),
+      "bob",
+    )
+    assert.deepEqual(
+      groups
+        .storedGroups()
+        .find((storedGroup) => storedGroup.id === "bob")
+        ?.sets,
+      before,
+    )
+  },
+)
 
-await check('`all` is not a destination — it is the absence of one, not an error', async () => {
-  // The everything view is synthesized and is in no file, so filing into it must be a no-op
-  // rather than a throw: the client sends `all` for exactly the case that means "no group".
-  assert.equal(await groups.fileSetIntoGroup(groups.ALL_ID, 'bob_anime'), null);
-  assert.equal(await groups.fileSetIntoGroup('', 'bob_anime'), null);
-  assert.equal(await groups.fileSetIntoGroup(null, 'bob_anime'), null);
-});
+await check(
+  "`all` is not a destination — it is the absence of one, not an error",
+  async () => {
+    // The everything view is synthesized and is in no file, so filing into it must be a no-op
+    // rather than a throw: the client sends `all` for exactly the case that means "no group".
+    assert.equal(
+      await groups.fileSetIntoGroup(
+        groups.ALL_ID,
+        "bob_anime",
+      ),
+      null,
+    )
+    assert.equal(
+      await groups.fileSetIntoGroup("", "bob_anime"),
+      null,
+    )
+    assert.equal(
+      await groups.fileSetIntoGroup(null, "bob_anime"),
+      null,
+    )
+  },
+)
 
-await check('a group that is not there throws, so the caller can SAY so', async () => {
-  // POST /api/sets turns this into `groupError` on a 200 — the set is already written, and a
-  // 400 would invite a retry that creates a second queue.
-  await assert.rejects(() => groups.fileSetIntoGroup('never-existed', 'bob_anime'), /no such group/);
-});
+await check(
+  "a group that is not there throws, so the caller can SAY so",
+  async () => {
+    // POST /api/sets turns this into `groupError` on a 200 — the set is already written, and a
+    // 400 would invite a retry that creates a second queue.
+    await assert.rejects(
+      () =>
+        groups.fileSetIntoGroup(
+          "never-existed",
+          "bob_anime",
+        ),
+      /no such group/,
+    )
+  },
+)
 
-await check('the hand-written header survives every write', () => {
-  assert.ok(readFileSync(GROUPS_PATH, 'utf8').startsWith(HEADER), 'header gone');
-});
+await check(
+  "the hand-written header survives every write",
+  () => {
+    assert.ok(
+      readFileSync(GROUPS_PATH, "utf8").startsWith(HEADER),
+      "header gone",
+    )
+  },
+)
 
-await check('deleting something already gone is not an error', async () => {
-  const out = await groups.deleteGroup('never-existed');
-  assert.deepEqual(out, { ok: true, deleted: false });
-});
+await check(
+  "deleting something already gone is not an error",
+  async () => {
+    const out = await groups.deleteGroup("never-existed")
+    assert.deepEqual(out, { ok: true, deleted: false })
+  },
+)
 
-console.log(failures ? `\n${failures} FAILED` : '\nall group checks passed');
-process.exit(failures ? 1 : 0);
+console.log(
+  failures
+    ? `\n${failures} FAILED`
+    : "\nall group checks passed",
+)
+process.exit(failures ? 1 : 0)
