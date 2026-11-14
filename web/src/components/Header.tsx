@@ -26,8 +26,12 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { MoreIcon } from "./MoreIcon"
+import { PencilIcon } from "./PencilIcon"
+import { RedoIcon } from "./RedoIcon"
 import { schemeIcons } from "./SchemeIcons"
 import { Tip } from "./Tip"
+import { UndoIcon } from "./UndoIcon"
 
 /**
  * The sticky header: back, the heading (which is also the rename field), the status
@@ -435,75 +439,5 @@ export function Header({
         ) : null}
       </div>
     </PageFrameHeader>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" />
-    </svg>
-  )
-}
-
-function UndoIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" />
-    </svg>
-  )
-}
-
-function RedoIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m15 7 5 5-5 5M20 12h-9a6 6 0 0 0-6 6" />
-    </svg>
-  )
-}
-
-function MoreIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="currentColor"
-      height="18"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <circle cx="12" cy="5" r="1.7" />
-      <circle cx="12" cy="12" r="1.7" />
-      <circle cx="12" cy="19" r="1.7" />
-    </svg>
   )
 }

@@ -8,23 +8,7 @@ import { unskipItem } from "../state/queueEntry"
 import type { Density } from "../state/queueView"
 import { useStore } from "../state/store"
 import { Poster } from "./Poster"
-
-const RestoreGlyph = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    height="16"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2"
-    viewBox="0 0 18 18"
-    width="16"
-  >
-    <path d="M5 6H1.5V2.5" />
-    <path d="M2 6a7 7 0 1 1-.1 5" />
-  </svg>
-)
+import { RestoreGlyph } from "./RestoreGlyph"
 
 /** Skipped leaves, shown after the queue in the same density as its active tiles. */
 export function SkippedPanel({

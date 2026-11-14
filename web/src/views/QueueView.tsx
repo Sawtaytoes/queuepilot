@@ -10,14 +10,12 @@ import {
 } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
-import {
-  EditionChip,
-  TypeBadge,
-} from "../components/badges"
+import { TypeBadge } from "../components/badges"
 import { ClearIcon } from "../components/ClearIcon"
 import { EditionBadge } from "../components/EditionBadge"
+import { EditionChip } from "../components/EditionChip"
+import { EntryEditor } from "../components/EntryEditor"
 import {
-  EntryEditor,
   PLEX_WORDS,
   SettingTags,
 } from "../components/EntrySettings"
@@ -25,11 +23,9 @@ import {
   isPullSet,
   OpenQueueButton,
 } from "../components/OpenQueueButton"
+import { PencilGlyph } from "../components/PencilGlyph"
 import { Poster } from "../components/Poster"
-import {
-  PencilGlyph,
-  PosterTile,
-} from "../components/PosterTile"
+import { PosterTile } from "../components/PosterTile"
 import { QueueActionsMenu } from "../components/QueueActionsMenu"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"

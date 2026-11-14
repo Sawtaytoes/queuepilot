@@ -1,9 +1,4 @@
-import {
-  Badge,
-  Button,
-  Checkbox,
-  IconButton,
-} from "@charcuterie/ui"
+import { Badge, Button } from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
@@ -33,6 +28,10 @@ import {
   setState,
   useStore,
 } from "../state/store"
+import {
+  MemberListRow,
+  type MemberRow,
+} from "./MemberListRow"
 import { Modal } from "./Modal"
 
 /**
@@ -67,21 +66,6 @@ import { Modal } from "./Modal"
  * Rows, at every width. These are a title and a line of detail, which is a reading surface
  * and not a card (decision `2026-08-25-a-text-heavy-row-list-is-one-column`).
  */
-
-/** One row, whatever it came from — a collection member or an episode. */
-type MemberRow = {
-  /** The leaf key, or null when the provider names none (no control on that row). */
-  ratingKey: string | null
-  label: string
-  /** The second line: the edition, the runtime, how far through it you are. */
-  detail: string
-  /** Fully watched / read — a chip, not a word buried in `detail`. */
-  isDone: boolean
-  /** Season 0: absent from playback until its leaf id is explicitly included. */
-  isSpecial: boolean
-  /** The season this row sits in, for the group headings. Null on a collection member. */
-  season: number | null
-}
 
 const HINT =
   "Normal episodes play unless you untick them. Specials start unticked, and you can include only the ones you want. A skipped normal episode counts as dealt with."
@@ -740,127 +724,5 @@ export function MembersModal() {
         {note}
       </p>
     </Modal>
-  )
-}
-
-/** One row, plus the season heading that opens its group. */
-function MemberListRow({
-  isCollection,
-  isSkipped,
-  onMove,
-  onToggle,
-  position,
-  previous,
-  row,
-  seedKey,
-  t,
-}: {
-  isCollection: boolean
-  isSkipped: boolean
-  onMove?: (offset: number) => void
-  onToggle: (isPlaying: boolean) => void
-  position: number
-  previous: MemberRow | null
-  row: MemberRow
-  seedKey: string
-  t: (s: string) => string
-}) {
-  const isSeasonHead =
-    row.season != null && row.season !== previous?.season
-
-  return (
-    <>
-      {isSeasonHead ? (
-        // h4: the modal's own title is an `<h3>` (`Modal.tsx`), so a season group opens one
-        // level under it. Nothing on this route sits between them.
-        <li className="memberseason">
-          <h4>
-            {row.isSpecial
-              ? t("Specials")
-              : `${t("Season")} ${row.season}`}
-          </h4>
-        </li>
-      ) : null}
-      <li
-        data-set={isCollection ? row.ratingKey : undefined}
-      >
-        {row.ratingKey ? (
-          <Checkbox
-            description={row.detail || undefined}
-            isChecked={!isSkipped}
-            // Keyed on what re-seeds it from outside the user's own clicks — the rows
-            // landing — and never on `isSkipped`, which changes on their click and would
-            // remount the box under their finger.
-            key={`${seedKey}:${row.ratingKey}`}
-            label={
-              isCollection
-                ? `${position}. ${row.label}`
-                : row.label
-            }
-            onChange={onToggle}
-            size="sm"
-            value={row.ratingKey}
-          />
-        ) : (
-          // No leaf key: this provider cannot skip one item, so the row reads rather than
-          // pretends to be a control.
-          <span className="memberplain">
-            {row.label}
-            {row.detail ? ` · ${row.detail}` : ""}
-          </span>
-        )}
-        {row.isDone ? (
-          <Badge intent="success" size="sm">
-            {t("Watched")}
-          </Badge>
-        ) : null}
-        {isSkipped ? (
-          <Badge intent="neutral" size="sm">
-            {row.isSpecial
-              ? "Skipped by default"
-              : "Skipped"}
-          </Badge>
-        ) : null}
-        {onMove ? (
-          <IconButton
-            appearance="ghost"
-            className="rowdrag"
-            intent="neutral"
-            label={`Drag ${row.label} to reorder. Use the up and down arrow keys to move it.`}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowUp") {
-                event.preventDefault()
-                onMove(-1)
-              } else if (event.key === "ArrowDown") {
-                event.preventDefault()
-                onMove(1)
-              }
-            }}
-            size="sm"
-          >
-            <DragIcon />
-          </IconButton>
-        ) : null}
-      </li>
-    </>
-  )
-}
-
-function DragIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="currentColor"
-      height="18"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <circle cx="9" cy="5" r="1.5" />
-      <circle cx="15" cy="5" r="1.5" />
-      <circle cx="9" cy="12" r="1.5" />
-      <circle cx="15" cy="12" r="1.5" />
-      <circle cx="9" cy="19" r="1.5" />
-      <circle cx="15" cy="19" r="1.5" />
-    </svg>
   )
 }

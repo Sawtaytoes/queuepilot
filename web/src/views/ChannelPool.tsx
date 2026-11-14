@@ -5,13 +5,12 @@ import {
   Spinner,
 } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
-
-import { WatchesBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
 import { WEIGHT_MAX } from "../components/EntrySettings"
 import { PosterTile } from "../components/PosterTile"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
+import { WatchesBadge } from "../components/WatchesBadge"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {

@@ -2,12 +2,10 @@ import { mergeRefs, useFlipList } from "@charcuterie/logic"
 import { BadgeButton } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
-import {
-  EditionChip,
-  TypeBadge,
-} from "../components/badges"
+import { TypeBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
 import { EditionBadge } from "../components/EditionBadge"
+import { EditionChip } from "../components/EditionChip"
 import { WEIGHT_MAX } from "../components/EntrySettings"
 import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"

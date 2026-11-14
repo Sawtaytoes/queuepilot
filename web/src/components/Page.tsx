@@ -8,8 +8,9 @@ import {
 } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 import { useLocation } from "react-router"
-
+import { CollapseIcon } from "./CollapseIcon"
 import { Header } from "./Header"
+import { MenuIcon } from "./MenuIcon"
 import { NowPlayingBar } from "./NowPlayingBar"
 import { PRIMARY_NAVIGATION_ITEMS } from "./PrimaryNavigation"
 
@@ -185,46 +186,5 @@ export function Page({
         {children}
       </Main>
     </Shell>
-  )
-}
-
-function MenuIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="20"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="20"
-    >
-      <path d="M4 7h16M4 12h16M4 17h16" />
-    </svg>
-  )
-}
-
-function CollapseIcon({
-  isCollapsed,
-}: {
-  isCollapsed: boolean
-}) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="20"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="20"
-    >
-      <path
-        d={isCollapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
-      />
-    </svg>
   )
 }

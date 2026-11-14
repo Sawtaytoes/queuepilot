@@ -19,10 +19,8 @@ import {
 } from "react"
 import { Link, useLocation } from "react-router"
 import { AlsoInDivider } from "../components/AlsoInDivider"
-import {
-  EditionChip,
-  TypeBadge,
-} from "../components/badges"
+import { TypeBadge } from "../components/badges"
+import { EditionChip } from "../components/EditionChip"
 import { LandingFilterBar } from "../components/LandingFilterBar"
 import { isPullSet } from "../components/OpenQueueButton"
 import { PeopleRow } from "../components/PeopleRow"
