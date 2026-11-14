@@ -221,13 +221,14 @@ describe("orderAfterLaneMove", () => {
     item({ key: "e" }),
     item({ key: "f" }),
   ]
-  const keys = (out: QueueItem[]) => out.map((i) => i.key)
+  const keys = (out: QueueItem[]) =>
+    out.map((queueItem) => queueItem.key)
 
   test("a promote lands at the END of the Priority queue, not at its old file position", () => {
-    const moved = items.map((i) =>
-      i.key === "e"
-        ? { ...i, placement: "priority" as const }
-        : i,
+    const moved = items.map((item) =>
+      item.key === "e"
+        ? { ...item, placement: "priority" as const }
+        : item,
     )
 
     expect(
@@ -243,10 +244,10 @@ describe("orderAfterLaneMove", () => {
   })
 
   test('"Play this next" lands at the HEAD of the Priority queue', () => {
-    const moved = items.map((i) =>
-      i.key === "e"
-        ? { ...i, placement: "priority" as const }
-        : i,
+    const moved = items.map((item) =>
+      item.key === "e"
+        ? { ...item, placement: "priority" as const }
+        : item,
     )
 
     expect(
@@ -263,8 +264,10 @@ describe("orderAfterLaneMove", () => {
   })
 
   test("a demote leaves the Priority queue in its own order and joins the pool", () => {
-    const moved = items.map((i) =>
-      i.key === "b" ? { ...i, placement: null } : i,
+    const moved = items.map((item) =>
+      item.key === "b"
+        ? { ...item, placement: null }
+        : item,
     )
 
     expect(
@@ -280,10 +283,10 @@ describe("orderAfterLaneMove", () => {
   })
 
   test("a BULK move keeps the selection's relative order and lands it together", () => {
-    const moved = items.map((i) =>
-      i.key === "d" || i.key === "f"
-        ? { ...i, placement: "priority" as const }
-        : i,
+    const moved = items.map((item) =>
+      item.key === "d" || item.key === "f"
+        ? { ...item, placement: "priority" as const }
+        : item,
     )
 
     expect(

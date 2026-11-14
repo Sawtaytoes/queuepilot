@@ -108,13 +108,15 @@ export function describeRule(
   nameOf: (personId: string) => string,
 ): string {
   const required = group.roster.filter(
-    (m) => m.role === "required",
+    (member) => member.role === "required",
   )
   const optional = group.roster.filter(
-    (m) => m.role === "optional",
+    (member) => member.role === "optional",
   )
   const minimum = group.minPresent ?? required.length
-  const names = required.map((m) => nameOf(m.personId))
+  const names = required.map((member) =>
+    nameOf(member.personId),
+  )
 
   let sentence: string
   if (required.length === 0)
@@ -132,7 +134,7 @@ export function describeRule(
 
   if (optional.length === 0) return sentence
   return `${sentence}. ${joinNames(
-    optional.map((m) => nameOf(m.personId)),
+    optional.map((member) => nameOf(member.personId)),
     "and",
   )} may join.`
 }
@@ -155,8 +157,8 @@ export function candidates(
   groups: readonly GroupWithRoster[],
 ): Candidate[] {
   const nameOf = (personId: string) =>
-    people.find((p) => p.id === personId)?.displayName ??
-    personId
+    people.find((person) => person.id === personId)
+      ?.displayName ?? personId
 
   return [
     ...people.map(
@@ -189,8 +191,8 @@ export function trayOf(
   members: readonly QueueMember[],
 ): TrayKey {
   const found = members.find(
-    (m) =>
-      memberKey(m.kind, m.id) ===
+    (member) =>
+      memberKey(member.kind, member.id) ===
       memberKey(candidate.kind, candidate.id),
   )
   return found ? found.role : "roster"
@@ -214,12 +216,16 @@ export function byTray(
   // roster order it arrived in, which is people then groups.
   const rank = (candidate: Candidate) =>
     members.findIndex(
-      (m) =>
-        memberKey(m.kind, m.id) ===
+      (member) =>
+        memberKey(member.kind, member.id) ===
         memberKey(candidate.kind, candidate.id),
     )
-  out.required.sort((a, b) => rank(a) - rank(b))
-  out.optional.sort((a, b) => rank(a) - rank(b))
+  out.required.sort(
+    (left, right) => rank(left) - rank(right),
+  )
+  out.optional.sort(
+    (left, right) => rank(left) - rank(right),
+  )
 
   return out
 }
@@ -239,14 +245,18 @@ export function moveToTray(
 ): QueueMember[] {
   const key = memberKey(candidate.kind, candidate.id)
   const without = members.filter(
-    (m) => memberKey(m.kind, m.id) !== key,
+    (member) => memberKey(member.kind, member.id) !== key,
   )
 
   if (tray === "roster") return renumber(without)
 
   const role: MemberRole = tray
-  const sameTray = without.filter((m) => m.role === role)
-  const elsewhere = without.filter((m) => m.role !== role)
+  const sameTray = without.filter(
+    (member) => member.role === role,
+  )
+  const elsewhere = without.filter(
+    (member) => member.role !== role,
+  )
   const at = Math.max(0, Math.min(toIndex, sameTray.length))
 
   sameTray.splice(at, 0, {
@@ -268,14 +278,17 @@ function renumber(
     required: 0,
   }
   return [...members]
-    .sort((a, b) =>
-      a.role === b.role
+    .sort((left, right) =>
+      left.role === right.role
         ? 0
-        : a.role === "required"
+        : left.role === "required"
           ? -1
           : 1,
     )
-    .map((m) => ({ ...m, position: next[m.role]++ }))
+    .map((member) => ({
+      ...member,
+      position: next[member.role]++,
+    }))
 }
 
 /**
@@ -303,13 +316,13 @@ export function queuePeopleLabel(
 ): string {
   const nameOf = (member: QueueMember): string =>
     member.kind === "group"
-      ? (groups.find((g) => g.id === member.id)?.label ??
-        member.id)
-      : (people.find((p) => p.id === member.id)
+      ? (groups.find((group) => group.id === member.id)
+          ?.label ?? member.id)
+      : (people.find((person) => person.id === member.id)
           ?.displayName ?? member.id)
 
   const required = members.filter(
-    (m) => m.role === "required",
+    (member) => member.role === "required",
   )
 
   // "Anybody" and not an empty string: a queue nobody has filed yet is a real state, and a

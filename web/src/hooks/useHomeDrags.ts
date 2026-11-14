@@ -84,20 +84,20 @@ export function useHomeDrags(
     // --- shelf (queue) reorder: drag the ≡ handle vertically ------------------ //
     let shelfDrag: ShelfDrag | null = null
 
-    function onShelfMove(e: PointerEvent) {
+    function onShelfMove(event: PointerEvent) {
       if (!shelfDrag) return
 
-      e.preventDefault()
+      event.preventDefault()
 
       // Dragging near the scroll-region edge moves it so a shelf can travel
       // further than one screen (collapse-all also makes long hauls easy).
-      autoScroll(e.clientY, 80)
+      autoScroll(event.clientY, 80)
 
       const others = [
         ...shelvesEl!.querySelectorAll<HTMLElement>(
           ".queue-family:not(.dragging)",
         ),
-      ].filter((s) => !s.hidden)
+      ].filter((shelf) => !shelf.hidden)
 
       if (!others.length) return
 
@@ -105,19 +105,23 @@ export function useHomeDrags(
       let bestDist = Infinity
       let isAfter = false
 
-      for (const s of others) {
-        const r = s.getBoundingClientRect()
-        const cy = r.top + r.height / 2
-        const cx = r.left + r.width / 2
+      for (const other of others) {
+        const rect = other.getBoundingClientRect()
+        const cy = rect.top + rect.height / 2
+        const cx = rect.left + rect.width / 2
         // Grid rows can share a Y coordinate. Choose the nearest card in both axes.
-        const d = Math.hypot(e.clientX - cx, e.clientY - cy)
+        const distance = Math.hypot(
+          event.clientX - cx,
+          event.clientY - cy,
+        )
 
-        if (d < bestDist) {
-          bestDist = d
-          best = s
+        if (distance < bestDist) {
+          bestDist = distance
+          best = other
           isAfter =
-            e.clientY > r.bottom ||
-            (e.clientY >= r.top && e.clientX > cx)
+            event.clientY > rect.bottom ||
+            (event.clientY >= rect.top &&
+              event.clientX > cx)
         }
       }
 
@@ -157,7 +161,7 @@ export function useHomeDrags(
         ...shelvesEl!.querySelectorAll<HTMLElement>(
           ".shelf",
         ),
-      ].map((s) => s.dataset.set!)
+      ].map((shelfEl) => shelfEl.dataset.set!)
 
       shelvesEl!.insertBefore(shelf, nextSibling)
 
@@ -191,17 +195,17 @@ export function useHomeDrags(
         }
 
         setStatus("Queue order saved", "ok")
-      } catch (e) {
+      } catch (error) {
         setStatus(
-          `Reorder failed: ${(e as Error).message}`,
+          `Reorder failed: ${(error as Error).message}`,
           "err",
         )
         await load()
       }
     }
 
-    const onShelfHandleDown = (e: PointerEvent) => {
-      const handle = (e.target as HTMLElement).closest(
+    const onShelfHandleDown = (event: PointerEvent) => {
+      const handle = (event.target as HTMLElement).closest(
         ".shelfdrag",
       )
 
@@ -212,7 +216,7 @@ export function useHomeDrags(
 
       if (!shelf) return
 
-      e.preventDefault()
+      event.preventDefault()
       shelfDrag = { nextSibling: shelf.nextSibling, shelf }
       busy.shelfDrag = true
       shelf.classList.add("dragging")
@@ -265,14 +269,14 @@ export function useHomeDrags(
       busy.homePress = false
     }
 
-    function onHomeMove(e: PointerEvent) {
+    function onHomeMove(event: PointerEvent) {
       if (!hpress) return
 
       if (!hpress.isDragging) {
         const isFar =
           Math.hypot(
-            e.clientX - hpress.x,
-            e.clientY - hpress.y,
+            event.clientX - hpress.x,
+            event.clientY - hpress.y,
           ) > DRAG_THRESHOLD
 
         if (hpress.type === "touch") {
@@ -291,25 +295,25 @@ export function useHomeDrags(
         if (!hpress.isDragging) return
       }
 
-      e.preventDefault()
+      event.preventDefault()
 
       // Page auto-scroll for cross-shelf hauls.
-      autoScroll(e.clientY, 90)
+      autoScroll(event.clientY, 90)
 
       // Match both axes: neighboring cards can have strips at the same Y.
       // Keep vertical slack for the gap between a strip and its caption.
       let target: HTMLElement | null = null
 
       for (const strip of stripsOnScreen()) {
-        const r = strip
+        const rect = strip
           .closest(".strip-wrap")!
           .getBoundingClientRect()
 
         if (
-          e.clientX >= r.left &&
-          e.clientX <= r.right &&
-          e.clientY >= r.top - 14 &&
-          e.clientY <= r.bottom + 14
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top - 14 &&
+          event.clientY <= rect.bottom + 14
         ) {
           target = strip
 
@@ -328,9 +332,9 @@ export function useHomeDrags(
         .closest(".strip-wrap")!
         .getBoundingClientRect()
 
-      if (e.clientX < wr.left + 70)
+      if (event.clientX < wr.left + 70)
         target.scrollBy({ behavior: "auto", left: -18 })
-      else if (e.clientX > wr.right - 70) {
+      else if (event.clientX > wr.right - 70) {
         target.scrollBy({ behavior: "auto", left: 18 })
       }
 
@@ -360,15 +364,15 @@ export function useHomeDrags(
       let bestDist = Infinity
       let isAfter = false
 
-      for (const t of tiles) {
-        const r = t.getBoundingClientRect()
-        const cx = r.left + r.width / 2
-        const d = Math.abs(e.clientX - cx)
+      for (const tile of tiles) {
+        const rect = tile.getBoundingClientRect()
+        const cx = rect.left + rect.width / 2
+        const distance = Math.abs(event.clientX - cx)
 
-        if (d < bestDist) {
-          bestDist = d
-          best = t
-          isAfter = e.clientX > cx
+        if (distance < bestDist) {
+          bestDist = distance
+          best = tile
+          isAfter = event.clientX > cx
         }
       }
 
@@ -443,7 +447,7 @@ export function useHomeDrags(
             )
 
             to.items = keys
-              .map((k) => byKey.get(k)!)
+              .map((key) => byKey.get(key)!)
               .filter(Boolean)
             bumpRevision()
           }
@@ -471,7 +475,7 @@ export function useHomeDrags(
             )
 
             to.items = keys
-              .map((k) => byKey.get(k)!)
+              .map((key) => byKey.get(key)!)
               .filter(Boolean)
             bumpRevision()
           }
@@ -490,17 +494,17 @@ export function useHomeDrags(
 
         // Freshen counts/order quietly; keeps the page where it is.
         refreshData()
-      } catch (e) {
+      } catch (error) {
         setStatus(
-          `Save failed: ${(e as Error).message}`,
+          `Save failed: ${(error as Error).message}`,
           "err",
         )
         await load()
       }
     }
 
-    const onPosterDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement
+    const onPosterDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement
 
       if (target.closest(".priority-position")) return
 
@@ -514,23 +518,24 @@ export function useHomeDrags(
       // See `stripsOnScreen`: a filtered queue cannot express an order for its parent.
       if (card.closest(".shelf.filtered")) return
 
-      if (e.pointerType !== "touch") e.preventDefault()
+      if (event.pointerType !== "touch")
+        event.preventDefault()
 
       hpress = {
         card,
         fromSet: card.dataset.set!,
         hiddenEmpty: null,
-        isArmed: e.pointerType !== "touch",
+        isArmed: event.pointerType !== "touch",
         isDragging: false,
         nextSibling: card.nextSibling,
         parent: card.parentElement,
-        type: e.pointerType,
-        x: e.clientX,
-        y: e.clientY,
+        type: event.pointerType,
+        x: event.clientX,
+        y: event.clientY,
       }
       busy.homePress = true
 
-      if (e.pointerType === "touch") {
+      if (event.pointerType === "touch") {
         hpress.holdTimer = setTimeout(() => {
           if (hpress) {
             hpress.isArmed = true
@@ -546,18 +551,19 @@ export function useHomeDrags(
       window.addEventListener("pointercancel", onHomeUp)
     }
 
-    const onDragStart = (e: Event) => e.preventDefault() // no native image drags
+    const onDragStart = (event: Event) =>
+      event.preventDefault() // no native image drags
     // A touch long-press arms the drag, but that same press fires the browser's
     // native context menu over a poster and steals the gesture — suppress it there.
-    const onContextMenu = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest(".thumb"))
-        e.preventDefault()
+    const onContextMenu = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest(".thumb"))
+        event.preventDefault()
     }
     // Once a touch drag is armed, stop the browser's native panning
     // (preventDefault on touchmove is what actually blocks scrolling — pointer
     // events alone can't).
-    const onTouchMove = (e: TouchEvent) => {
-      if (hpress?.isDragging) e.preventDefault()
+    const onTouchMove = (event: TouchEvent) => {
+      if (hpress?.isDragging) event.preventDefault()
     }
 
     shelvesEl.addEventListener(

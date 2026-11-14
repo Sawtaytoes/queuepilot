@@ -44,7 +44,10 @@ export async function commitStart(
 
     entry.refresh()
     entry.afterStart?.()
-  } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(
+      `Save failed: ${(error as Error).message}`,
+      "err",
+    )
   }
 }

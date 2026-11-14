@@ -20,10 +20,10 @@ const redPhotonZillion: ShowEpisodes = {
   multiSeason: false,
   seasons: [
     {
-      episodes: Array.from({ length: 31 }, (_, i) => ({
-        episode: i + 1,
-        title: `Episode ${i + 1}`,
-        watched: i + 1 <= 23,
+      episodes: Array.from({ length: 31 }, (_, index) => ({
+        episode: index + 1,
+        title: `Episode ${index + 1}`,
+        watched: index + 1 <= 23,
       })),
       season: 1,
     },

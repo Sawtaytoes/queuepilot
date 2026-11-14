@@ -190,7 +190,9 @@ export function playerCountLine(
 
   if (game.bestWith.length === 0) return range
 
-  const best = [...game.bestWith].sort((a, b) => a - b)
+  const best = [...game.bestWith].sort(
+    (left, right) => left - right,
+  )
   const first = best[0]
   const last = best[best.length - 1]
   const bestText =

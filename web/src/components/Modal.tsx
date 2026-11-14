@@ -96,8 +96,8 @@ export function Modal({
       >
         <form
           id={`${id.replace("modal", "")}form`}
-          onSubmit={(e) => {
-            e.preventDefault()
+          onSubmit={(event) => {
+            event.preventDefault()
             onSubmit?.()
           }}
         >

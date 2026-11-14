@@ -34,16 +34,16 @@ export function PeopleRow({
 
   const labelFor = (member: QueueMember): string =>
     member.kind === "group"
-      ? (groups.find((g) => g.id === member.id)?.label ??
-        member.id)
-      : (people.find((p) => p.id === member.id)
+      ? (groups.find((group) => group.id === member.id)
+          ?.label ?? member.id)
+      : (people.find((person) => person.id === member.id)
           ?.displayName ?? member.id)
 
   const required = members.filter(
-    (m) => m.role === "required",
+    (member) => member.role === "required",
   )
   const optional = members.filter(
-    (m) => m.role === "optional",
+    (member) => member.role === "optional",
   )
 
   return (

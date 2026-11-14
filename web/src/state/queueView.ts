@@ -64,21 +64,25 @@ function readView(setId: string | null): QueueView {
   try {
     const raw = window.localStorage.getItem(KEY(setId))
     if (!raw) return DEFAULT_VIEW
-    const v = JSON.parse(raw) as Partial<QueueView>
+    const parsed = JSON.parse(raw) as Partial<QueueView>
     return {
-      density: DENSITIES.includes(v.density as Density)
-        ? (v.density as Density)
+      density: DENSITIES.includes(parsed.density as Density)
+        ? (parsed.density as Density)
         : DEFAULT_VIEW.density,
-      filters: { ...EMPTY_FILTERS, ...(v.filters ?? {}) },
+      filters: {
+        ...EMPTY_FILTERS,
+        ...(parsed.filters ?? {}),
+      },
     }
   } catch {
     return DEFAULT_VIEW // private mode, quota, corrupt JSON — a view is never worth throwing over
   }
 }
 
-export const isFiltered = (f: QueueFilters) =>
-  Boolean(f.text.trim() || f.type || f.state) ||
-  f.sort !== "queue"
+export const isFiltered = (filters: QueueFilters) =>
+  Boolean(
+    filters.text.trim() || filters.type || filters.state,
+  ) || filters.sort !== "queue"
 
 export function useQueueView(setId: string | null) {
   const [view, setView] = useState<QueueView>(() =>
@@ -269,9 +273,9 @@ export function orderAtPriorityPosition(
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
 export function applyFilters(
   items: QueueItem[],
-  f: QueueFilters,
+  filters: QueueFilters,
 ): QueueItem[] {
-  const text = f.text.trim().toLowerCase()
+  const text = filters.text.trim().toLowerCase()
   const out = items.filter((it) => {
     if (
       text &&
@@ -280,49 +284,56 @@ export function applyFilters(
     ) {
       return false
     }
-    if (f.type && it.type !== f.type) return false
+    if (filters.type && it.type !== filters.type)
+      return false
     // "Completed / fully watched" means what the TILE means by it — the file's flag or a
     // live-finished entry the next scan will flag — so filtering never hides a tile that is
     // sitting right there wearing a Completed badge.
-    if (f.state === "done" && !isCompleted(it)) return false
-    if (f.state === "active" && isCompleted(it))
+    if (filters.state === "done" && !isCompleted(it))
       return false
-    if (f.state === "overrides" && !hasOverrides(it))
+    if (filters.state === "active" && isCompleted(it))
       return false
-    if (f.state === "weighted" && (it.weight ?? 1) < 2)
+    if (filters.state === "overrides" && !hasOverrides(it))
+      return false
+    if (
+      filters.state === "weighted" &&
+      (it.weight ?? 1) < 2
+    )
       return false
     // The entry's own PROMOTE, not the effective lane. On an ordered queue every entry is in
     // the Priority lane by inheritance, so an effective-lane filter would match all of them
     // and answer a question nobody asked; "what have I promoted here" is the useful one.
     if (
-      f.state === "priority" &&
+      filters.state === "priority" &&
       it.placement !== "priority"
     )
       return false
-    if (f.state === "start" && !it.start) return false
-    if (f.state === "section" && !hasSection(it))
+    if (filters.state === "start" && !it.start) return false
+    if (filters.state === "section" && !hasSection(it))
       return false
     return true
   })
-  if (f.sort === "title") {
-    return [...out].sort((a, b) =>
-      a.title.localeCompare(b.title, undefined, {
+  if (filters.sort === "title") {
+    return [...out].sort((left, right) =>
+      left.title.localeCompare(right.title, undefined, {
         sensitivity: "base",
       }),
     )
   }
-  if (f.sort === "weight") {
+  if (filters.sort === "weight") {
     // Heaviest first; ties keep the queue's own order, so this reads as "the weighted ones,
     // then everything else as it sits" rather than an arbitrary reshuffle.
     return [...out].sort(
-      (a, b) => (b.weight ?? 1) - (a.weight ?? 1),
+      (left, right) =>
+        (right.weight ?? 1) - (left.weight ?? 1),
     )
   }
-  if (f.sort === "recent") {
+  if (filters.sort === "recent") {
     // Newest first. Old entries have no honest timestamp, so they follow every stamped entry
     // and keep their existing relative order instead of receiving an invented date.
     return [...out].sort(
-      (a, b) => (b.queuedAt ?? 0) - (a.queuedAt ?? 0),
+      (left, right) =>
+        (right.queuedAt ?? 0) - (left.queuedAt ?? 0),
     )
   }
   return out

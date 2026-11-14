@@ -73,19 +73,19 @@ export function isPlayingItem(
 ): boolean {
   if (!isNowLive(now) || !item) return false
 
-  const n = now.now!
-  const ctx = n.context || {}
+  const playing = now.now!
+  const ctx = playing.context || {}
   if (
-    n.plexServer !== undefined &&
+    playing.plexServer !== undefined &&
     ("plexServer" in item
       ? (item.plexServer ?? null)
-      : null) !== n.plexServer
+      : null) !== playing.plexServer
   )
     return false
 
   if (
     item.ratingKey &&
-    String(item.ratingKey) === String(n.ratingKey)
+    String(item.ratingKey) === String(playing.ratingKey)
   )
     return true
 
@@ -99,7 +99,9 @@ export function isPlayingItem(
     item.type === "collection" &&
     Array.isArray(ctx.collections)
   ) {
-    return ctx.collections.some((c) => c === item.title)
+    return ctx.collections.some(
+      (collection) => collection === item.title,
+    )
   }
 
   return false
@@ -111,11 +113,11 @@ export function activeSet(
 ): string | null {
   if (!isNowLive(now) || !now.set || !data) return null
 
-  const q = data.sets[now.set]
+  const queue = data.sets[now.set]
 
-  if (!q?.items) return null
+  if (!queue?.items) return null
 
-  return q.items.some((it) => isPlayingItem(now, it))
+  return queue.items.some((it) => isPlayingItem(now, it))
     ? now.set
     : null
 }

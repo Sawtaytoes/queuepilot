@@ -102,8 +102,8 @@ export function CountPicker({
   const emit = onChange as (
     v: number | typeof INFINITE,
   ) => void
-  const preset = (n: number) =>
-    unit === "x" ? `${n}x` : String(n)
+  const preset = (count: number) =>
+    unit === "x" ? `${count}x` : String(count)
   const presets = countPickerPresets(defaultValue, common)
   const isInfinite = value === INFINITE
   // Infinite is a preset in its own right, so it must not fall through to the Custom… field —
@@ -143,13 +143,17 @@ export function CountPicker({
   }, [commonKey, defaultValue, value])
 
   const commit = (raw: string) => {
-    const n = parseInt(raw, 10)
-    if (!Number.isFinite(n) || n < min || n > max) {
+    const parsed = parseInt(raw, 10)
+    if (
+      !Number.isFinite(parsed) ||
+      parsed < min ||
+      parsed > max
+    ) {
       setDraft(String(value)) // snap back — never write a value the server would clamp
       return
     }
-    setDraft(String(n))
-    if (n !== value) emit(n)
+    setDraft(String(parsed))
+    if (parsed !== value) emit(parsed)
   }
 
   if (isCustom) {
@@ -161,12 +165,14 @@ export function CountPicker({
           id={id}
           max={max}
           min={min}
-          onBlur={(e) => commit(e.target.value)}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              commit((e.target as HTMLInputElement).value)
+          onBlur={(event) => commit(event.target.value)}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              commit(
+                (event.target as HTMLInputElement).value,
+              )
             }
           }}
           ref={fieldRef}
@@ -214,13 +220,13 @@ export function CountPicker({
     <SelectListbox
       id={id}
       label={label}
-      onChange={(v) => {
-        if (v === INFINITE) {
+      onChange={(value) => {
+        if (value === INFINITE) {
           emit(INFINITE)
 
           return
         }
-        if (v === CUSTOM) {
+        if (value === CUSTOM) {
           setIsCustom(true)
           // Focus the field it just became, or picking Custom… means picking up the mouse again.
           requestAnimationFrame(() =>
@@ -228,13 +234,16 @@ export function CountPicker({
           )
           return
         }
-        emit(parseInt(v, 10))
+        emit(parseInt(value, 10))
       }}
       options={[
-        ...presets.map((n) => ({
-          badge: n === defaultValue ? "Default" : undefined,
-          label: preset(n),
-          value: String(n),
+        ...presets.map((presetCount) => ({
+          badge:
+            presetCount === defaultValue
+              ? "Default"
+              : undefined,
+          label: preset(presetCount),
+          value: String(presetCount),
         })),
         ...(hasInfinite
           ? [{ label: "Infinite", value: INFINITE }]

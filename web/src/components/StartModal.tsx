@@ -61,7 +61,7 @@ const pick = (
   want: string | number | null | undefined,
 ) =>
   pickOptionValue(
-    options.map((o) => o.value),
+    options.map((option) => option.value),
     want,
   )
 
@@ -82,8 +82,8 @@ export function StartModal() {
   const { startModal: entry } = useOverlays()
   const { reg } = useStore()
   const vocab = vocabForSet(reg?.sets, entry?.setId)
-  const t = useCallback(
-    (s: string) => applyVocab(s, vocab),
+  const translate = useCallback(
+    (text: string) => applyVocab(text, vocab),
     [vocab],
   )
   const item = entry?.item ?? null
@@ -130,12 +130,12 @@ export function StartModal() {
       ]
         .filter(Boolean)
         .join("&")
-      const q = qs ? `?${qs}` : ""
+      const querySuffix = qs ? `?${qs}` : ""
 
       try {
         data = await api<ShowEpisodes>(
           "GET",
-          `/api/show/${ratingKey}/episodes${q}`,
+          `/api/show/${ratingKey}/episodes${querySuffix}`,
         )
       } catch {
         /* handled below */
@@ -147,7 +147,7 @@ export function StartModal() {
         setEpisodeData(null)
         setIsEpisodeShown(false)
         setNote(
-          t(
+          translate(
             "Could not read this series’ episodes from Plex.",
           ),
         )
@@ -169,7 +169,7 @@ export function StartModal() {
     },
     // Re-close over the profile uuid when it changes (once per open) so the fetch scopes
     // its watched marks to the right account.
-    [entry?.accountUuid, entry?.setId, item, t],
+    [entry?.accountUuid, entry?.setId, item, translate],
   )
 
   /** A collection member: a series opens its pickers, a movie member has nothing
@@ -182,7 +182,7 @@ export function StartModal() {
       nextEp: NextEp | null,
     ) => {
       const child = kids.find(
-        (c) => String(c.ratingKey) === String(rk),
+        (kid) => String(kid.ratingKey) === String(rk),
       )
 
       if (child?.type !== "show") {
@@ -263,7 +263,7 @@ export function StartModal() {
       } catch {
         if (!isStale) {
           setNote(
-            t(
+            translate(
               "Could not read this collection’s members from Plex.",
             ),
           )
@@ -283,18 +283,18 @@ export function StartModal() {
       // A hand-written YAML entry may name the member by title rather than
       // ratingKey — the engine matches either, so the picker must too.
       const byRatingKey = kids.some(
-        (c) => String(c.ratingKey) === String(want),
+        (kid) => String(kid.ratingKey) === String(want),
       )
         ? want
         : kids.find(
-            (c) =>
-              c.title.toLowerCase() ===
+            (kid) =>
+              kid.title.toLowerCase() ===
               String(want || "").toLowerCase(),
           )?.ratingKey
       const chosen = pick(
-        kids.map((c) => ({
-          label: c.title,
-          value: String(c.ratingKey),
+        kids.map((kid) => ({
+          label: kid.title,
+          value: String(kid.ratingKey),
         })),
         byRatingKey,
       )
@@ -325,14 +325,14 @@ export function StartModal() {
         title="Start from…"
         titleId="startmodal-title"
       >
-        <p className="subhint">{t(START_HINT)}</p>
+        <p className="subhint">{translate(START_HINT)}</p>
       </Modal>
     )
   }
 
   const seasonRow =
     episodeData?.seasons.find(
-      (x) => String(x.season) === seasonValue,
+      (season) => String(season.season) === seasonValue,
     ) ?? episodeData?.seasons[0]
   const isSeasonShown =
     Boolean(episodeData?.multiSeason) && isEpisodeShown
@@ -432,7 +432,7 @@ export function StartModal() {
       }
       titleId="startmodal-title"
     >
-      <p className="subhint">{t(START_HINT)}</p>
+      <p className="subhint">{translate(START_HINT)}</p>
 
       <label
         className="field"
@@ -452,10 +452,10 @@ export function StartModal() {
           id="start-series"
           key={children.length}
           label="Series"
-          onChange={(v) => {
-            setSeriesValue(v)
+          onChange={(selectedSeries) => {
+            setSeriesValue(selectedSeries)
             void paintMember(
-              v,
+              selectedSeries,
               children,
               item.start,
               item.nextEp,
@@ -463,28 +463,28 @@ export function StartModal() {
           }}
           options={
             children.length
-              ? children.map((c, i) => ({
+              ? children.map((child, index) => ({
                   // A series says how far through it you are; a single item just
                   // gets a word when seen. Both ride in the chip, which turns
                   // success-green only when the member is FULLY seen — that is the
                   // one state you skim this list for.
                   badge:
-                    c.type === "show"
-                      ? c.leafCount
-                        ? `${c.viewedLeafCount || 0}/${c.leafCount} ${t("watched")}`
+                    child.type === "show"
+                      ? child.leafCount
+                        ? `${child.viewedLeafCount || 0}/${child.leafCount} ${translate("watched")}`
                         : undefined
-                      : c.watched
-                        ? t("Watched")
+                      : child.watched
+                        ? translate("Watched")
                         : undefined,
                   badgeIntent:
-                    c.type === "show"
-                      ? (c.viewedLeafCount || 0) >=
-                        (c.leafCount || 0)
+                    child.type === "show"
+                      ? (child.viewedLeafCount || 0) >=
+                        (child.leafCount || 0)
                         ? ("success" as const)
                         : ("neutral" as const)
                       : ("success" as const),
-                  label: `${i + 1}. ${c.title}`,
-                  value: String(c.ratingKey),
+                  label: `${index + 1}. ${child.title}`,
+                  value: String(child.ratingKey),
                 }))
               : [{ label: "Loading members…", value: "" }]
           }
@@ -497,7 +497,7 @@ export function StartModal() {
         hidden={!isSeasonShown}
         id="start-seasonbox"
       >
-        {t("Season")}
+        {translate("Season")}
         {/* Season: `loadEpisodes` writes the season list and `seasonValue`
             together, and it runs on open AND whenever a different member is picked
             above. The season numbers themselves are the key — they change exactly
@@ -505,14 +505,15 @@ export function StartModal() {
         <SelectListbox
           id="start-season"
           key={(episodeData?.seasons ?? [])
-            .map((s) => s.season)
+            .map((seasonGroup) => seasonGroup.season)
             .join(",")}
-          label={t("Season")}
-          onChange={(v) => {
-            setSeasonValue(v)
+          label={translate("Season")}
+          onChange={(selectedSeason) => {
+            setSeasonValue(selectedSeason)
 
             const row = episodeData?.seasons.find(
-              (x) => String(x.season) === v,
+              (season) =>
+                String(season.season) === selectedSeason,
             )
 
             setEpisodeValue(
@@ -522,9 +523,9 @@ export function StartModal() {
             )
           }}
           options={(episodeData?.seasons ?? []).map(
-            (s) => ({
-              label: `${t("Season")} ${s.season}`,
-              value: String(s.season),
+            (seasonGroup) => ({
+              label: `${translate("Season")} ${seasonGroup.season}`,
+              value: String(seasonGroup.season),
             }),
           )}
           value={seasonValue}
@@ -536,7 +537,7 @@ export function StartModal() {
         hidden={!isEpisodeShown}
         id="start-episodebox"
       >
-        {t("Episode")}
+        {translate("Episode")}
         {/* Episode: two writers other than the user, and both move the SEASON —
             `loadEpisodes` on open, and the season picker's own `onChange`, which
             resets this to that season's first episode. So the key is the season
@@ -545,23 +546,23 @@ export function StartModal() {
         <SelectListbox
           id="start-episode"
           key={`${seasonRow?.season ?? ""}:${isLoadingEpisodes ? "loading" : "ready"}`}
-          label={t("Episode")}
+          label={translate("Episode")}
           onChange={setEpisodeValue}
           options={
             isLoadingEpisodes || !seasonRow
               ? [
                   {
-                    label: t("Loading episodes…"),
+                    label: translate("Loading episodes…"),
                     value: "",
                   },
                 ]
-              : seasonRow.episodes.map((e) => ({
-                  badge: e.watched
-                    ? t("Watched")
+              : seasonRow.episodes.map((episode) => ({
+                  badge: episode.watched
+                    ? translate("Watched")
                     : undefined,
                   badgeIntent: "success" as const,
-                  label: `${seLabel({ episode: e.episode }, unit)}${e.title ? ` · ${e.title}` : ""}`,
-                  value: String(e.episode),
+                  label: `${seLabel({ episode: episode.episode }, unit)}${episode.title ? ` · ${episode.title}` : ""}`,
+                  value: String(episode.episode),
                 }))
           }
           value={episodeValue}

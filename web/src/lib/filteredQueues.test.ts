@@ -24,7 +24,7 @@ const set = (
   }) as unknown as RegistrySet
 
 const registry = (...sets: RegistrySet[]) => {
-  const byId = new Map(sets.map((s) => [s.id, s]))
+  const byId = new Map(sets.map((set) => [set.id, set]))
 
   return (id: string) => byId.get(id) ?? null
 }

@@ -304,9 +304,9 @@ export function GroupsModal() {
       await loadPeople()
       if (!selectedId) selectGroupInModal(id)
       setStatus("People group saved", "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not save people group: ${(e as Error).message}`,
+        `Could not save people group: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -321,9 +321,9 @@ export function GroupsModal() {
       await deletePeopleGroup(selected.id)
       selectGroupInModal(null)
       setStatus("People group removed", "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not remove people group: ${(e as Error).message}`,
+        `Could not remove people group: ${(error as Error).message}`,
         "err",
       )
     } finally {

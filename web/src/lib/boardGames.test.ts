@@ -267,7 +267,7 @@ describe("the shelf, filtered", () => {
 
   test("an empty term is the whole shelf — this screen IS the shelf", () => {
     expect(
-      filterCollection(shelf, {}).map((g) => g.id),
+      filterCollection(shelf, {}).map((game) => game.id),
     ).toEqual(["harbour-lantern", "quarry-duel"])
   })
 
@@ -275,14 +275,14 @@ describe("the shelf, filtered", () => {
     expect(
       filterCollection(shelf, {
         isExcludedShown: true,
-      }).map((g) => g.id),
+      }).map((game) => game.id),
     ).toContain("tidewright")
   })
 
   test("matches part of a name, ignoring case", () => {
     expect(
       filterCollection(shelf, { query: "quarry" }).map(
-        (g) => g.id,
+        (game) => game.id,
       ),
     ).toEqual(["quarry-duel"])
   })

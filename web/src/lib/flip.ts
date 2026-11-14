@@ -68,13 +68,13 @@ export function flipMove(
   for (const el of items) {
     if (el === dragEl) continue
 
-    const f = first.get(el)
+    const firstRect = first.get(el)
 
-    if (!f) continue
+    if (!firstRect) continue
 
     const last = el.getBoundingClientRect()
-    const dx = f.left - last.left
-    const dy = f.top - last.top
+    const dx = firstRect.left - last.left
+    const dy = firstRect.top - last.top
 
     if (!dx && !dy) continue
 

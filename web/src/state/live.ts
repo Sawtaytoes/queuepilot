@@ -26,11 +26,11 @@ import {
  * Everything here is deferred while `uiBusy()`; see `state/busy.ts` for why.
  */
 
-let livePending = false
+let isLivePending = false
 
 /** Background refresh — MUST go through the same guard as the SSE live updates. */
 export function refreshData() {
-  livePending = true
+  isLivePending = true
 
   // A click / explicit refresh has to re-read Kavita. The ETag only covers YAML
   // + cache generation, so a conditional GET would 304 and leave "Ch 35" sitting
@@ -72,7 +72,7 @@ async function refreshOne<TResponse>(
     // The fetch may have taken seconds — a gesture may have STARTED meanwhile, and
     // committing now would replace the DOM under the drag. Defer to the retry timer.
     if (uiBusy()) {
-      livePending = true
+      isLivePending = true
 
       return false
     }
@@ -86,24 +86,24 @@ async function refreshOne<TResponse>(
     // line one failed fetch left the tab stale until the next SSE event or a tab focus, and
     // a config edit produces exactly ONE `data` event. Hence: mark it pending and let the
     // timer come back for it.
-    livePending = true
+    isLivePending = true
 
     return false
   }
 }
 
 export async function liveRefresh({
-  force = false,
+  force: isForced = false,
 }: {
   force?: boolean
 } = {}) {
   if (uiBusy()) {
-    livePending = true
+    isLivePending = true
 
     return
   }
 
-  livePending = false
+  isLivePending = false
 
   // `force` is the other half of the conditional-GET story: Kavita has no webhook, so
   // marking a chapter read there never bumps the ETag. Tab-focus and an explicit refresh
@@ -113,14 +113,14 @@ export async function liveRefresh({
     // both are in flight at once, so this is documentation, not scheduling.
     refreshOne<SetsResponse>(
       () =>
-        force
+        isForced
           ? api<SetsResponse>("GET", "/api/sets")
           : apiConditional<SetsResponse>("/api/sets"),
       (reg) => setState({ reg }),
     ),
     refreshOne<QueuesResponse>(
       () =>
-        force
+        isForced
           ? api<QueuesResponse>("GET", "/api/queues")
           : apiConditional<QueuesResponse>("/api/queues"),
       (data) => setState({ data }),
@@ -130,7 +130,7 @@ export async function liveRefresh({
     refreshPeople(),
   ])
 
-  if (!committed[2]) livePending = true
+  if (!committed[2]) isLivePending = true
   if (committed.some(Boolean)) void refreshHistoryButtons()
 }
 
@@ -144,10 +144,13 @@ export async function liveRefresh({
  */
 async function resyncNow() {
   try {
-    const n = await api<NowState>("GET", "/api/now")
+    const nowState = await api<NowState>("GET", "/api/now")
 
     setState({
-      now: { now: n.now || null, set: n.set || null },
+      now: {
+        now: nowState.now || null,
+        set: nowState.set || null,
+      },
     })
   } catch {
     /* the next `now` SSE event fills it in */
@@ -223,7 +226,7 @@ export function startLiveUpdates() {
     )
       return
 
-    const s = st as {
+    const playStatus = st as {
       error?: string
       awaiting?: string
       playback?: {
@@ -234,29 +237,29 @@ export function startLiveUpdates() {
       now?: { title?: string; show?: string }
     }
 
-    if (s.error) {
-      setStatus(`Play: ${s.error}`, "err")
+    if (playStatus.error) {
+      setStatus(`Play: ${playStatus.error}`, "err")
 
       return
     }
 
-    if (s.awaiting === "profile") {
+    if (playStatus.awaiting === "profile") {
       setStatus("Waiting for a profile on the Shield…")
 
       return
     }
 
-    if (s.playback) {
-      const dev = s.playback.client || "device"
+    if (playStatus.playback) {
+      const dev = playStatus.playback.client || "device"
 
-      if (s.playback.played) {
+      if (playStatus.playback.played) {
         setStatus(
-          `Playing ${s.now?.title || s.now?.show || ""} on ${dev}`,
+          `Playing ${playStatus.now?.title || playStatus.now?.show || ""} on ${dev}`,
           "ok",
         )
       } else {
         setStatus(
-          `Play failed on ${dev}: ${s.playback.error || "unknown"}`,
+          `Play failed on ${dev}: ${playStatus.playback.error || "unknown"}`,
           "err",
         )
       }
@@ -276,7 +279,7 @@ export function startLiveUpdates() {
   document.addEventListener("visibilitychange", onVisible)
 
   const timer = setInterval(() => {
-    if (livePending && !uiBusy()) void liveRefresh()
+    if (isLivePending && !uiBusy()) void liveRefresh()
   }, 2000)
 
   return () => {

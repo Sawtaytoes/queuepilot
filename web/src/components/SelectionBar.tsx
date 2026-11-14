@@ -74,11 +74,12 @@ export function SelectionBar({
   const [batchStop, setBatchStop] = useState(KEEP)
 
   const picksSet = currentSet
-    ? reg?.sets.find((x) => x.id === currentSet)
+    ? reg?.sets.find((set) => set.id === currentSet)
     : undefined
   const chapterDefault =
     (currentSet
-      ? reg?.sets.find((s) => s.id === currentSet)?.episodes
+      ? reg?.sets.find((set) => set.id === currentSet)
+          ?.episodes
       : null) ?? 1
   /**
    * WHERE A SELECTION CAN MOVE: any other Picks queue.
@@ -136,10 +137,12 @@ export function SelectionBar({
     body: Record<string, unknown>,
     verb: string,
   ) => {
-    const items = [...selected.values()].map((s) => ({
-      key: s.key,
-      set: s.fromSet,
-    }))
+    const items = [...selected.values()].map(
+      (selectedItem) => ({
+        key: selectedItem.key,
+        set: selectedItem.fromSet,
+      }),
+    )
 
     setStatus(`${verb}…`)
 
@@ -176,9 +179,9 @@ export function SelectionBar({
           body.placement,
         )
       }
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `${verb} failed: ${(e as Error).message}`,
+        `${verb} failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -197,10 +200,10 @@ export function SelectionBar({
         <Button
           appearance="outline"
           id="selplay"
-          onClick={(e) =>
+          onClick={(event) =>
             openPlayMenu({
               anchor:
-                e.currentTarget.getBoundingClientRect(),
+                event.currentTarget.getBoundingClientRect(),
               only: only.key,
               onlyLabel: only.title,
               setId: only.fromSet,
@@ -389,9 +392,9 @@ export function SelectionBar({
             )
             clearSelection()
             await load()
-          } catch (e) {
+          } catch (error) {
             setStatus(
-              `Move failed: ${(e as Error).message}`,
+              `Move failed: ${(error as Error).message}`,
               "err",
             )
           }
@@ -413,9 +416,9 @@ export function SelectionBar({
             })
             clearSelection()
             await load()
-          } catch (e) {
+          } catch (error) {
             setStatus(
-              `Remove failed: ${(e as Error).message}`,
+              `Remove failed: ${(error as Error).message}`,
               "err",
             )
           }

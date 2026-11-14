@@ -181,13 +181,13 @@ export function useGridDrag(
       busy.gridPress = false
     }
 
-    function onMove(e: PointerEvent) {
+    function onMove(event: PointerEvent) {
       if (!press) return
 
       const isFar =
         Math.hypot(
-          e.clientX - press.x,
-          e.clientY - press.y,
+          event.clientX - press.x,
+          event.clientY - press.y,
         ) > DRAG_THRESHOLD
 
       if (!press.isDragging) {
@@ -209,7 +209,7 @@ export function useGridDrag(
       // mutating the DOM or saving an unchanged order when the pointer wanders by one pixel.
       if (!press.hasMoved && !isFar) return
 
-      e.preventDefault()
+      event.preventDefault()
 
       // COALESCE to one reposition per animation frame. `pointermove` fires far faster than
       // the screen repaints — a deliberate half-second drag across the Cards grid measured 20
@@ -218,7 +218,7 @@ export function useGridDrag(
       // drawn, so the handler now only records where the pointer IS and the work happens once
       // per frame.
       press.hasMoved = true
-      press.at = { x: e.clientX, y: e.clientY }
+      press.at = { x: event.clientX, y: event.clientY }
       queueReposition()
     }
 
@@ -307,16 +307,16 @@ export function useGridDrag(
       let isAfter = false
 
       for (const slot of slots) {
-        const r = slot.rect
-        const cx = r.left + r.width / 2
-        const cy = r.top + r.height / 2
-        const d = Math.hypot(
-          (px - cx) / Math.max(1, r.width),
-          (py - cy) / Math.max(1, r.height),
+        const rect = slot.rect
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        const distance = Math.hypot(
+          (px - cx) / Math.max(1, rect.width),
+          (py - cy) / Math.max(1, rect.height),
         )
 
-        if (d < bestDist) {
-          bestDist = d
+        if (distance < bestDist) {
+          bestDist = distance
           best = slot
           // Past the slot's own centre horizontally means the tile belongs AFTER it.
           isAfter = px > cx
@@ -335,14 +335,16 @@ export function useGridDrag(
       const ref = !best.tile
         ? null
         : (() => {
-            const i = others.indexOf(best.tile!)
+            const index = others.indexOf(best.tile!)
 
             // The winning tile IS the dragged one (it is excluded from `others`, so the
             // index misses): the card is already where the pointer is.
-            if (i < 0) return undefined
+            if (index < 0) return undefined
 
             return (
-              (isAfter ? others[i + 1] : others[i]) ?? null
+              (isAfter
+                ? others[index + 1]
+                : others[index]) ?? null
             )
           })()
 
@@ -382,17 +384,20 @@ export function useGridDrag(
 
       const { bottom, top } =
         scrollRegionBounds(scrollRegion)
-      const y = press.at.y
+      const pointerY = press.at.y
       let delta = 0
 
-      if (y < top + AUTO_SCROLL_EDGE)
+      if (pointerY < top + AUTO_SCROLL_EDGE)
         delta =
           -AUTO_SCROLL_MAX_STEP *
-          (1 - Math.max(0, y - top) / AUTO_SCROLL_EDGE)
-      else if (y > bottom - AUTO_SCROLL_EDGE)
+          (1 -
+            Math.max(0, pointerY - top) / AUTO_SCROLL_EDGE)
+      else if (pointerY > bottom - AUTO_SCROLL_EDGE)
         delta =
           AUTO_SCROLL_MAX_STEP *
-          (1 - Math.max(0, bottom - y) / AUTO_SCROLL_EDGE)
+          (1 -
+            Math.max(0, bottom - pointerY) /
+              AUTO_SCROLL_EDGE)
 
       if (!delta) return false
 
@@ -414,12 +419,12 @@ export function useGridDrag(
         if (!press) return
 
         press.frame = undefined
-        const didScroll = autoScroll()
+        const hasScrolled = autoScroll()
         reposition()
 
         // Continue without another pointermove. The finger is stationary at the viewport
         // edge while the page and its newly reachable destinations move underneath it.
-        if (didScroll) queueReposition()
+        if (hasScrolled) queueReposition()
       })
     }
 
@@ -523,15 +528,15 @@ export function useGridDrag(
         return
       }
 
-      const q = getState().data?.sets[set]
+      const queueSet = getState().data?.sets[set]
 
-      if (q) {
+      if (queueSet) {
         const byKey = new Map(
-          q.items.map((it) => [it.key, it]),
+          queueSet.items.map((it) => [it.key, it]),
         )
 
-        q.items = keys
-          .map((k) => byKey.get(k)!)
+        queueSet.items = keys
+          .map((key) => byKey.get(key)!)
           .filter(Boolean)
 
         const hit = byKey.get(key)
@@ -576,9 +581,9 @@ export function useGridDrag(
             : "Order saved",
           "ok",
         )
-      } catch (e) {
+      } catch (error) {
         setStatus(
-          `${isPromote ? "Move" : "Reorder"} failed: ${(e as Error).message}`,
+          `${isPromote ? "Move" : "Reorder"} failed: ${(error as Error).message}`,
           "err",
         )
         await load()
@@ -591,12 +596,12 @@ export function useGridDrag(
     // so dragging BETWEEN ROWS (vertical motion) was stolen by the scroller and, on
     // a touch-only device like a Windows tablet, every drag just scrolled. The Home
     // shelves already carry this exact listener; the grid needs it too.
-    const onTouchMove = (e: TouchEvent) => {
-      if (press?.isDragging) e.preventDefault()
+    const onTouchMove = (event: TouchEvent) => {
+      if (press?.isDragging) event.preventDefault()
     }
 
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement
 
       if (
         target.closest(".tilechrome") ||
@@ -628,7 +633,7 @@ export function useGridDrag(
       // on the poster opened a press that its own `pointerup` then settled as a TAP — which
       // opens the entry sheet. The tile menu the right-click had just opened went under it,
       // and the one gesture did two things. Touch and pen both report button 0.
-      if (e.button !== 0) return
+      if (event.button !== 0) return
 
       const card = target.closest<HTMLElement>("li.tile")
 
@@ -639,7 +644,8 @@ export function useGridDrag(
       // Mouse/pen: suppress the native image drag + text selection so our gesture
       // owns the press. Touch must NOT preventDefault here — the browser needs it
       // to pan/scroll until we arm.
-      if (e.pointerType !== "touch") e.preventDefault()
+      if (event.pointerType !== "touch")
+        event.preventDefault()
 
       press = {
         card,
@@ -647,14 +653,14 @@ export function useGridDrag(
         isDragging: false,
         nextSibling: card.nextSibling,
         parent: card.parentElement,
-        pointerId: e.pointerId,
-        type: e.pointerType,
-        x: e.clientX,
-        y: e.clientY,
+        pointerId: event.pointerId,
+        type: event.pointerType,
+        x: event.clientX,
+        y: event.clientY,
       }
       busy.gridPress = true
 
-      if (e.pointerType === "touch") {
+      if (event.pointerType === "touch") {
         // A touch hold has ONE meaning on the poster: pick it up. Starting at the arm point
         // removes the narrow interval between "not armed yet" and the later contextmenu.
         // Tap still opens the entry sheet because it releases before this timer. The entry
@@ -677,11 +683,14 @@ export function useGridDrag(
     // Kill any native drag that starts inside the grid (poster images are draggable
     // by default; a native image drag pre-empts the pointer-drag with a
     // pointercancel).
-    const onDragStart = (e: Event) => e.preventDefault()
-    const onClickCapture = (e: MouseEvent) => {
-      if (selectionClickCard?.contains(e.target as Node)) {
-        e.preventDefault()
-        e.stopPropagation()
+    const onDragStart = (event: Event) =>
+      event.preventDefault()
+    const onClickCapture = (event: MouseEvent) => {
+      if (
+        selectionClickCard?.contains(event.target as Node)
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
       }
 
       selectionClickCard = null
@@ -698,12 +707,12 @@ export function useGridDrag(
     // The `preventDefault` is unchanged and still only about the poster: the browser's own
     // menu (Save image, Copy image) must not pop over it. A right-click elsewhere on the
     // tile opens OUR menu.
-    const onContextMenu = (e: MouseEvent) => {
+    const onContextMenu = (event: MouseEvent) => {
       // A browser can synthesize `contextmenu` later in the same touch hold. Once the tile
       // is armed, suppress that second interpretation and keep the drag alive.
       if (press?.type === "touch" && press.isDragging) {
-        e.preventDefault()
-        e.stopPropagation()
+        event.preventDefault()
+        event.stopPropagation()
 
         return
       }
@@ -723,8 +732,8 @@ export function useGridDrag(
         endPress()
       }
 
-      if ((e.target as HTMLElement).closest(".thumb"))
-        e.preventDefault()
+      if ((event.target as HTMLElement).closest(".thumb"))
+        event.preventDefault()
     }
 
     grid.addEventListener("pointerdown", onPointerDown)

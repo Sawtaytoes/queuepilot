@@ -48,16 +48,16 @@ export function CheckboxGroup<T extends string | number>({
 }) {
   return (
     <div className="libs" id={id}>
-      {options.map((o) => (
+      {options.map((option) => (
         <Checkbox
-          isChecked={checked.includes(o.value)}
-          key={`${seedKey}:${o.value}`}
-          label={o.label}
+          isChecked={checked.includes(option.value)}
+          key={`${seedKey}:${option.value}`}
+          label={option.label}
           onChange={(isChecked) =>
-            onToggle(o.value, isChecked)
+            onToggle(option.value, isChecked)
           }
           size="sm"
-          value={String(o.value)}
+          value={String(option.value)}
         />
       ))}
     </div>

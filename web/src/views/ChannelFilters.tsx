@@ -19,7 +19,9 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { BlocklistRow } from "./BlocklistRow"
 import { patchActiveBinding } from "./ChannelPool"
+import { ExcludeRow } from "./ExcludeRow"
 
 /**
  * The channel filter panel. Libraries + audio are CHANNEL-level; the ratings and
@@ -100,21 +102,27 @@ export function ChannelFilters({
 
   const ratingOptions = [
     ...new Set([...known, ...stored]),
-  ].map((r) => ({
-    label: r,
-    value: r,
+  ].map((rating) => ({
+    label: rating,
+    value: rating,
   }))
 
   const showLibs = (reg?.libraries ?? []).filter(
-    (l) => l.video && l.type === "show",
+    (library) => library.video && library.type === "show",
   )
   // Both groups are Plex movie-type sections feeding the same `item_sections` —
   // split in the UI the way Plex does: real Movie libraries vs "Other Videos".
   const movieLibs = (reg?.libraries ?? []).filter(
-    (l) => l.video && l.type === "movie" && !l.other,
+    (library) =>
+      library.video &&
+      library.type === "movie" &&
+      !library.other,
   )
   const otherLibs = (reg?.libraries ?? []).filter(
-    (l) => l.video && l.type === "movie" && l.other,
+    (library) =>
+      library.video &&
+      library.type === "movie" &&
+      library.other,
   )
 
   const resync = async () => {
@@ -155,9 +163,9 @@ export function ChannelFilters({
       )
       await resync()
       setStatus("Filters saved", "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Save failed: ${(e as Error).message}`,
+        `Save failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -178,11 +186,13 @@ export function ChannelFilters({
           <CheckboxGroup
             checked={ratings}
             id="ch-ratings"
-            onToggle={(v, isChecked) =>
+            onToggle={(rating, isChecked) =>
               setRatings((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, rating]
+                  : prev.filter(
+                      (existing) => existing !== rating,
+                    ),
               )
             }
             options={ratingOptions}
@@ -195,16 +205,18 @@ export function ChannelFilters({
           <CheckboxGroup
             checked={showSections}
             id="ch-showlibs"
-            onToggle={(v, isChecked) =>
+            onToggle={(sectionId, isChecked) =>
               setShowSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (existing) => existing !== sectionId,
+                    ),
               )
             }
-            options={showLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
+            options={showLibs.map((showLibrary) => ({
+              label: showLibrary.title,
+              value: showLibrary.id,
             }))}
             seedKey={profileKey}
           />
@@ -221,16 +233,18 @@ export function ChannelFilters({
           <CheckboxGroup
             checked={itemSections}
             id="ch-movielibs"
-            onToggle={(v, isChecked) =>
+            onToggle={(sectionId, isChecked) =>
               setItemSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (existing) => existing !== sectionId,
+                    ),
               )
             }
-            options={movieLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
+            options={movieLibs.map((movieLibrary) => ({
+              label: movieLibrary.title,
+              value: movieLibrary.id,
             }))}
             seedKey={profileKey}
           />
@@ -244,16 +258,18 @@ export function ChannelFilters({
           <CheckboxGroup
             checked={itemSections}
             id="ch-otherlibs"
-            onToggle={(v, isChecked) =>
+            onToggle={(sectionId, isChecked) =>
               setItemSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (existing) => existing !== sectionId,
+                    ),
               )
             }
-            options={otherLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
+            options={otherLibs.map((otherLibrary) => ({
+              label: otherLibrary.title,
+              value: otherLibrary.id,
             }))}
             seedKey={profileKey}
           />
@@ -284,7 +300,7 @@ export function ChannelFilters({
           <legend>Blocked</legend>
           <div className="add chmadd">
             <SearchDropdown<SearchHit>
-              doSearch={async (q) => {
+              doSearch={async (query) => {
                 // Scoped to THIS channel's libraries + collections — you exclude from
                 // the channel's own pool, so there is no point offering titles it
                 // never draws from.
@@ -292,7 +308,7 @@ export function ChannelFilters({
                   results: SearchHit[]
                 }>(
                   "GET",
-                  `/api/search?set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
+                  `/api/search?set=${channel.id}&q=${encodeURIComponent(query)}&collections=1`,
                 )
 
                 return results
@@ -385,10 +401,10 @@ export function ChannelFilters({
                         `Excluded “${hit.title}”`,
                         "ok",
                       )
-                    } catch (e) {
+                    } catch (error) {
                       setStatus(
                         "Exclude failed: " +
-                          (e as Error).message,
+                          (error as Error).message,
                         "err",
                       )
                     }
@@ -417,7 +433,7 @@ export function ChannelFilters({
           <legend>Excluded from rewatch</legend>
           <div className="add chmadd">
             <SearchDropdown<SearchHit>
-              doSearch={async (q) => {
+              doSearch={async (query) => {
                 // A rewatch exclusion addresses the playable MOVIE leaf. Limit this
                 // picker to movie hits because a show-library search result names the
                 // parent show, while the rewatch engine addresses its one episode.
@@ -425,7 +441,7 @@ export function ChannelFilters({
                   results: SearchHit[]
                 }>(
                   "GET",
-                  `/api/search?set=${channel.id}&q=${encodeURIComponent(q)}`,
+                  `/api/search?set=${channel.id}&q=${encodeURIComponent(query)}`,
                 )
 
                 return results.filter(
@@ -488,9 +504,9 @@ export function ChannelFilters({
                       `Excluded “${hit.title}”`,
                       "ok",
                     )
-                  } catch (e) {
+                  } catch (error) {
                     setStatus(
-                      `Exclude failed: ${(e as Error).message}`,
+                      `Exclude failed: ${(error as Error).message}`,
                       "err",
                     )
                   }
@@ -520,7 +536,9 @@ export function ChannelFilters({
           <legend>Audio language</legend>
           <input
             id="ch-audio"
-            onChange={(e) => setAudio(e.target.value)}
+            onChange={(event) =>
+              setAudio(event.target.value)
+            }
             placeholder="e.g. jpn, eng — blank = default"
             type="text"
             value={audio}
@@ -542,150 +560,5 @@ export function ChannelFilters({
         Save filters
       </Button>
     </aside>
-  )
-}
-
-/** A blocklist entry is a ratingKey (one show/item) OR "Collection: <name>" (the
- * whole collection — the pool scan expands it to every member's ratingKey). */
-function BlocklistRow({
-  channel,
-  entry,
-  onChanged,
-}: {
-  channel: RegistrySet
-  entry: string
-  onChanged: () => Promise<void>
-}) {
-  const collection = /^\s*collection:\s*(.+)$/i.exec(
-    String(entry),
-  )
-  const [title, setTitle] = useState(
-    collection ? collection[1]! : `#${entry}`,
-  )
-
-  useEffect(() => {
-    if (collection) return
-
-    let isStale = false
-
-    api<{ title: string }>("GET", `/api/item/${entry}`)
-      .then((md) => {
-        if (!isStale) setTitle(md.title)
-      })
-      .catch(() => {})
-
-    return () => {
-      isStale = true
-    }
-  }, [collection, entry])
-
-  return (
-    <li>
-      <span>
-        {title}
-        {collection ? (
-          <>
-            {" "}
-            <span className="collbadge">Collection</span>
-          </>
-        ) : null}
-      </span>
-      {/* `#ch-block button` / `#ch-movieexcludes button` painted the same small outline
-          control in two places. Both are ELEMENT selectors, so they would have kept matching
-          a Charcuterie `Button` and outranked it — they are deleted, and the look is
-          `appearance="outline"` at `size="sm"`. */}
-      <Button
-        appearance="outline"
-        intent="neutral"
-        onClick={async () => {
-          setStatus("Unblocking…")
-
-          try {
-            await api("PATCH", `/api/sets/${channel.id}`, {
-              blocklist: channel.blocklist.filter(
-                (b) => b !== entry,
-              ),
-            })
-            await onChanged()
-            setStatus("Unblocked", "ok")
-          } catch (e) {
-            setStatus(
-              `Unblock failed: ${(e as Error).message}`,
-              "err",
-            )
-          }
-        }}
-        size="sm"
-      >
-        Unblock
-      </Button>
-    </li>
-  )
-}
-
-/** The movies-channel rewatch excludes — the movie analogue of the shows blocklist,
- * per binding since PR 4. */
-function ExcludeRow({
-  channel,
-  currentProfile,
-  excludes,
-  onChanged,
-  ratingKey,
-}: {
-  channel: RegistrySet
-  currentProfile: string | null
-  excludes: string[]
-  ratingKey: string
-  onChanged: () => Promise<void>
-}) {
-  const [title, setTitle] = useState(`#${ratingKey}`)
-
-  useEffect(() => {
-    let isStale = false
-
-    api<{ title: string }>("GET", `/api/item/${ratingKey}`)
-      .then((md) => {
-        if (!isStale) setTitle(md.title)
-      })
-      .catch(() => {})
-
-    return () => {
-      isStale = true
-    }
-  }, [ratingKey])
-
-  return (
-    <li>
-      <span>{title}</span>
-      <Button
-        appearance="outline"
-        intent="neutral"
-        onClick={async () => {
-          setStatus("Un-excluding…")
-
-          try {
-            await patchActiveBinding(
-              channel,
-              currentProfile,
-              {
-                movie_excludes: excludes.filter(
-                  (x) => x !== ratingKey,
-                ),
-              },
-            )
-            await onChanged()
-            setStatus("Un-excluded", "ok")
-          } catch (e) {
-            setStatus(
-              `Un-exclude failed: ${(e as Error).message}`,
-              "err",
-            )
-          }
-        }}
-        size="sm"
-      >
-        Un-exclude
-      </Button>
-    </li>
   )
 }

@@ -48,18 +48,18 @@ let state: UiState = {
 const listeners = new Set<() => void>()
 
 const emit = () => {
-  for (const l of listeners) l()
+  for (const listener of listeners) listener()
 }
 
 export const getUi = () => state
 
 export const useUi = () =>
   useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
+    (listener) => {
+      listeners.add(listener)
 
       return () => {
-        listeners.delete(l)
+        listeners.delete(listener)
       }
     },
     () => state,

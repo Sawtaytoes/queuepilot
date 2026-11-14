@@ -81,10 +81,18 @@ const waitReady = async (url: string, ms = 30000) => {
 // be a timer wearing a different hat, and it is the one regression nothing else could see: a
 // `setInterval` that re-fetches looks exactly like a page that works.
 {
-  const source = await fs.readFile(
-    `${ROOT}/web/src/views/CalendarView.tsx`,
-    "utf8",
-  )
+  // `CalendarRow.tsx` is the view's row, split out of `CalendarView.tsx` so each file
+  // declares one component. The ban covers both.
+  const source = (
+    await Promise.all(
+      ["CalendarView.tsx", "CalendarRow.tsx"].map((file) =>
+        fs.readFile(
+          `${ROOT}/web/src/views/${file}`,
+          "utf8",
+        ),
+      ),
+    )
+  ).join("\n")
   // The CALL, not the word: this file's own header says "there is no `setInterval`", and a
   // grep that cannot tell a ban from its explanation is a gate that fails on its own comment.
   for (const banned of [

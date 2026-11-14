@@ -87,7 +87,9 @@ const withPeople = (
 
 describe("the activity tiles", () => {
   test("are the settled six, in the settled order", () => {
-    expect(ACTIVITIES.map((a) => a.id)).toEqual([
+    expect(
+      ACTIVITIES.map((activity) => activity.id),
+    ).toEqual([
       "video-games",
       "board-games",
       "movies",
@@ -102,9 +104,9 @@ describe("the activity tiles", () => {
   })
 
   test("there is no Retro Games tile — MiSTer is Video Games", () => {
-    expect(ACTIVITIES.map((a) => a.label)).not.toContain(
-      "Retro Games",
-    )
+    expect(
+      ACTIVITIES.map((activity) => activity.label),
+    ).not.toContain("Retro Games")
     // The MiSTer half of the rule, asked of the routing map rather than of a provider
     // kind: everything under the `video-games` queue activity — Steam, MiSTer and the
     // three launchers that are not built — lands on exactly ONE tile.
@@ -716,7 +718,9 @@ describe("queuesForTonight", () => {
 
   test("narrows to the chosen activity", () => {
     expect(
-      queuesForTonight(all, "shows", []).map((q) => q.id),
+      queuesForTonight(all, "shows", []).map(
+        (queue) => queue.id,
+      ),
     ).toEqual(["shows-1"])
   })
 
@@ -731,7 +735,7 @@ describe("queuesForTonight", () => {
       queuesForTonight(all, "surprise", [
         "ada",
         "grace",
-      ]).map((q) => q.id),
+      ]).map((queue) => queue.id),
     ).toEqual(["shows-1"])
   })
 })
@@ -817,10 +821,9 @@ describe("tonightQueues — the registry projection", () => {
     )
 
     expect(projected?.hasRoster).toBe(true)
-    expect(projected?.members.map((m) => m.label)).toEqual([
-      "Ada",
-      "Kids",
-    ])
+    expect(
+      projected?.members.map((member) => member.label),
+    ).toEqual(["Ada", "Kids"])
     // The group is ONE member with a count, never two people.
     expect(projected?.members[1]?.minPresent).toBe(1)
     expect(projected?.members[1]?.people).toEqual([
@@ -909,7 +912,7 @@ describe("rosterOrder", () => {
         { displayName: "Linus", id: "linus", position: 2 },
         { displayName: "Ada", id: "ada", position: 0 },
         { displayName: "Grace", id: "grace", position: 1 },
-      ]).map((p) => p.displayName),
+      ]).map((person) => person.displayName),
     ).toEqual(["Ada", "Grace", "Linus"])
   })
 })

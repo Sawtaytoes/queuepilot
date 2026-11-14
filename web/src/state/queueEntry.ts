@@ -121,7 +121,7 @@ export async function skipQueueItem(
   if (!setId || !leaf) return
 
   const set = getState().reg?.sets.find(
-    (s) => s.id === setId,
+    (set) => set.id === setId,
   )
   const current = set?.skipped || []
   const label = skipTarget(item)
@@ -145,8 +145,11 @@ export async function skipQueueItem(
 
     setState({ data, reg })
     setStatus(`Skipped “${label}”`, "ok")
-  } catch (e) {
-    setStatus(`Skip failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(
+      `Skip failed: ${(error as Error).message}`,
+      "err",
+    )
   }
 }
 
@@ -210,7 +213,7 @@ export async function saveMemberSelection(
   if (!setId) return false
 
   const set = getState().reg?.sets.find(
-    (s) => s.id === setId,
+    (set) => set.id === setId,
   )
   const current = set?.skipped || []
   const next = mergeSkipped({ current, managed, skipped })
@@ -246,8 +249,11 @@ export async function saveMemberSelection(
     setStatus("Saved", "ok")
 
     return true
-  } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(
+      `Save failed: ${(error as Error).message}`,
+      "err",
+    )
 
     return false
   }
@@ -267,9 +273,9 @@ export async function saveCollectionOrder(
       { collection_order: collectionOrder },
     )
     return true
-  } catch (e) {
+  } catch (error) {
     setStatus(
-      `Order save failed: ${(e as Error).message}`,
+      `Order save failed: ${(error as Error).message}`,
       "err",
     )
     return false
@@ -283,7 +289,7 @@ export async function unskipItem(
   label: string,
 ) {
   const set = getState().reg?.sets.find(
-    (s) => s.id === setId,
+    (set) => set.id === setId,
   )
 
   setStatus(`Restoring ${label}…`)
@@ -299,9 +305,9 @@ export async function unskipItem(
 
     setState({ data, reg })
     setStatus(`Restored “${label}”`, "ok")
-  } catch (e) {
+  } catch (error) {
     setStatus(
-      `Restore failed: ${(e as Error).message}`,
+      `Restore failed: ${(error as Error).message}`,
       "err",
     )
   }
@@ -373,7 +379,7 @@ const defaultLaneOf = (
 
   const state = getState()
   const set =
-    state.reg?.sets.find((s) => s.id === setId) ??
+    state.reg?.sets.find((set) => set.id === setId) ??
     state.data?.sets[setId]
 
   return isRandomOrder(set) ? "random" : "priority"
@@ -457,9 +463,9 @@ export async function setEntryLane(
         : "Plays next",
       "ok",
     )
-  } catch (e) {
+  } catch (error) {
     setStatus(
-      `${isMove ? "Move" : "Reorder"} failed: ${(e as Error).message}`,
+      `${isMove ? "Move" : "Reorder"} failed: ${(error as Error).message}`,
       "err",
     )
     refreshData()
