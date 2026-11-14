@@ -40,7 +40,7 @@ import { pathToFileURL } from 'node:url';
 import { startBoardGameServer, stopBoardGameServer } from './board-game-play-harness.js';
 import { startFixtureServer } from './fixture-server.js';
 import { chromium, type Browser, type Page, type Request } from './playwright.js';
-import { chooseSharedMemory, readAvailableSharedMemory } from './sharedMemory.js';
+import { chooseVrtSharedMemory } from './sharedMemory.js';
 import { killServer, REPO_ROOT } from './stubs/server-process.mjs';
 import { startTonightServer, stopTonightServer } from './tonight-harness.js';
 
@@ -221,9 +221,7 @@ await fs.mkdir(OUT, { recursive: true });
 const stops: (() => void)[] = [];
 // Keep Chromium's shared memory in RAM when the runner's `/dev/shm` has room (see
 // `sharedMemory.ts`); otherwise Playwright's default writes it to temp files on disk.
-const sharedMemory = chooseSharedMemory(await readAvailableSharedMemory());
-console.log(sharedMemory.message);
-const browser = await chromium.launch({ ignoreDefaultArgs: sharedMemory.ignoreDefaultArgs });
+const browser = await chromium.launch({ ignoreDefaultArgs: await chooseVrtSharedMemory() });
 
 try {
   const landing = await startFixtureServer(LANDING_PORT, {

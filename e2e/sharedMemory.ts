@@ -6,54 +6,39 @@
 // rendered frame and resource buffer moves through those files. On the self-hosted VRT runner,
 // `/tmp` is the container's overlay on a ZFS pool, so the capture wrote its frames to disk.
 //
-// The runner now has a 2 GiB tmpfs at `/dev/shm`. When it has room, the capture drops the flag
-// and Chromium keeps its shared memory in RAM. The pixels do not change: shared memory carries
-// the same buffers either way. This is the same rule, threshold, and log line as Charcuterie's
-// shared capture (`packages/ci/src/vrt/sharedMemory.js` in `Sawtaytoes/charcuterie`).
-import { statfs } from 'node:fs/promises';
+// The runner has a 2 GiB tmpfs at `/dev/shm`. In CI the shared `vrt` workflow puts its tools at
+// `$VRT_TOOLS`; their `sharedMemory.js` (Charcuterie `packages/ci/src/vrt/sharedMemory.js`)
+// drops the flag when `/dev/shm` has at least 512 MiB free and says which one it chose. The
+// pixels do not change: shared memory carries the same buffers either way. Asking that module,
+// rather than copying its rule, keeps one threshold and one log line for every capture. Outside
+// CI, or with tools that lack the module, Playwright's default stays.
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-export const SHARED_MEMORY_PATH = '/dev/shm';
-
-// 512 MiB. Docker's 64 MiB default is the case the Playwright flag exists for.
-export const MINIMUM_SHARED_MEMORY_BYTES = 512 * 1024 * 1024;
-
-const DISABLE_DEV_SHM_USAGE = '--disable-dev-shm-usage';
-
-export interface SharedMemoryChoice {
+interface SharedMemoryChoice {
   ignoreDefaultArgs: string[];
-  isInMemory: boolean;
   message: string;
 }
 
-export const chooseSharedMemory = (availableBytes: number | null): SharedMemoryChoice => {
-  const mebibytes = availableBytes === null ? null : Math.floor(availableBytes / (1024 * 1024));
+interface SharedMemoryModule {
+  chooseSharedMemory: (availableBytes: number | null) => SharedMemoryChoice;
+  readAvailableSharedMemory: () => Promise<number | null>;
+}
 
-  if (availableBytes !== null && availableBytes >= MINIMUM_SHARED_MEMORY_BYTES) {
-    return {
-      ignoreDefaultArgs: [DISABLE_DEV_SHM_USAGE],
-      isInMemory: true,
-      message: `[vrt] Chromium shared memory: ${SHARED_MEMORY_PATH} (${mebibytes} MiB free).`,
-    };
-  }
+/** The `ignoreDefaultArgs` for `chromium.launch`. */
+export const chooseVrtSharedMemory = async (): Promise<string[]> => {
+  const tools = process.env.VRT_TOOLS;
+  if (!tools) return [];
 
-  return {
-    ignoreDefaultArgs: [],
-    isInMemory: false,
-    message:
-      `[vrt] Chromium shared memory: temp files, because ${SHARED_MEMORY_PATH} ` +
-      (mebibytes === null ? 'could not be read.' : `has only ${mebibytes} MiB free.`) +
-      ` Give the runner a /dev/shm of at least ${MINIMUM_SHARED_MEMORY_BYTES / (1024 * 1024)} MiB` +
-      ' so the capture does not write its frames to disk.',
-  };
-};
-
-export const readAvailableSharedMemory = async (
-  path: string = SHARED_MEMORY_PATH,
-): Promise<number | null> => {
+  let sharedMemory: SharedMemoryModule;
   try {
-    const stats = await statfs(path);
-    return stats.bavail * stats.bsize;
+    sharedMemory = (await import(pathToFileURL(join(tools, 'sharedMemory.js')).href)) as SharedMemoryModule;
   } catch {
-    return null;
+    console.log('[vrt] Chromium shared memory: temp files, because the shared tools have no sharedMemory.js.');
+    return [];
   }
+
+  const choice = sharedMemory.chooseSharedMemory(await sharedMemory.readAvailableSharedMemory());
+  console.log(choice.message);
+  return choice.ignoreDefaultArgs;
 };
