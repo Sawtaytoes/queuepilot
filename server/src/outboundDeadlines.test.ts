@@ -112,6 +112,19 @@ describe("TLS", () => {
     )
   })
 
+  test("the cast sidecar checks the Plex certificate", () => {
+    const sidecar = readFileSync(
+      new URL("../../cast_sidecar/service.py", import.meta.url),
+      "utf8",
+    )
+    const code = sidecar
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")
+    expect(code).not.toMatch(/verify\s*=\s*False/)
+    expect(code).not.toMatch(/CERT_NONE|_create_unverified_context/)
+  })
+
   test("poster reads from PLEX_URL go through the scoped Plex agent, with a deadline", async () => {
     const poster = await thumb("7")
     expect(poster?.contentType).toBe("image/png")
