@@ -182,8 +182,9 @@ export function disarm(): void {
 
 export const armedCount = (): number => ARMED.plan.size
 export const pendingCount = (): number =>
-  [...ARMED.plan.keys()].filter((k) => !ARMED.seen.has(k))
-    .length
+  [...ARMED.plan.keys()].filter(
+    (key) => !ARMED.seen.has(key),
+  ).length
 export const target = (): {
   device: Device | null
   setName: string | null
@@ -476,18 +477,18 @@ export function startWatch({
           }
           if (sec.action === "seek" && sec.ms != null) {
             try {
-              const r = await withCancellation(
+              const seekResult = await withCancellation(
                 () => isStopped || !isCurrent(),
                 () => seek(sec.ms!),
               )
               log(
-                r && r.seeked === false
-                  ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${r.error}`
+                seekResult && seekResult.seeked === false
+                  ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${seekResult.error}`
                   : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`,
               )
-            } catch (e) {
+            } catch (error) {
               log(
-                `[section] the start seek threw: ${errMessage(e)}`,
+                `[section] the start seek threw: ${errMessage(error)}`,
               )
             }
           } else if (sec.action === "next") {
@@ -497,18 +498,20 @@ export function startWatch({
               )
             } else {
               try {
-                const r = await withCancellation(
-                  () => isStopped || !isCurrent(),
-                  () => advance!(),
-                )
+                const advanceResult =
+                  await withCancellation(
+                    () => isStopped || !isCurrent(),
+                    () => advance!(),
+                  )
                 log(
-                  r && r.ok === false
-                    ? `[section] skipNext failed at the end mark: ${r.error}`
+                  advanceResult &&
+                    advanceResult.ok === false
+                    ? `[section] skipNext failed at the end mark: ${advanceResult.error}`
                     : `[section] rk=${sec.rk} stopped at its end mark; the lineup advances`,
                 )
-              } catch (e) {
+              } catch (error) {
                 log(
-                  `[section] skipNext threw: ${errMessage(e)}`,
+                  `[section] skipNext threw: ${errMessage(error)}`,
                 )
               }
             }
@@ -553,11 +556,11 @@ export function startWatch({
       // Log EVERY decision, not just the seeks: when this silently does nothing, the reason it
       // declined is the only thing worth having. One line per episode, not per read — `seen`
       // guarantees a given ratingKey is considered once.
-      const quiet =
+      const isQuiet =
         decision.reason === "already considered" ||
         decision.reason === "nothing playing"
       if (
-        !quiet &&
+        !isQuiet &&
         !(decision.retry && LOGGED.has(decision.rk ?? ""))
       ) {
         if (decision.retry) LOGGED.add(decision.rk ?? "")
@@ -571,17 +574,17 @@ export function startWatch({
       const ms = decision.ms
       if (ms == null) return
       try {
-        const r = await withCancellation(
+        const seekResult = await withCancellation(
           () => isStopped || !isCurrent(),
           () => seek(ms),
         )
         log(
-          r && r.seeked === false
-            ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${r.error}`
+          seekResult && seekResult.seeked === false
+            ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${seekResult.error}`
             : `[resume] resumed rk=${decision.rk} at ${Math.round(ms / 1000)}s via ${via} (it restarts at 0 otherwise)`,
         )
-      } catch (e) {
-        log(`[resume] seek threw: ${errMessage(e)}`)
+      } catch (error) {
+        log(`[resume] seek threw: ${errMessage(error)}`)
       }
     } finally {
       isReading = false
@@ -616,11 +619,11 @@ export function startWatch({
         lastPushedRk = ratingKey
         void read("push")
       })
-    } catch (e) {
+    } catch (error) {
       // No broker, no push. The poll is the whole trigger, exactly as before.
       UNSUBSCRIBE = null
       log(
-        `[resume] the now-playing wake-up is unavailable (${errMessage(e)}) — polling only`,
+        `[resume] the now-playing wake-up is unavailable (${errMessage(error)}) — polling only`,
       )
     }
   }

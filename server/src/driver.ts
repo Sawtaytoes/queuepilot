@@ -73,9 +73,12 @@ const ACCOUNT_ERROR =
   "'{label}' is for the '{profile}' profile, but the Shield played it as '{actual}'. " +
   "I stopped it. Pick the right profile on the TV and try again."
 
-const sleep = (s: number): Promise<void> =>
-  new Promise((r) => {
-    setTimeout(r, Math.max(0, Number(s) || 0) * 1000)
+const sleep = (seconds: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(
+      resolve,
+      Math.max(0, Number(seconds) || 0) * 1000,
+    )
   })
 
 // Explicit cancellation and sitting replacement both end an in-flight transition.
@@ -116,10 +119,10 @@ async function plexForeground(): Promise<boolean> {
 // device_on + plex_foreground, retried. Non-fatal: ensurePlexOpen never force-stops, and
 // a play still tries even if ADB can't confirm Plex came up (HA may have launched it).
 async function ensurePlex(attempts = 2): Promise<boolean> {
-  const n = Math.max(1, attempts)
-  for (let i = 0; i < n; i++) {
-    const ok = await Promise.resolve(adb.ensurePlexOpen())
-    if (ok) return true
+  const attemptCount = Math.max(1, attempts)
+  for (let attempt = 0; attempt < attemptCount; attempt++) {
+    const isOk = await Promise.resolve(adb.ensurePlexOpen())
+    if (isOk) return true
     await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
   }
   return false
@@ -319,7 +322,7 @@ async function driveProfile(
   }
 
   const attempts = Math.max(1, PLAYBACK_FSM_SWITCH_ATTEMPTS)
-  for (let i = 0; i < attempts; i++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     if (isCancelled(cancel)) return { cancelled: true }
     // adb.js: switchTo(target, cancel = null, knownCurrent = null) → [ok, detail].
     // Deliberately typed `unknown`: the tuple is what the real module returns, but this
@@ -333,26 +336,26 @@ async function driveProfile(
         cancel,
         profiles.LAST_SEEN.title,
       )
-    } catch (e) {
-      out = [false, errMessage(e)]
+    } catch (error) {
+      out = [false, errMessage(error)]
     }
     if (isCancelled(cancel)) return { cancelled: true }
-    let ok: boolean
+    let isOk: boolean
     let detail: unknown
     if (Array.isArray(out)) {
-      ;[ok, detail] = out as [boolean, unknown]
+      ;[isOk, detail] = out as [boolean, unknown]
     } else if (
       out &&
       typeof out === "object" &&
       "ok" in out
     ) {
-      ok = Boolean((out as { ok?: unknown }).ok)
+      isOk = Boolean((out as { ok?: unknown }).ok)
       detail = (out as { detail?: unknown }).detail
     } else {
-      ok = Boolean(out)
+      isOk = Boolean(out)
       detail = out
     }
-    if (ok) {
+    if (isOk) {
       console.log(
         `[driver] switched to '${required}': ${detail}`,
       )
@@ -378,7 +381,7 @@ async function driveProfile(
       return null
     }
     console.log(
-      `[driver] switch attempt ${i + 1}/${attempts} to '${required}' failed: ${detail}`,
+      `[driver] switch attempt ${attempt + 1}/${attempts} to '${required}' failed: ${detail}`,
     )
     await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
   }
@@ -416,7 +419,7 @@ async function drivePlay(
   const [host, port] = companionAddr(device)
   const attempts = Math.max(1, PLAYBACK_FSM_PLAY_ATTEMPTS)
   let result: PlaybackResult | null = null
-  for (let i = 0; i < attempts; i++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     if (isCancelled(cancel)) return { cancelled: true }
     // Verify plex_foreground + Companion readiness immediately BEFORE firing play.
     if (ADB_ENABLED && !(await plexForeground())) {
@@ -444,7 +447,7 @@ async function drivePlay(
     if (result && result.played) return result
     if (isConnRefused(result)) {
       console.log(
-        `[driver] play attempt ${i + 1}/${attempts} refused: ${result && result.error}; ` +
+        `[driver] play attempt ${attempt + 1}/${attempts} refused: ${result && result.error}; ` +
           "re-opening Plex and retrying",
       )
       if (ADB_ENABLED) await ensurePlex()
@@ -509,23 +512,25 @@ async function driveToPlayingOnDevice({
 
   // plex_foreground -> signed_in(required). Only when the set/card demands a profile.
   if (requiredProfile) {
-    const r = await driveProfile(
+    const profileResult = await driveProfile(
       requiredProfile,
       cancel,
       accountId,
       device,
     )
-    if (r != null) {
-      if (r.error === SWITCH_ERROR) {
+    if (profileResult != null) {
+      if (profileResult.error === SWITCH_ERROR) {
         const profile =
-          r._profile != null ? r._profile : requiredProfile
-        delete r._profile
-        r.error = SWITCH_ERROR.replace(
+          profileResult._profile != null
+            ? profileResult._profile
+            : requiredProfile
+        delete profileResult._profile
+        profileResult.error = SWITCH_ERROR.replace(
           "{label}",
           setLabel || setName || "",
         ).replace("{profile}", profile)
       }
-      return r
+      return profileResult
     }
   }
 
@@ -722,9 +727,9 @@ function recordGatedPush({
       ratingKeys,
       playQueueId,
     })
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[driver] could not log the gated push for '${setName}': ${errMessage(e)}`,
+      `[driver] could not log the gated push for '${setName}': ${errMessage(error)}`,
     )
   }
 }

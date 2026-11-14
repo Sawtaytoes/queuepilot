@@ -108,8 +108,8 @@ export function queuePlayAs(
 ): plex.HomeUser | null {
   if (cfg.requires_profile)
     return (
-      users.find((u) =>
-        [u.name, u.username].includes(
+      users.find((user) =>
+        [user.name, user.username].includes(
           cfg.requires_profile!,
         ),
       ) ?? null
@@ -117,8 +117,9 @@ export function queuePlayAs(
   const binding = routing.bindingFor(cfg)
   if (binding.user_uuid)
     return (
-      users.find((u) => u.uuid === binding.user_uuid) ??
-      null
+      users.find(
+        (user) => user.uuid === binding.user_uuid,
+      ) ?? null
     )
   if (
     binding.account_id != null &&
@@ -126,10 +127,11 @@ export function queuePlayAs(
   )
     return (
       users.find(
-        (u) => !u.admin && u.id === binding.account_id,
+        (user) =>
+          !user.admin && user.id === binding.account_id,
       ) ?? null
     )
-  return users.find((u) => u.admin) ?? null
+  return users.find((user) => user.admin) ?? null
 }
 
 /**

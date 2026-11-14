@@ -171,13 +171,13 @@ function conn(): DatabaseSync {
 // Prepared-statement cache — DatabaseSync.prepare is cheap but not free, and these run on the
 // request path.
 const stmts = new Map<string, StatementSync>()
-function q(sql: string): StatementSync {
-  let s = stmts.get(sql)
-  if (!s) {
-    s = conn().prepare(sql)
-    stmts.set(sql, s)
+function statementFor(sql: string): StatementSync {
+  let statement = stmts.get(sql)
+  if (!statement) {
+    statement = conn().prepare(sql)
+    stmts.set(sql, statement)
   }
-  return s
+  return statement
 }
 
 function openDb(): DatabaseSync {
@@ -204,8 +204,10 @@ function openDb(): DatabaseSync {
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
       )
       .all()
-    for (const t of tables)
-      opened.exec(`DROP TABLE IF EXISTS ${String(t.name)}`)
+    for (const table of tables)
+      opened.exec(
+        `DROP TABLE IF EXISTS ${String(table.name)}`,
+      )
     opened.exec(SCHEMA)
     opened
       .prepare("INSERT INTO meta (k, v) VALUES (?, ?)")
@@ -227,8 +229,8 @@ export async function init(): Promise<boolean> {
   try {
     openDb()
     return true
-  } catch (e) {
-    console.log(`[cache] disabled: ${errMessage(e)}`)
+  } catch (error) {
+    console.log(`[cache] disabled: ${errMessage(error)}`)
     db = null
     return false
   }
@@ -242,16 +244,16 @@ const ready = (): boolean => db != null
 // /api/queues. Read as a plain integer.
 export async function generation(): Promise<number> {
   if (!ready()) return 0
-  const row = q("SELECT v FROM meta WHERE k = ?").get(
-    "generation",
-  )
+  const row = statementFor(
+    "SELECT v FROM meta WHERE k = ?",
+  ).get("generation")
   return row ? Number(row.v) : 0
 }
 
 export async function bumpGeneration(): Promise<number> {
   if (!ready()) return 0
   const next = (await generation()) + 1
-  q(
+  statementFor(
     "INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
   ).run("generation", String(next))
   return next
@@ -272,7 +274,7 @@ export async function getLeaves<T = unknown>(
   account: string = "",
 ): Promise<T | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT * FROM leaves WHERE show_rk = ? AND account = ?",
   ).get(String(showRk), String(account || ""))
   if (!row) return null
@@ -307,7 +309,7 @@ export async function putLeaves(
   account: string = "",
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO leaves (show_rk, account, updated_at, leaf_count, viewed_leaf_count, payload, fetched_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(show_rk, account) DO UPDATE SET
@@ -333,7 +335,7 @@ export async function dropLeaves(
   showRk: string | number,
 ): Promise<void> {
   if (!ready()) return
-  q("DELETE FROM leaves WHERE show_rk = ?").run(
+  statementFor("DELETE FROM leaves WHERE show_rk = ?").run(
     String(showRk),
   )
 }
@@ -365,10 +367,15 @@ export async function getResolved<T = unknown>(
   guid: string | null | undefined,
 ): Promise<CachedResolved<T>> {
   if (!ready()) return undefined // undefined = cache miss; a cached NULL result is `null`
-  const [s, t, y, g] = rkey(section, title, year, guid)
-  const row = q(
+  const [sectionKey, titleKey, yearKey, guidKey] = rkey(
+    section,
+    title,
+    year,
+    guid,
+  )
+  const row = statementFor(
     "SELECT payload, fetched_at FROM resolved WHERE section=? AND title=? AND year=? AND guid=?",
-  ).get(s, t, y, g)
+  ).get(sectionKey, titleKey, yearKey, guidKey)
   if (!row) return undefined
   if (now() - Number(row.fetched_at) > RESOLVED_TTL_MS)
     return undefined
@@ -383,11 +390,23 @@ export async function putResolved(
   payload: unknown,
 ): Promise<void> {
   if (!ready()) return
-  const [s, t, y, g] = rkey(section, title, year, guid)
-  q(
+  const [sectionKey, titleKey, yearKey, guidKey] = rkey(
+    section,
+    title,
+    year,
+    guid,
+  )
+  statementFor(
     `INSERT INTO resolved (section, title, year, guid, payload, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(section, title, year, guid) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(s, t, y, g, JSON.stringify(payload), now())
+  ).run(
+    sectionKey,
+    titleKey,
+    yearKey,
+    guidKey,
+    JSON.stringify(payload),
+    now(),
+  )
 }
 
 // --- collection_children --------------------------------------------------------------- //
@@ -399,7 +418,7 @@ export async function getCollectionChildren<T = unknown>(
   account: string = "",
 ): Promise<T | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT * FROM collection_children WHERE rk = ? AND account = ?",
   ).get(String(rk), String(account || ""))
   if (!row) return null
@@ -429,7 +448,7 @@ export async function putCollectionChildren(
   account: string = "",
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO collection_children (rk, account, updated_at, child_count, payload, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(rk, account) DO UPDATE SET updated_at = excluded.updated_at, child_count = excluded.child_count,
        payload = excluded.payload, fetched_at = excluded.fetched_at`,
@@ -462,9 +481,9 @@ export async function dropCollectionChildren(
   rk: string | number,
 ): Promise<void> {
   if (!ready()) return
-  q("DELETE FROM collection_children WHERE rk = ?").run(
-    String(rk),
-  )
+  statementFor(
+    "DELETE FROM collection_children WHERE rk = ?",
+  ).run(String(rk))
 }
 
 // --- item resolution (read-through, revalidated by the page rather than by a clock) ----- //
@@ -489,7 +508,7 @@ export async function getItemMeta<T = unknown>(
   account: string = "",
 ): Promise<CachedValue<T> | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT payload FROM item_meta WHERE rk = ? AND account = ?",
   ).get(String(rk), String(account || ""))
   return row ? payloadOf<CachedValue<T>>(row) : null
@@ -501,7 +520,7 @@ export async function putItemMeta(
   account: string = "",
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO item_meta (rk, account, payload, fetched_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(rk, account) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
   ).run(
@@ -517,14 +536,16 @@ export async function dropItemMeta(
   rk: string | number,
 ): Promise<void> {
   if (!ready()) return
-  q("DELETE FROM item_meta WHERE rk = ?").run(String(rk))
+  statementFor("DELETE FROM item_meta WHERE rk = ?").run(
+    String(rk),
+  )
 }
 
 export async function getSectionCollections<T = unknown>(
   section: string | number,
 ): Promise<T | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT payload FROM section_collections WHERE section = ?",
   ).get(String(section))
   return row ? payloadOf<T>(row) : null
@@ -535,7 +556,7 @@ export async function putSectionCollections(
   payload: unknown,
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO section_collections (section, payload, fetched_at) VALUES (?, ?, ?)
      ON CONFLICT(section) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
   ).run(String(section), JSON.stringify(payload), now())
@@ -546,7 +567,7 @@ export async function getKavitaItem<T = unknown>(
   id: string | number,
 ): Promise<CachedValue<T> | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT payload FROM kavita_item WHERE kind = ? AND id = ?",
   ).get(String(kind), String(id))
   return row ? payloadOf<CachedValue<T>>(row) : null
@@ -558,7 +579,7 @@ export async function putKavitaItem(
   value: unknown,
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO kavita_item (kind, id, payload, fetched_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(kind, id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
   ).run(
@@ -574,7 +595,9 @@ export async function dropKavitaItem(
   id: string | number,
 ): Promise<void> {
   if (!ready()) return
-  q("DELETE FROM kavita_item WHERE id = ?").run(String(id))
+  statementFor("DELETE FROM kavita_item WHERE id = ?").run(
+    String(id),
+  )
 }
 
 // --- section_listing (soft TTL, stale-while-revalidate) -------------------------------- //
@@ -588,7 +611,7 @@ export async function getSectionListing<T = unknown>(
   account: string = "",
 ): Promise<SectionListingHit<T> | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT payload, fetched_at FROM section_listing WHERE section=? AND type=? AND account=?",
   ).get(
     String(section),
@@ -609,7 +632,7 @@ export async function putSectionListing(
   payload: unknown,
 ): Promise<void> {
   if (!ready()) return
-  q(
+  statementFor(
     `INSERT INTO section_listing (section, type, account, payload, fetched_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(section, type, account) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
   ).run(
@@ -627,15 +650,15 @@ export async function dropSectionListings(
   sections: string | number | readonly (string | number)[],
 ): Promise<void> {
   if (!ready()) return
-  const del = q(
+  const del = statementFor(
     "DELETE FROM section_listing WHERE section = ?",
   )
   // `[].concat(x)` in the JS: accepts a bare value or an array and flattens one level.
   // `concat` on a typed empty array won't infer that, so the same widening is spelled out.
-  for (const s of Array.isArray(sections)
+  for (const section of Array.isArray(sections)
     ? sections
     : [sections])
-    del.run(String(s))
+    del.run(String(section))
 }
 
 // --- history (append-only, cursor-driven) ---------------------------------------------- //
@@ -645,7 +668,7 @@ export async function isWatched(
   ratingKey: string | number,
 ): Promise<boolean> {
   if (!ready()) return false
-  const row = q(
+  const row = statementFor(
     "SELECT 1 FROM history WHERE account=? AND section=? AND rating_key=?",
   ).get(String(account), String(section), String(ratingKey))
   return Boolean(row)
@@ -657,10 +680,10 @@ export async function watchedSet(
   section: string | number,
 ): Promise<Set<string>> {
   if (!ready()) return new Set()
-  const rows = q(
+  const rows = statementFor(
     "SELECT rating_key FROM history WHERE account=? AND section=?",
   ).all(String(account), String(section))
-  return new Set(rows.map((r) => String(r.rating_key)))
+  return new Set(rows.map((row) => String(row.rating_key)))
 }
 
 // Insert history rows in ONE transaction (batched writes, per B1). Each row is
@@ -671,38 +694,38 @@ export async function addHistory(
   rows: readonly HistoryRow[],
 ): Promise<void> {
   if (!ready() || !rows.length) return
-  const ins = q(
+  const ins = statementFor(
     `INSERT INTO history (account, section, rating_key, viewed_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(account, section, rating_key) DO UPDATE SET viewed_at = excluded.viewed_at`,
   )
   let maxViewed = 0
   conn().exec("BEGIN")
   try {
-    for (const r of rows) {
+    for (const row of rows) {
       ins.run(
         String(account),
         String(section),
-        String(r.ratingKey),
-        Number(r.viewedAt || 0),
+        String(row.ratingKey),
+        Number(row.viewedAt || 0),
       )
-      if (Number(r.viewedAt || 0) > maxViewed)
-        maxViewed = Number(r.viewedAt || 0)
+      if (Number(row.viewedAt || 0) > maxViewed)
+        maxViewed = Number(row.viewedAt || 0)
     }
     if (maxViewed) {
-      const cur = q(
+      const cur = statementFor(
         "SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?",
       ).get(String(account), String(section))
       if (!cur || maxViewed > Number(cur.last_viewed_at)) {
-        q(
+        statementFor(
           `INSERT INTO history_cursor (account, section, last_viewed_at) VALUES (?, ?, ?)
            ON CONFLICT(account, section) DO UPDATE SET last_viewed_at = excluded.last_viewed_at`,
         ).run(String(account), String(section), maxViewed)
       }
     }
     conn().exec("COMMIT")
-  } catch (e) {
+  } catch (error) {
     conn().exec("ROLLBACK")
-    throw e
+    throw error
   }
 }
 
@@ -713,7 +736,7 @@ export async function historyCursor(
   section: string | number,
 ): Promise<number | null> {
   if (!ready()) return null
-  const row = q(
+  const row = statementFor(
     "SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?",
   ).get(String(account), String(section))
   return row ? Number(row.last_viewed_at) : null

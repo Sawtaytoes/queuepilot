@@ -39,13 +39,13 @@ async function mapLimit<T>(
   limit: number,
   fn: (item: T) => unknown,
 ): Promise<void> {
-  let i = 0
+  let nextIndex = 0
   await Promise.all(
     Array.from(
       { length: Math.min(limit, items.length) },
       async () => {
-        while (i < items.length) {
-          const idx = i++
+        while (nextIndex < items.length) {
+          const idx = nextIndex++
           try {
             // `idx < items.length` was just checked, so the read is in bounds —
             // noUncheckedIndexedAccess cannot see that.
@@ -67,18 +67,18 @@ async function warmOnce(): Promise<void> {
     const reg = await sets.getRegistry()
     const all = await queues.listAll()
     const work: WarmJob[] = []
-    for (const s of reg.sets) {
-      if (s.source !== "queue") continue
-      for (const e of all.get(s.id) || []) {
+    for (const set of reg.sets) {
+      if (set.source !== "queue") continue
+      for (const queueEntry of all.get(set.id) || []) {
         const start =
-          e.value &&
-          typeof e.value === "object" &&
-          e.value.start
-            ? e.value.start
+          queueEntry.value &&
+          typeof queueEntry.value === "object" &&
+          queueEntry.value.start
+            ? queueEntry.value.start
             : null
         work.push({
-          sections: s.sections,
-          value: e.value,
+          sections: set.sections,
+          value: queueEntry.value,
           start,
         })
       }

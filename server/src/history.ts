@@ -42,8 +42,8 @@ let redoStack: Snapshot[] = []
  * truncating a data file. Typed honestly as a predicate over that one check rather than
  * pretending the file was schema-validated.
  */
-function isSnapshot(s: unknown): s is Snapshot {
-  return Boolean(s && typeof s === "object")
+function isSnapshot(value: unknown): value is Snapshot {
+  return Boolean(value && typeof value === "object")
 }
 
 // Top-level await, deliberately: the undo stack must be hydrated before the first request can
@@ -52,8 +52,10 @@ try {
   const saved: unknown = JSON.parse(
     await fs.readFile(HISTORY_PATH, "utf8"),
   )
-  const stack = (a: unknown): Snapshot[] =>
-    Array.isArray(a) ? a.filter(isSnapshot).slice(-MAX) : []
+  const stack = (list: unknown): Snapshot[] =>
+    Array.isArray(list)
+      ? list.filter(isSnapshot).slice(-MAX)
+      : []
   // Not optional-chained: a persisted `null` must throw here exactly as it did before, so the
   // catch below is what starts the stacks empty.
   const persisted = saved as {
@@ -75,9 +77,9 @@ async function persist() {
       "utf8",
     )
     await fs.rename(tmp, HISTORY_PATH)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[history] persist failed: ${errMessage(e)}`,
+      `[history] persist failed: ${errMessage(error)}`,
     )
     await fs.rm(tmp, { force: true }).catch(() => {})
   }
@@ -127,7 +129,7 @@ async function reshapeQueues(
       why: "an undo restore never talks to a provider",
     }))
     const rewritten = result.changes.filter(
-      (c) => c.rewritten,
+      (change) => change.rewritten,
     )
     if (rewritten.length === 0) return text
     console.log(
@@ -135,11 +137,11 @@ async function reshapeQueues(
         `entr${rewritten.length === 1 ? "y" : "ies"} to the object form so the queue plays`,
     )
     return result.text
-  } catch (e) {
+  } catch (error) {
     // A snapshot this cannot parse is a snapshot the old code would have written anyway.
     // Restoring the raw text is no worse than before and keeps undo working.
     console.log(
-      `[history] could not reshape a restored snapshot: ${errMessage(e)}`,
+      `[history] could not reshape a restored snapshot: ${errMessage(error)}`,
     )
     return text
   }

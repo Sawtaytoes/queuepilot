@@ -28,13 +28,13 @@ function loadHostConfig(): HostConfig {
       fs.readFileSync(path, "utf8"),
     )
     return (doc || {}) as HostConfig
-  } catch (e) {
+  } catch (error) {
     // A missing file is fine: every value falls back to a deliberately non-routable
     // placeholder, so a misconfigured deploy fails loudly instead of reaching a stranger's
     // LAN. Anything else is worth a line in the log, but must never crash boot.
-    if (!isNodeError(e) || e.code !== "ENOENT") {
+    if (!isNodeError(error) || error.code !== "ENOENT") {
       console.log(
-        `[config] could not read ${path}: ${errMessage(e)}`,
+        `[config] could not read ${path}: ${errMessage(error)}`,
       )
     }
     return {}
@@ -52,9 +52,10 @@ export const hostval = (
   yamlKey: string,
   fallback: string,
 ): string => {
-  const v = process.env[envKey]
-  if (v) return v
-  const y = HOST[yamlKey]
-  if (y != null && y !== "") return String(y)
+  const value = process.env[envKey]
+  if (value) return value
+  const yamlValue = HOST[yamlKey]
+  if (yamlValue != null && yamlValue !== "")
+    return String(yamlValue)
   return fallback
 }

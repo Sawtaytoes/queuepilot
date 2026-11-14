@@ -202,8 +202,8 @@ const nowPayload = (set?: string | null) => ({
 export function sseRoutes(): Hono {
   const app = new Hono()
 
-  app.get("/events", (c) =>
-    streamSSE(c, async (stream) => {
+  app.get("/events", (context) =>
+    streamSSE(context, async (stream) => {
       // No `flushHeaders()` analogue exists on a Hono stream: the response head goes out with
       // the FIRST write, which is why the `hello` frame below is load-bearing rather than
       // ceremonial. Drop it and a client with nothing playing sees no bytes for 25 s.
@@ -231,7 +231,7 @@ export function sseRoutes(): Hono {
         // Hold the response open until the client goes away. Without this the handler returns,
         // `streamSSE` closes the response, and the browser sees the stream end immediately.
         await new Promise<void>((resolve) => {
-          const signal = c.req.raw.signal
+          const signal = context.req.raw.signal
           if (
             signal.aborted ||
             stream.aborted ||
@@ -277,10 +277,10 @@ export function startLiveUpdates(): void {
   // is on that list because it is hand-edited over SMB exactly like the other two, and a group
   // added there has to reach an open tab the same way a renamed queue does — otherwise the
   // picker at the top of the app is the one thing that needs an F5.
-  for (const p of store.watchTargets()) {
-    const d = path.dirname(p)
-    if (!byDir.has(d)) byDir.set(d, new Set())
-    byDir.get(d)?.add(path.basename(p))
+  for (const watchTarget of store.watchTargets()) {
+    const dir = path.dirname(watchTarget)
+    if (!byDir.has(dir)) byDir.set(dir, new Set())
+    byDir.get(dir)?.add(path.basename(watchTarget))
   }
   for (const [dir, names] of byDir) {
     try {
@@ -289,9 +289,9 @@ export function startLiveUpdates(): void {
         if (timer) clearTimeout(timer)
         timer = setTimeout(() => broadcast("data", {}), 300)
       })
-    } catch (e) {
+    } catch (error) {
       console.log(
-        `[sse] watch unavailable for ${dir} (${errMessage(e)}) — UI updates on its own actions only`,
+        `[sse] watch unavailable for ${dir} (${errMessage(error)}) — UI updates on its own actions only`,
       )
     }
   }
@@ -350,12 +350,12 @@ export function startLiveUpdates(): void {
         LAST_NOW &&
         LAST_NOW.context &&
         LAST_NOW.context.showRatingKey
-      const st =
+      const isPlaybackState =
         LAST_NOW &&
         (LAST_NOW.state === "playing" ||
           LAST_NOW.state === "stopped" ||
           LAST_NOW.state === "paused")
-      if (showRk && st) {
+      if (showRk && isPlaybackState) {
         await cache.dropLeaves(showRk)
         await cache.bumpGeneration()
       }

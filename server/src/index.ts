@@ -71,9 +71,9 @@ await cache.init()
 try {
   const { sets: registrySets } = await sets.getRegistry()
   await seedIfMissing(registrySets)
-} catch (e) {
+} catch (error) {
   console.log(
-    `[groups] seed skipped: ${e instanceof Error ? e.message : String(e)}`,
+    `[groups] seed skipped: ${error instanceof Error ? error.message : String(error)}`,
   )
 }
 
@@ -89,17 +89,17 @@ try {
 // offline harness.
 try {
   ensureBoardGamesImported()
-} catch (e) {
+} catch (error) {
   console.log(
-    `[boardgames] absorb skipped: ${e instanceof Error ? e.message : String(e)}`,
+    `[boardgames] absorb skipped: ${error instanceof Error ? error.message : String(error)}`,
   )
 }
 
 try {
   ensurePeopleImported()
-} catch (e) {
+} catch (error) {
   console.log(
-    `[people] import skipped: ${e instanceof Error ? e.message : String(e)}`,
+    `[people] import skipped: ${error instanceof Error ? error.message : String(error)}`,
   )
 }
 
@@ -140,9 +140,9 @@ serve({ fetch: app.fetch, port: WEB_PORT }, () => {
   // the nightly tick and listens for the result. HA owns the schedule; there is no cron here.
   // Fire-and-forget for the same reason `mqttd.start()` is: a broker that is down must not stop
   // the app from serving.
-  startBoardGameMqtt().catch((e: unknown) => {
+  startBoardGameMqtt().catch((error: unknown) => {
     console.log(
-      `[boardgames] MQTT not started: ${e instanceof Error ? e.message : String(e)}`,
+      `[boardgames] MQTT not started: ${error instanceof Error ? error.message : String(error)}`,
     )
   })
 })

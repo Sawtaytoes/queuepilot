@@ -131,13 +131,15 @@ export interface SectionDecision {
 export function headStartOffsetMs(
   head: SectionFields | null | undefined,
   resumeOffsetMs: number,
-  { playsSections }: { playsSections: boolean },
+  {
+    playsSections: isSectionPlaybackSupported,
+  }: { playsSections: boolean },
 ): number {
   const fallback = Math.max(
     0,
     Math.round(Number(resumeOffsetMs) || 0),
   )
-  if (!playsSections || !head) return fallback
+  if (!isSectionPlaybackSupported || !head) return fallback
   if (head.sectionStartMs != null)
     return Math.max(0, Math.round(head.sectionStartMs))
   if (head.sectionEndMs != null) return 0
@@ -164,14 +166,14 @@ export function sectionPlan(
   items: readonly SectionCandidate[] | null | undefined,
   {
     isHeadStartApplied = false,
-    playsSections = true,
+    playsSections: isSectionPlaybackSupported = true,
   }: {
     isHeadStartApplied?: boolean
     playsSections?: boolean
   } = {},
 ): Map<number, SectionRow> {
   const plan = new Map<number, SectionRow>()
-  if (!playsSections) return plan
+  if (!isSectionPlaybackSupported) return plan
   ;(items || []).forEach((item, index) => {
     if (!item || item.ratingKey == null) return
     const duration = Math.max(0, Number(item.duration) || 0)

@@ -79,8 +79,9 @@ function encQ(value: unknown): string {
     .replace(/%20/g, "+")
     .replace(
       /[!'()*~]/g,
-      (c) =>
-        "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+      (match) =>
+        "%" +
+        match.charCodeAt(0).toString(16).toUpperCase(),
     )
 }
 
@@ -111,7 +112,10 @@ async function historySince(
       ["sort", "viewedAt:asc"],
     ]
     const query = pairs
-      .map(([k, v]) => `${encQ(k)}=${encQ(v)}`)
+      .map(
+        ([pair, paramValue]) =>
+          `${encQ(pair)}=${encQ(paramValue)}`,
+      )
       .join("&")
     const container = await client.container(
       "/status/sessions/history/all?" + query,
@@ -192,8 +196,8 @@ export async function auditAttribution({
   let history: HistoryRow[]
   try {
     history = await historySince(client, since)
-  } catch (e) {
-    report.unreadable = errMessage(e)
+  } catch (error) {
+    report.unreadable = errMessage(error)
     return report
   }
 

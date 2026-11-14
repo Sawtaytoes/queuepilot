@@ -44,7 +44,7 @@ export function startDeviceNowPlaying({
     const ctx = context()
     const device = ctx.isPreparing
       ? undefined
-      : targets.find((d) => d.id === id)
+      : targets.find((target) => target.id === id)
     try {
       if (device) {
         const observed = await read(device, ctx)

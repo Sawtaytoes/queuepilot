@@ -24,9 +24,9 @@ import type { CancelFlag } from "./types.js"
  *     catch (e) { if (!isNodeError(e) || e.code !== 'ENOENT') throw e; }
  */
 export function isNodeError(
-  e: unknown,
-): e is NodeJS.ErrnoException {
-  return e instanceof Error
+  error: unknown,
+): error is NodeJS.ErrnoException {
+  return error instanceof Error
 }
 
 /**
@@ -39,17 +39,18 @@ export function isNodeError(
  * would change log lines and, in a few places, the sentence published to the MQTT state
  * topic and read aloud by Home Assistant.
  */
-export function errMessage(e: unknown): string {
-  if (e instanceof Error && e.message) return e.message
+export function errMessage(error: unknown): string {
+  if (error instanceof Error && error.message)
+    return error.message
   if (
-    e != null &&
-    typeof e === "object" &&
-    "message" in e
+    error != null &&
+    typeof error === "object" &&
+    "message" in error
   ) {
-    const m = (e as { message?: unknown }).message
-    if (m) return String(m)
+    const message = (error as { message?: unknown }).message
+    if (message) return String(message)
   }
-  return String(e)
+  return String(error)
 }
 
 /**
@@ -86,12 +87,12 @@ export class PlexError extends Error {
  * from a bundled older build or a test fixture.
  */
 export function isPlexError(
-  e: unknown,
-): e is Error & { plexStatus: number } {
+  error: unknown,
+): error is Error & { plexStatus: number } {
   return (
-    e instanceof Error &&
-    typeof (e as { plexStatus?: unknown }).plexStatus ===
-      "number"
+    error instanceof Error &&
+    typeof (error as { plexStatus?: unknown })
+      .plexStatus === "number"
   )
 }
 

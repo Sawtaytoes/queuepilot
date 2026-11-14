@@ -157,7 +157,8 @@ function setKeepingComment(
   newNode: Node,
 ): void {
   const pair = map.items.find(
-    (p) => isScalar(p.key) && String(p.key.value) === key,
+    (item) =>
+      isScalar(item.key) && String(item.key.value) === key,
   )
   if (pair && isNode(pair.value)) {
     if (pair.value.comment != null)
@@ -190,19 +191,22 @@ async function writeDoc(doc: Document): Promise<void> {
   await store.sets.writeDoc(doc)
 }
 
-const toInts = (a: unknown): number[] =>
-  Array.isArray(a)
-    ? a
-        .map((x) => parseInt(String(x), 10))
-        .filter((x) => !Number.isNaN(x))
+const toInts = (values: unknown): number[] =>
+  Array.isArray(values)
+    ? values
+        .map((element) => parseInt(String(element), 10))
+        .filter((parsed) => !Number.isNaN(parsed))
     : []
 
 // A per-scan item cap (max_items): a positive integer, or null when blank/absent/invalid
 // (no limit). Mirrors queue_builder/config.py's coercion (int > 0 else None).
-const toPosIntOrNull = (v: unknown): number | null => {
-  if (v == null || String(v).trim() === "") return null
-  const n = parseInt(String(v), 10)
-  return Number.isFinite(n) && n > 0 ? n : null
+const toPosIntOrNull = (value: unknown): number | null => {
+  if (value == null || String(value).trim() === "")
+    return null
+  const parsed = parseInt(String(value), 10)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null
 }
 
 /** One YAML node field as a plain value, for the sibling reads the writers do. */
@@ -220,7 +224,8 @@ const pickDefined = (
   keys: readonly string[],
 ): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
-  for (const k of keys) if (k in patch) out[k] = patch[k]
+  for (const key of keys)
+    if (key in patch) out[key] = patch[key]
   return out
 }
 
@@ -260,21 +265,21 @@ const readStoredLength = (
  * round trip at scan time.
  */
 const toLineupLength = (
-  v: unknown,
+  value: unknown,
 ): number | typeof INFINITE | null => {
   // The named infinite form. Never `0` and never `999`: a falsy count already reads as
   // *uncapped* in resolve.ts's applyBatch, so a typo landing on 0 would become a binge rather
   // than an error (`docs/todos/batch-all-or-infinite.md` settled this for the entry batch).
   if (
-    String(v ?? "")
+    String(value ?? "")
       .trim()
       .toLowerCase() === INFINITE
   )
     return INFINITE
 
-  const n = toPosIntOrNull(v)
-  if (n == null) return null
-  const clamped = Math.min(n, ROTATION_LENGTH_MAX)
+  const parsed = toPosIntOrNull(value)
+  if (parsed == null) return null
+  const clamped = Math.min(parsed, ROTATION_LENGTH_MAX)
   // Equal-to-the-default still drops the key, but the default is now PER KIND — a rewatch pool
   // follows 1, a filtered pool 12, an ordered queue 1 — so the comparison cannot be against a
   // single env constant any more. The caller passes the kind's own default in.
@@ -288,14 +293,15 @@ const toLineupLength = (
  * Rejected rather than coerced, because a typo ("restart-at-1") silently meaning "drop" is how
  * a channel quietly stops restarting — the failure looks exactly like a pool that ran out.
  */
-const toOnComplete = (v: unknown): "restart" | null => {
-  const s = v == null ? "" : String(v).trim().toLowerCase()
-  if (!s || s === "drop") return null
-  if (s !== "restart")
+const toOnComplete = (value: unknown): "restart" | null => {
+  const normalized =
+    value == null ? "" : String(value).trim().toLowerCase()
+  if (!normalized || normalized === "drop") return null
+  if (normalized !== "restart")
     throw new Error(
-      `invalid on_complete '${String(v)}' — use 'restart' or 'drop'`,
+      `invalid on_complete '${String(value)}' — use 'restart' or 'drop'`,
     )
-  return s
+  return normalized
 }
 
 /**
@@ -312,15 +318,16 @@ const toOnComplete = (v: unknown): "restart" | null => {
  * plays; strict on WRITE, tolerant on READ.
  */
 const toCollectionMembers = (
-  v: unknown,
+  value: unknown,
 ): "split" | null => {
-  const s = v == null ? "" : String(v).trim().toLowerCase()
-  if (!s || s === "whole") return null
-  if (s !== "split")
+  const normalized =
+    value == null ? "" : String(value).trim().toLowerCase()
+  if (!normalized || normalized === "whole") return null
+  if (normalized !== "split")
     throw new Error(
-      `invalid collection_members '${String(v)}' — use 'whole' or 'split'`,
+      `invalid collection_members '${String(value)}' — use 'whole' or 'split'`,
     )
-  return s
+  return normalized
 }
 
 // batch_stops_at: WHERE a multi-episode batch may stop — "member" (never span two collection
@@ -331,23 +338,28 @@ const BATCH_STOPS = ["member", "season"] as const
 // `includes` over the widened array rather than a cast on the value: the runtime test is the
 // same `Array.prototype.includes` the JS had, and a non-string simply fails it, as before.
 const isBatchStop = (
-  v: unknown,
-): v is "member" | "season" =>
-  typeof v === "string" &&
-  (BATCH_STOPS as readonly string[]).includes(v)
-const normalizeBatchStop = (v: unknown): BatchStop => {
-  const s = v == null ? "" : String(v).trim().toLowerCase()
-  return isBatchStop(s) ? s : null
+  value: unknown,
+): value is "member" | "season" =>
+  typeof value === "string" &&
+  (BATCH_STOPS as readonly string[]).includes(value)
+const normalizeBatchStop = (value: unknown): BatchStop => {
+  const normalized =
+    value == null ? "" : String(value).trim().toLowerCase()
+  return isBatchStop(normalized) ? normalized : null
 }
 
 // The two Picks-only set fields, normalized ONCE for both write paths. createSet dropped
 // `add_as` entirely before this existed, so the two paths must not re-derive the rule.
 // `null` means "the caller said nothing usable" — the key is then absent on disk (sparse).
 const normalizeAddAsForWrite = (
-  v: unknown,
+  value: unknown,
 ): AddAs | null => {
-  const s = v == null ? "" : String(v).trim().toLowerCase()
-  return s === "priority" || s === "random" ? s : null
+  const normalized =
+    value == null ? "" : String(value).trim().toLowerCase()
+  return normalized === "priority" ||
+    normalized === "random"
+    ? normalized
+    : null
 }
 // A blank / off spelling clears the window; anything else is stored verbatim and parsed at
 // read time (promote.parsePromoteWindow), the same posture as remove_completed_after.
@@ -359,12 +371,15 @@ const PROMOTE_WINDOW_OFF = [
   "disabled",
 ]
 const normalizePromoteWindowForWrite = (
-  v: unknown,
+  value: unknown,
 ): string | null => {
-  const s = v == null ? "" : String(v).trim()
-  if (!s || PROMOTE_WINDOW_OFF.includes(s.toLowerCase()))
+  const trimmed = value == null ? "" : String(value).trim()
+  if (
+    !trimmed ||
+    PROMOTE_WINDOW_OFF.includes(trimmed.toLowerCase())
+  )
     return null
-  return s
+  return trimmed
 }
 
 /**
@@ -443,15 +458,18 @@ const normalizeSeasonForWrite = (
 // refuses it here, so the editor's Save reports the refusal to a person who can still fix it —
 // rather than the queue silently never resetting next November.
 const normalizeResetWatchedOnForWrite = (
-  v: unknown,
+  value: unknown,
 ): string | null => {
-  const s = v == null ? "" : String(v).trim()
-  if (!s || RESET_WATCHED_OFF.includes(s.toLowerCase()))
+  const trimmed = value == null ? "" : String(value).trim()
+  if (
+    !trimmed ||
+    RESET_WATCHED_OFF.includes(trimmed.toLowerCase())
+  )
     return null
-  const parsed = parseResetDate(s)
+  const parsed = parseResetDate(trimmed)
   if (!parsed)
     throw new Error(
-      `reset_watched_on must be MM-DD (got ${JSON.stringify(s)})`,
+      `reset_watched_on must be MM-DD (got ${JSON.stringify(trimmed)})`,
     )
   return formatResetDate(parsed)
 }
@@ -463,15 +481,15 @@ const RESET_WATCHED_OFF = [
 ]
 
 const MODES = ["rewatch", "episodic", "both"] as const
-const isMode = (v: unknown): v is SetMode =>
-  typeof v === "string" &&
-  (MODES as readonly string[]).includes(v)
+const isMode = (value: unknown): value is SetMode =>
+  typeof value === "string" &&
+  (MODES as readonly string[]).includes(value)
 // behavior (v3 PR 2) supersedes `mode`: progress = advance through unwatched ("next
 // episode"), rewatch = weighted least-watched replay. Mirrors queue_builder/config.py.
 const BEHAVIORS = ["progress", "rewatch"] as const
-const isBehavior = (v: unknown): v is SetBehavior =>
-  typeof v === "string" &&
-  (BEHAVIORS as readonly string[]).includes(v)
+const isBehavior = (value: unknown): value is SetBehavior =>
+  typeof value === "string" &&
+  (BEHAVIORS as readonly string[]).includes(value)
 
 // The per-profile binding fields (v3 PR 2): a rotation channel works with one or more
 // PROFILES, each carrying that channel's per-profile rating caps + account identity. The
@@ -517,8 +535,8 @@ function readProfiles(
 ): [Binding, ...Binding[]] {
   const raw = Array.isArray(ent.profiles)
     ? ent.profiles.filter(
-        (p): p is RawBinding =>
-          Boolean(p) && typeof p === "object",
+        (profile): profile is RawBinding =>
+          Boolean(profile) && typeof profile === "object",
       )
     : []
   // Typed as a non-empty tuple because it IS one — the fallback list is `[ent]` — and that is
@@ -538,33 +556,37 @@ function readProfiles(
 function bindingWriteObj(
   src: RawBinding = {},
 ): Record<string, unknown> {
-  const b: Record<string, unknown> = {}
+  const binding: Record<string, unknown> = {}
   if (src.plex_user != null && String(src.plex_user).trim())
-    b.plex_user = String(src.plex_user).trim()
+    binding.plex_user = String(src.plex_user).trim()
   if (
     src.account_id != null &&
     String(src.account_id).trim() !== ""
   )
-    b.account_id = parseInt(String(src.account_id), 10)
+    binding.account_id = parseInt(
+      String(src.account_id),
+      10,
+    )
   if (src.user_uuid != null && String(src.user_uuid).trim())
-    b.user_uuid = String(src.user_uuid).trim()
+    binding.user_uuid = String(src.user_uuid).trim()
   if (
     Array.isArray(src.allowed_ratings) &&
     src.allowed_ratings.length
   )
-    b.allowed_ratings = src.allowed_ratings.map(String)
+    binding.allowed_ratings =
+      src.allowed_ratings.map(String)
   if (
     Array.isArray(src.movie_ratings) &&
     src.movie_ratings.length
   )
-    b.movie_ratings = src.movie_ratings.map(String)
+    binding.movie_ratings = src.movie_ratings.map(String)
   const wca = toInts(src.watch_count_accounts)
-  if (wca.length) b.watch_count_accounts = wca
+  if (wca.length) binding.watch_count_accounts = wca
   const mex = Array.isArray(src.movie_excludes)
     ? src.movie_excludes.map(String)
     : []
-  if (mex.length) b.movie_excludes = mex
-  return b
+  if (mex.length) binding.movie_excludes = mex
+  return binding
 }
 
 // One explicit member of a rotation channel's `members:` list (v3 PR 3). Accepted forms
@@ -572,47 +594,58 @@ function bindingWriteObj(
 // carrying ratingKey/title/collection plus an optional `episodes:` batch. Stored by
 // ratingKey per 2026-07-21-drop-human-readable-yaml-canonical-ids. Returns the cleaned
 // value, or null for an empty/invalid entry (dropped).
-function memberWriteValue(v: unknown): MemberValue | null {
-  if (v == null) return null
-  if (typeof v === "object") {
+function memberWriteValue(
+  value: unknown,
+): MemberValue | null {
+  if (value == null) return null
+  if (typeof value === "object") {
     // The on-disk mapping form. Every field is re-coerced below, so reading it through a
     // declared shape asserts nothing the code does not already enforce.
-    const src = v as {
+    const src = value as {
       ratingKey?: unknown
       collection?: unknown
       title?: unknown
       episodes?: unknown
       weight?: unknown
     }
-    const m: MemberObject = {}
+    const memberObject: MemberObject = {}
     if (
       src.ratingKey != null &&
       String(src.ratingKey).trim() !== ""
     )
-      m.ratingKey = String(src.ratingKey).trim()
+      memberObject.ratingKey = String(src.ratingKey).trim()
     if (
       src.collection != null &&
       String(src.collection).trim()
     )
-      m.collection = String(src.collection).trim()
+      memberObject.collection = String(
+        src.collection,
+      ).trim()
     if (src.title != null && String(src.title).trim())
-      m.title = String(src.title).trim()
+      memberObject.title = String(src.title).trim()
     const eps = parseInt(String(src.episodes), 10)
-    if (Number.isFinite(eps) && eps > 0) m.episodes = eps
+    if (Number.isFinite(eps) && eps > 0)
+      memberObject.episodes = eps
     // How many slots this member takes per round (engine/weight.js). 1 is the default and is
     // never written, so an unweighted members list keeps its current shape on disk.
-    const w = toWeight(src.weight)
-    if (w > 1) m.weight = w
-    return m.ratingKey || m.collection || m.title ? m : null
+    const weight = toWeight(src.weight)
+    if (weight > 1) memberObject.weight = weight
+    return memberObject.ratingKey ||
+      memberObject.collection ||
+      memberObject.title
+      ? memberObject
+      : null
   }
-  const s = String(v).trim()
-  return s || null
+  const trimmed = String(value).trim()
+  return trimmed || null
 }
-const toMembers = (a: unknown): MemberValue[] =>
-  Array.isArray(a)
-    ? a
+const toMembers = (values: unknown): MemberValue[] =>
+  Array.isArray(values)
+    ? values
         .map(memberWriteValue)
-        .filter((m): m is MemberValue => m != null)
+        .filter(
+          (member): member is MemberValue => member != null,
+        )
     : []
 
 // A rotation channel's per-show manual start map (decision 2026-08-07-dynamic-pool-start-
@@ -620,16 +653,24 @@ const toMembers = (a: unknown): MemberValue[] =>
 // embedded `start`, but for a rule-derived pool show that has no stored entry. Cleaned to
 // the same {series?, season?, episode?} floor shape the engine's _at_or_after_start reads;
 // entries with neither an episode nor a series are dropped (a cleared start removes its key).
-function toStarts(v: unknown): Record<string, Start> {
-  if (!v || typeof v !== "object" || Array.isArray(v))
+function toStarts(value: unknown): Record<string, Start> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
     return {}
   const out: Record<string, Start> = {}
-  for (const [rk, s] of Object.entries(
-    v as Record<string, unknown>,
+  for (const [rk, rawStart] of Object.entries(
+    value as Record<string, unknown>,
   )) {
-    if (!s || typeof s !== "object" || Array.isArray(s))
+    if (
+      !rawStart ||
+      typeof rawStart !== "object" ||
+      Array.isArray(rawStart)
+    )
       continue
-    const src = s as {
+    const src = rawStart as {
       series?: unknown
       season?: unknown
       episode?: unknown
@@ -665,31 +706,40 @@ function toStarts(v: unknown): Record<string, Start> {
  * unrecognised value here means "follow the pool" rather than taking a card off the wall.
  */
 function toOnCompleteByShow(
-  v: unknown,
+  value: unknown,
 ): Record<string, "restart" | "drop"> {
-  if (!v || typeof v !== "object" || Array.isArray(v))
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
     return {}
   const out: Record<string, "restart" | "drop"> = {}
   for (const [rk, val] of Object.entries(
-    v as Record<string, unknown>,
+    value as Record<string, unknown>,
   )) {
-    const w = String(val ?? "")
+    const normalized = String(val ?? "")
       .trim()
       .toLowerCase()
-    if (w === "restart" || w === "drop") out[String(rk)] = w
+    if (normalized === "restart" || normalized === "drop")
+      out[String(rk)] = normalized
   }
   return out
 }
 
-function toWeights(v: unknown): Record<string, number> {
-  if (!v || typeof v !== "object" || Array.isArray(v))
+function toWeights(value: unknown): Record<string, number> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
     return {}
   const out: Record<string, number> = {}
-  for (const [rk, n] of Object.entries(
-    v as Record<string, unknown>,
+  for (const [rk, rawWeight] of Object.entries(
+    value as Record<string, unknown>,
   )) {
-    const w = toWeight(n)
-    if (w > 1) out[String(rk)] = w
+    const weight = toWeight(rawWeight)
+    if (weight > 1) out[String(rk)] = weight
   }
   return out
 }
@@ -924,7 +974,8 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       has_explicit_profiles:
         Array.isArray(ent.profiles) &&
         ent.profiles.some(
-          (p) => Boolean(p) && typeof p === "object",
+          (profile) =>
+            Boolean(profile) && typeof profile === "object",
         ),
       // Which binding the Play/Channels dropdowns seed to (a binding's plex_user). A pure
       // UI-seed hint — the Python engine ignores it and still plays the profile the play
@@ -1066,12 +1117,12 @@ async function registryCache(): Promise<RegistryCache> {
   // entries so `engine/routing.ts`'s separate parse of the same file inherits identically.
   const sets = inheritFilteredQueues(raw.sets || [])
     .map(normalize)
-    .filter((s): s is SetRegistryEntry => Boolean(s))
+    .filter((set): set is SetRegistryEntry => Boolean(set))
   const entry: RegistryCache = {
     mtimeMs: st ? st.mtimeMs : 0,
     size: st ? st.size : 0,
     reg: { sets },
-    byId: new Map(sets.map((s) => [s.id, s])),
+    byId: new Map(sets.map((set) => [set.id, set])),
   }
   if (st) _regCache = entry
   return entry
@@ -1088,7 +1139,7 @@ export async function getSet(
 }
 
 export async function setIds(): Promise<string[]> {
-  return (await getRegistry()).sets.map((s) => s.id)
+  return (await getRegistry()).sets.map((set) => set.id)
 }
 
 // --- mutations (all under the lock; the Python service only ever reads) ------- //
@@ -1103,8 +1154,8 @@ function slugify(label: unknown, taken: string[]): string {
     .slice(0, 40)
   if (!base) base = "queue"
   let id = base
-  for (let i = 2; taken.includes(id); i++)
-    id = `${base}_${i}`
+  for (let iteration = 2; taken.includes(id); iteration++)
+    id = `${base}_${iteration}`
   return id
 }
 
@@ -1148,8 +1199,8 @@ function rotationCreateObj(
   // disk). Otherwise write the single legacy binding from the top-level fields (unchanged).
   const bodyProfiles = Array.isArray(body.profiles)
     ? body.profiles
-        .map((p) => bindingWriteObj(p))
-        .filter((b) => Object.keys(b).length)
+        .map((profile) => bindingWriteObj(profile))
+        .filter((binding) => Object.keys(binding).length)
     : []
   if (bodyProfiles.length) {
     obj.profiles = bodyProfiles
@@ -1251,13 +1302,13 @@ function writeLineupKnobs(
 function writableBlocks(
   blocks: ProviderBlock[],
 ): WritableProviderBlock[] {
-  return blocks.map((b) => ({
-    provider: b.provider,
-    ...(b.profile ? { profile: b.profile } : {}),
-    ...(b.libraries.length
-      ? { libraries: b.libraries }
+  return blocks.map((block) => ({
+    provider: block.provider,
+    ...(block.profile ? { profile: block.profile } : {}),
+    ...(block.libraries.length
+      ? { libraries: block.libraries }
       : {}),
-    ...(b.batch != null ? { batch: b.batch } : {}),
+    ...(block.batch != null ? { batch: block.batch } : {}),
   }))
 }
 
@@ -1272,13 +1323,20 @@ function deliveryForSet(ent: RawSet): Delivery {
   const blocks: ProviderBlock[] = blocksForSet(ent)
   const defs = new Map<string, string>(
     providerDefinitions().map(
-      (d: { id: string; kind: string }) => [d.id, d.kind],
+      (providerDefinition: {
+        id: string
+        kind: string
+      }) => [
+        providerDefinition.id,
+        providerDefinition.kind,
+      ],
     ),
   )
-  const anyPush = blocks.some(
-    (b) => deliveryForKind(defs.get(b.provider)) !== "pull",
+  const hasPushBlock = blocks.some(
+    (block) =>
+      deliveryForKind(defs.get(block.provider)) !== "pull",
   )
-  return anyPush ? "push" : "pull"
+  return hasPushBlock ? "push" : "pull"
 }
 
 /**
@@ -1313,7 +1371,13 @@ function providerKindForSet(ent: RawSet): string {
   const blocks: ProviderBlock[] = blocksForSet(ent)
   const defs = new Map<string, string>(
     providerDefinitions().map(
-      (d: { id: string; kind: string }) => [d.id, d.kind],
+      (providerDefinition: {
+        id: string
+        kind: string
+      }) => [
+        providerDefinition.id,
+        providerDefinition.kind,
+      ],
     ),
   )
   return defs.get(blocks[0]?.provider ?? "") ?? ""
@@ -1351,7 +1415,9 @@ export async function createSet(
     const doc = await readDoc()
     const seq = setsSeq(doc)
     const taken = seq.items
-      .map((n) => (isMap(n) ? String(n.get("id")) : ""))
+      .map((item) =>
+        isMap(item) ? String(item.get("id")) : "",
+      )
       .filter(Boolean)
     const id = slugify(idSeed, taken)
     // Starts as `{}` rather than null purely so the ternary below needs no assertion: it is
@@ -1483,13 +1549,17 @@ export async function createSet(
     // rotation channels append at the end (they live after the queues on the shelf).
     let at = seq.items.length
     if (!isRotation) {
-      for (let i = 0; i < seq.items.length; i++) {
-        const item = seq.items[i]
+      for (
+        let index = 0;
+        index < seq.items.length;
+        index++
+      ) {
+        const item = seq.items[index]
         if (
           isMap(item) &&
           item.get("source") === "rotation"
         ) {
-          at = i
+          at = index
           break
         }
       }
@@ -1510,8 +1580,8 @@ export async function updateSet(
     const doc = await readDoc()
     const seq = setsSeq(doc)
     const node = seq.items.find(
-      (n): n is YAMLMap =>
-        isMap(n) && String(n.get("id")) === id,
+      (item): item is YAMLMap =>
+        isMap(item) && String(item.get("id")) === id,
     )
     if (!node) throw new Error(`unknown set ${id}`)
     const isRotation = node.get("source") === "rotation"
@@ -1610,17 +1680,17 @@ export async function updateSet(
         "default_profile",
       )
     }
-    for (const k of allow) {
-      if (!(k in patch)) continue
+    for (const key of allow) {
+      if (!(key in patch)) continue
       // `unknown`, and it stays `unknown` through every reassignment below. The branches
       // narrow it per key exactly as the JS did; nothing here indexes `patch` by a typed key,
       // so no cast is needed to keep the runtime behaviour identical.
-      let v: unknown = patch[k]
-      if (k === "kind") {
+      let value: unknown = patch[key]
+      if (key === "kind") {
         // Product kind only on disk. Legacy create-UI values (movies/anime) still map via
         // kindForWrite and may also stamp add_as when the caller did not send one.
         const written = kindForWrite(
-          v,
+          value,
           isRotation ? "rotation" : "queue",
         )
         setKeepingComment(
@@ -1645,13 +1715,13 @@ export async function updateSet(
         }
         continue
       }
-      if (k === "season_start" || k === "season_end") {
+      if (key === "season_start" || key === "season_end") {
         // ONE branch for TWO keys, because the rule is about the pair. `season_end` is
         // skipped when `season_start` is in the same patch, so the pair is written exactly
         // once; a patch carrying only one of them reads the other off the NODE, which is what
         // makes "set only the end" mean "change the end of the window this set already has"
         // rather than "delete the start".
-        if (k === "season_end" && "season_start" in patch)
+        if (key === "season_end" && "season_start" in patch)
           continue
         const season = normalizeSeasonForWrite(
           "season_start" in patch
@@ -1679,58 +1749,66 @@ export async function updateSet(
         )
         continue
       }
-      if (k === "add_as") {
+      if (key === "add_as") {
         if (isRotation)
           throw new Error(
             "add_as is only valid on picks queues",
           )
-        const a = normalizeAddAsForWrite(v)
-        if (!a) {
+        const addAs = normalizeAddAsForWrite(value)
+        if (!addAs) {
           node.delete("add_as")
           continue
         }
-        setKeepingComment(node, "add_as", doc.createNode(a))
+        setKeepingComment(
+          node,
+          "add_as",
+          doc.createNode(addAs),
+        )
         continue
       }
-      if (k === "promote_window") {
+      if (key === "promote_window") {
         if (isRotation)
           throw new Error(
             "promote_window is only valid on picks queues",
           )
-        const s = normalizePromoteWindowForWrite(v)
-        if (!s) {
+        const promoteWindow =
+          normalizePromoteWindowForWrite(value)
+        if (!promoteWindow) {
           node.delete("promote_window")
           continue
         }
         setKeepingComment(
           node,
           "promote_window",
-          doc.createNode(s),
+          doc.createNode(promoteWindow),
         )
         continue
       }
       if (
-        k === "keep_completed" ||
-        k === "reel" ||
-        k === "restart_when_exhausted"
+        key === "keep_completed" ||
+        key === "reel" ||
+        key === "restart_when_exhausted"
       ) {
         // Queue-only booleans. false/absent drops the key so the file stays sparse.
         // Rotation channels have no consumption model here — reject rather than no-op so a
         // mis-pointed client surfaces immediately.
         if (isRotation)
           throw new Error(
-            `${k} is only valid on curated queues`,
+            `${key} is only valid on curated queues`,
           )
-        const on =
-          v === true || v === "true" || v === 1 || v === "1"
-        if (!on) {
-          node.delete(k)
+        const isEnabled =
+          value === true ||
+          value === "true" ||
+          value === 1 ||
+          value === "1"
+        if (!isEnabled) {
+          node.delete(key)
           continue
         }
-        setKeepingComment(node, k, doc.createNode(true))
+        setKeepingComment(node, key, doc.createNode(true))
         // reel implies keep_completed at the engine; also write it so a hand-reader of
         // sets.yaml sees the non-consuming intent without having to know the implication.
-        if (k === "reel" && !node.get("keep_completed")) {
+        if (key === "reel" && !node.get("keep_completed")) {
           setKeepingComment(
             node,
             "keep_completed",
@@ -1739,12 +1817,12 @@ export async function updateSet(
         }
         continue
       }
-      if (k === "watch_history") {
+      if (key === "watch_history") {
         if (isRotation)
           throw new Error(
             "watch_history is only valid on curated queues",
           )
-        const source = normalizeWatchHistory(v)
+        const source = normalizeWatchHistory(value)
         if (!source || source === "provider") {
           node.delete("watch_history")
           continue
@@ -1756,22 +1834,23 @@ export async function updateSet(
         )
         continue
       }
-      if (k === "remove_completed_after") {
+      if (key === "remove_completed_after") {
         // Opt-in finished-entry TTL. Blank / never / 0 drops the key (= keep forever).
         if (isRotation)
           throw new Error(
             "remove_completed_after is only valid on curated queues",
           )
-        const s = v == null ? "" : String(v).trim()
+        const trimmed =
+          value == null ? "" : String(value).trim()
         if (
-          !s ||
+          !trimmed ||
           [
             "0",
             "never",
             "off",
             "none",
             "disabled",
-          ].includes(s.toLowerCase())
+          ].includes(trimmed.toLowerCase())
         ) {
           node.delete("remove_completed_after")
           continue
@@ -1779,11 +1858,11 @@ export async function updateSet(
         setKeepingComment(
           node,
           "remove_completed_after",
-          doc.createNode(s),
+          doc.createNode(trimmed),
         )
         continue
       }
-      if (k === "reset_watched_on") {
+      if (key === "reset_watched_on") {
         // The day each year this queue clears its own watched state. Blank / never / off drops
         // the key (= this queue does not reset), so the file stays sparse; anything that is
         // not `MM-DD` THROWS rather than being dropped, because a stored date is next examined
@@ -1792,26 +1871,27 @@ export async function updateSet(
           throw new Error(
             "reset_watched_on is only valid on curated queues",
           )
-        const s = normalizeResetWatchedOnForWrite(v)
-        if (!s) {
+        const resetWatchedOn =
+          normalizeResetWatchedOnForWrite(value)
+        if (!resetWatchedOn) {
           node.delete("reset_watched_on")
           continue
         }
         setKeepingComment(
           node,
           "reset_watched_on",
-          doc.createNode(s),
+          doc.createNode(resetWatchedOn),
         )
         continue
       }
-      if (k === "batch_stops_at") {
+      if (key === "batch_stops_at") {
         // Where a multi-episode batch may stop. "none"/blank/unrecognised drops the key (the
         // engine default), so the file stays sparse and a typo can never persist.
         if (isRotation)
           throw new Error(
             "batch_stops_at is only valid on curated queues",
           )
-        const bsa = normalizeBatchStop(v)
+        const bsa = normalizeBatchStop(value)
         if (!bsa) {
           node.delete("batch_stops_at")
           continue
@@ -1823,48 +1903,56 @@ export async function updateSet(
         )
         continue
       }
-      if (k === "episodes") {
+      if (key === "episodes") {
         // The set's DEFAULT batch — how many items one entry contributes per visit. The COUNT
         // to batch_stops_at's WHERE, and stored the same sparse way: 1 is the engine default,
         // so it drops the key rather than writing the value everyone already has.
         //
         // Clamped to QUEUE_SERIES_LENGTH, the same hard safety cap a per-entry override gets
         // (queues.setEpisodes) — a hand-posted 900 must not queue a whole library.
-        const n = parseInt(String(v ?? ""), 10)
-        if (!Number.isFinite(n) || n <= 1) {
+        const episodes = parseInt(String(value ?? ""), 10)
+        if (!Number.isFinite(episodes) || episodes <= 1) {
           node.delete("episodes")
           continue
         }
         setKeepingComment(
           node,
           "episodes",
-          doc.createNode(Math.min(n, QUEUE_SERIES_LENGTH)),
+          doc.createNode(
+            Math.min(episodes, QUEUE_SERIES_LENGTH),
+          ),
         )
         continue
       }
-      if (k === "volumes") {
+      if (key === "volumes") {
         // How many VOLUMES a volume-based series contributes per visit. Independent of
         // `episodes` — a volume is a collection of chapters, so the chapter count must
         // not apply. 1 is the default and drops the key.
-        const n = parseInt(String(v ?? ""), 10)
-        if (!Number.isFinite(n) || n <= 1) {
+        const volumes = parseInt(String(value ?? ""), 10)
+        if (!Number.isFinite(volumes) || volumes <= 1) {
           node.delete("volumes")
           continue
         }
         setKeepingComment(
           node,
           "volumes",
-          doc.createNode(Math.min(n, QUEUE_SERIES_LENGTH)),
+          doc.createNode(
+            Math.min(volumes, QUEUE_SERIES_LENGTH),
+          ),
         )
         continue
       }
-      if (k === "providers") {
+      if (key === "providers") {
         // Whole-array replace, like members/profiles: the editor sends the full desired
         // block list. An empty list drops the key entirely, which is NOT the same as
         // "no providers" — it means "fall back to the implicit single Plex block", so a
         // set that never had blocks is byte-identical after an unrelated edit.
-        const { ok, errors, blocks } = validateBlocks(v)
-        if (!ok) throw new Error(errors.join("; "))
+        const {
+          ok: isOk,
+          errors,
+          blocks,
+        } = validateBlocks(value)
+        if (!isOk) throw new Error(errors.join("; "))
         if (!blocks.length) {
           node.delete("providers")
           continue
@@ -1875,8 +1963,8 @@ export async function updateSet(
         )
         continue
       }
-      if (k === "shared_libraries") {
-        const scope = sharedLibraryScope(v)
+      if (key === "shared_libraries") {
+        const scope = sharedLibraryScope(value)
         if (!Object.keys(scope).length) {
           node.delete("shared_libraries")
           continue
@@ -1884,7 +1972,7 @@ export async function updateSet(
         node.set("shared_libraries", doc.createNode(scope))
         continue
       }
-      if (k === "skipped") {
+      if (key === "skipped") {
         // Whole-array replace, like members: the grid sends the full desired list, and an
         // empty one drops the key so the file stays sparse.
         //
@@ -1900,9 +1988,9 @@ export async function updateSet(
         // ratingKey called "undefined" that matches nothing forever.
         const list = [
           ...new Set(
-            (Array.isArray(v) ? v : [])
+            (Array.isArray(value) ? value : [])
               .map(String)
-              .map((x) => x.trim())
+              .map((ratingKey) => ratingKey.trim())
               .filter(Boolean),
           ),
         ]
@@ -1913,7 +2001,7 @@ export async function updateSet(
         node.set("skipped", doc.createNode(list))
         continue
       }
-      if (k === "included_specials") {
+      if (key === "included_specials") {
         if (isRotation) {
           throw new Error(
             "included_specials is only valid on curated queues",
@@ -1921,9 +2009,9 @@ export async function updateSet(
         }
         const list = [
           ...new Set(
-            (Array.isArray(v) ? v : [])
+            (Array.isArray(value) ? value : [])
               .map(String)
-              .map((x) => x.trim())
+              .map((ratingKey) => ratingKey.trim())
               .filter(Boolean),
           ),
         ]
@@ -1934,10 +2022,10 @@ export async function updateSet(
         node.set("included_specials", doc.createNode(list))
         continue
       }
-      if (k === "members") {
+      if (key === "members") {
         // Whole-array replace, like profiles: the grid sends the full desired list. An
         // empty list drops the key entirely (back to the pure dynamic rule).
-        const list = toMembers(v)
+        const list = toMembers(value)
         if (!list.length) {
           node.delete("members")
           continue
@@ -1945,11 +2033,11 @@ export async function updateSet(
         node.set("members", doc.createNode(list))
         continue
       }
-      if (k === "starts") {
+      if (key === "starts") {
         // Whole-map replace, like members: the Channels view sends the full desired
         // {ratingKey: {season, episode}} map. An empty map drops the key entirely (every
         // show back to its natural next-unwatched).
-        const map = toStarts(v)
+        const map = toStarts(value)
         if (!Object.keys(map).length) {
           node.delete("starts")
           continue
@@ -1957,7 +2045,7 @@ export async function updateSet(
         node.set("starts", doc.createNode(map))
         continue
       }
-      if (k === "on_complete_by_show") {
+      if (key === "on_complete_by_show") {
         // Whole-map replace, exactly like `starts` and `weights`: the Channels view sends the
         // full desired {ratingKey: 'restart'|'drop'} map. `toOnCompleteByShow` drops anything
         // unrecognised, so an empty result means "no show overrides the pool any more" and the
@@ -1966,7 +2054,7 @@ export async function updateSet(
         // A `drop` IS stored, even though drop is also the engine default: on a pool set to
         // `restart` it is a real override, and that is the case this exists for. Sparseness
         // here is "follows the pool", not "equals the engine default".
-        const map = toOnCompleteByShow(v)
+        const map = toOnCompleteByShow(value)
         if (!Object.keys(map).length) {
           node.delete("on_complete_by_show")
           continue
@@ -1974,11 +2062,11 @@ export async function updateSet(
         node.set("on_complete_by_show", doc.createNode(map))
         continue
       }
-      if (k === "weights") {
+      if (key === "weights") {
         // Whole-map replace, exactly like `starts`: the Channels view sends the full desired
         // {ratingKey: n} map. toWeights already drops every 1, so an empty result means "no
         // show is weighted any more" and the key goes with it.
-        const map = toWeights(v)
+        const map = toWeights(value)
         if (!Object.keys(map).length) {
           node.delete("weights")
           continue
@@ -1986,13 +2074,13 @@ export async function updateSet(
         node.set("weights", doc.createNode(map))
         continue
       }
-      if (k === "profiles") {
+      if (key === "profiles") {
         // Binding CRUD is whole-array replace: the form sends the full desired profiles[].
         // Writing profiles[] makes it the source of truth, so drop the now-stale legacy
         // top-level binding fields (the two shapes are mutually exclusive on disk).
-        const list = (Array.isArray(v) ? v : [])
-          .map((p) => bindingWriteObj(p))
-          .filter((b) => Object.keys(b).length)
+        const list = (Array.isArray(value) ? value : [])
+          .map((profile) => bindingWriteObj(profile))
+          .filter((binding) => Object.keys(binding).length)
         if (!list.length)
           throw new Error(
             "at least one profile binding required",
@@ -2001,42 +2089,47 @@ export async function updateSet(
         for (const bk of BINDING_KEYS) node.delete(bk)
         continue
       }
-      if (k === "behavior") {
-        if (!isBehavior(v)) {
+      if (key === "behavior") {
+        if (!isBehavior(value)) {
           node.delete("behavior")
           continue
         } // cleared/invalid => drop
-        node.set("behavior", doc.createNode(v))
+        node.set("behavior", doc.createNode(value))
         continue
       }
-      if (k === "default_profile") {
+      if (key === "default_profile") {
         // A UI-seed hint keyed by plex_user; blank/absent => no default (drop the key so the
         // dropdowns fall back to profiles[0]).
-        const s = v == null ? "" : String(v).trim()
-        if (!s) {
+        const trimmed =
+          value == null ? "" : String(value).trim()
+        if (!trimmed) {
           node.delete("default_profile")
           continue
         }
-        node.set("default_profile", doc.createNode(s))
+        node.set("default_profile", doc.createNode(trimmed))
         continue
       }
-      if (k === "activity") {
+      if (key === "activity") {
         // Sparse, like `max_items` and `length`: blank / the provider's own answer DROPS the
         // key rather than writing it. Two reasons, and the second is the load-bearing one.
         // A stored value that equals the derivation is noise in a hand-edited file; and it
         // would FREEZE today's provider→activity opinion into `sets.yaml`, so a later change
         // to that table would disagree with sixteen files it can no longer see.
-        const s =
-          v == null ? "" : String(v).trim().toLowerCase()
-        if (!s) {
+        const normalized =
+          value == null
+            ? ""
+            : String(value).trim().toLowerCase()
+        if (!normalized) {
           node.delete("activity")
           continue
         }
-        if (!isActivity(s))
-          throw new Error(`unknown activity '${s}'`)
+        if (!isActivity(normalized))
+          throw new Error(
+            `unknown activity '${normalized}'`,
+          )
         const raw = node.toJSON() as RawSet
         if (
-          s ===
+          normalized ===
           activityForSet({
             provider_id: providerIdForSet(raw),
             provider_kind: providerKindForSet(raw),
@@ -2045,62 +2138,71 @@ export async function updateSet(
           node.delete("activity")
           continue
         }
-        node.set("activity", doc.createNode(s))
+        node.set("activity", doc.createNode(normalized))
         continue
       }
-      if (k === "requires_profile") {
+      if (key === "requires_profile") {
         // Gate a curated queue to a Plex Home profile (blank => ungated, drop the key). The
         // value is the PMS-log profile title the play-gate matches on. Rotation channels are
         // profile-DRIVEN (their set:"auto" scan lets the signed-in profile pick the tier), so
         // a fixed gate here would break routing — reject a non-empty value on rotation.
-        const s = v == null ? "" : String(v).trim()
-        if (isRotation && s)
+        const trimmed =
+          value == null ? "" : String(value).trim()
+        if (isRotation && trimmed)
           throw new Error(
             "rotation channels cannot require a profile (they are profile-driven)",
           )
-        if (!s) {
+        if (!trimmed) {
           node.delete("requires_profile")
           continue
         }
-        node.set("requires_profile", doc.createNode(s))
+        node.set(
+          "requires_profile",
+          doc.createNode(trimmed),
+        )
         continue
       }
-      if (k === "sections" || k === "item_sections") {
+      if (key === "sections" || key === "item_sections") {
         // Normalized, never validated: clearing every library is a legitimate edit that means
         // "draw from all of them" (see the note above `writableBlocks`). This used to throw
         // on an empty union, which is how unchecking the last box read as a save failure.
-        v = toInts(v)
+        value = toInts(value)
       }
-      if (k === "blocklist" || k === "movie_excludes")
-        v = (Array.isArray(v) ? v : []).map(String)
+      if (key === "blocklist" || key === "movie_excludes")
+        value = (Array.isArray(value) ? value : []).map(
+          String,
+        )
       if (
-        k === "allowed_ratings" ||
-        k === "movie_ratings"
+        key === "allowed_ratings" ||
+        key === "movie_ratings"
       ) {
-        v = Array.isArray(v) ? v.map(String) : null // null => no rating cap
+        value = Array.isArray(value)
+          ? value.map(String)
+          : null // null => no rating cap
       }
-      if (k === "watch_count_accounts") v = toInts(v)
-      if (k === "account_id")
-        v =
-          v == null || String(v).trim() === ""
+      if (key === "watch_count_accounts")
+        value = toInts(value)
+      if (key === "account_id")
+        value =
+          value == null || String(value).trim() === ""
             ? null
-            : parseInt(String(v), 10)
-      if (k === "max_items") {
-        v = toPosIntOrNull(v)
-        if (v == null) {
+            : parseInt(String(value), 10)
+      if (key === "max_items") {
+        value = toPosIntOrNull(value)
+        if (value == null) {
           node.delete("max_items")
           continue
         } // cleared => drop the key (no cap)
       }
-      if (k === "length") {
-        const n = toLineupLength(v)
+      if (key === "length") {
+        const lineupLength = toLineupLength(value)
 
         // `length: infinite` RETIRES `refill`, which was its 2026-08-17 spelling. Leaving both
         // would be two keys answering one question, and the older one is the deprecated half —
         // this is the migration, and it happens the first time the set is saved.
-        if (n === INFINITE) {
+        if (lineupLength === INFINITE) {
           node.delete("refill")
-          v = n
+          value = lineupLength
         } else {
           // Sparse, against THIS KIND's own default rather than one env constant: a rewatch
           // pool follows 1, a filtered pool 12, an ordered queue 1. The editor posts the
@@ -2119,84 +2221,87 @@ export async function updateSet(
             ]),
           })
 
-          if (n == null || n === kindDefault) {
+          if (
+            lineupLength == null ||
+            lineupLength === kindDefault
+          ) {
             node.delete("length")
             continue
           }
-          v = n
+          value = lineupLength
         }
       }
-      if (k === "refill") {
+      if (key === "refill") {
         // DEPRECATED — `length: infinite` says this now. Still accepted so a hand-written file
         // or an older caller keeps working, and still written sparsely; the editor never sends
         // it, so a set saved through the UI sheds it.
-        if (v !== true) {
+        if (value !== true) {
           node.delete("refill")
           continue
         }
       }
-      if (k === "is_locked_on_tv") {
+      if (key === "is_locked_on_tv") {
         // Sparse: only `true` is written, so a queue that never touched the switch stays
         // byte-identical on disk.
-        if (v !== true) {
+        if (value !== true) {
           node.delete("is_locked_on_tv")
           continue
         }
       }
-      if (k === "power_off_when_done") {
+      if (key === "power_off_when_done") {
         // Sparse: only `true` is written. Absent means "leave the room alone", which is what
         // every set has always done.
-        if (v !== true) {
+        if (value !== true) {
           node.delete("power_off_when_done")
           continue
         }
       }
-      if (k === "collection_members") {
+      if (key === "collection_members") {
         // Sparse: 'whole' (and blank) drop the key, so a pool that never touched this reads
         // as the default rather than carrying a value that says nothing.
-        const cmv = toCollectionMembers(v)
+        const cmv = toCollectionMembers(value)
         if (cmv == null) {
           node.delete("collection_members")
           continue
         }
-        v = cmv
+        value = cmv
       }
-      if (k === "on_complete") {
-        const s = toOnComplete(v)
-        if (s == null) {
+      if (key === "on_complete") {
+        const onComplete = toOnComplete(value)
+        if (onComplete == null) {
           node.delete("on_complete")
           continue
         }
-        v = s
+        value = onComplete
       }
-      if (k === "mode" && !isMode(v))
-        throw new Error(`invalid mode ${String(v)}`)
-      if (k === "audio_language")
-        v =
-          v == null || String(v).trim() === ""
+      if (key === "mode" && !isMode(value))
+        throw new Error(`invalid mode ${String(value)}`)
+      if (key === "audio_language")
+        value =
+          value == null || String(value).trim() === ""
             ? null
-            : String(v).trim()
+            : String(value).trim()
       if (
-        (k === "plex_user" || k === "user_uuid") &&
-        v != null
+        (key === "plex_user" || key === "user_uuid") &&
+        value != null
       )
-        v = String(v)
-      if (k === "label") {
-        v = String(v ?? "").trim()
+        value = String(value)
+      if (key === "label") {
+        value = String(value ?? "").trim()
         // CLEARING is a legitimate edit, not a refusal. Emptying the Name field is how a
         // queue goes back to being called after its activity, and it is the whole of
         // "auto-generated unless specified" on the write side. `node.delete` rather than an
         // empty string so the file carries no `label:` line and `has_explicit_label` reads
         // back false (decision
         // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
-        if (!v) {
+        if (!value) {
           node.delete("label")
           continue
         }
       }
       // Preserve an inline comment on the value being replaced (e.g. `label: Bob  # rename
       // freely` typed over SMB) — see setKeepingComment + e2e/yaml-roundtrip-test.mjs.
-      setKeepingComment(node, k, doc.createNode(v))
+      setKeepingComment(node, key, doc.createNode(value))
     }
     await writeDoc(doc)
     return { ok: true }
@@ -2214,11 +2319,12 @@ export async function deleteSet(
   return withLock(async () => {
     const doc = await readDoc()
     const seq = setsSeq(doc)
-    const i = seq.items.findIndex(
-      (n) => isMap(n) && String(n.get("id")) === id,
+    const index = seq.items.findIndex(
+      (item) =>
+        isMap(item) && String(item.get("id")) === id,
     )
-    if (i < 0) return { deleted: false }
-    seq.items.splice(i, 1)
+    if (index < 0) return { deleted: false }
+    seq.items.splice(index, 1)
     await writeDoc(doc)
     return { deleted: true }
   })
@@ -2246,8 +2352,8 @@ export async function migrateLegacyTiers(): Promise<
     const seq = setsSeq(doc)
     const byId = (setId: string): YAMLMap | undefined =>
       seq.items.find(
-        (n): n is YAMLMap =>
-          isMap(n) && String(n.get("id")) === setId,
+        (item): item is YAMLMap =>
+          isMap(item) && String(item.get("id")) === setId,
       )
     if (byId("shows_shorts") || byId("movies"))
       return {
@@ -2257,44 +2363,49 @@ export async function migrateLegacyTiers(): Promise<
     const tiers = ["younger", "older"]
       .map(byId)
       .filter(
-        (n): n is YAMLMap =>
-          Boolean(n) &&
-          n?.get("source") === "rotation" &&
-          !n.get("profiles"),
+        (tier): tier is YAMLMap =>
+          Boolean(tier) &&
+          tier?.get("source") === "rotation" &&
+          !tier.get("profiles"),
       )
     if (!tiers.length)
       return {
         migrated: false as const,
         reason: "no legacy tier sets to migrate",
       }
-    const raw: RawSet[] = tiers.map((n) => n.toJSON())
+    const raw: RawSet[] = tiers.map((tier) => tier.toJSON())
     const uniqInts = (lists: unknown[][]): number[] => [
       ...new Set(
         lists
           .flat()
-          .map((x) => parseInt(String(x), 10))
-          .filter((x) => !Number.isNaN(x)),
+          .map((list) => parseInt(String(list), 10))
+          .filter((parsed) => !Number.isNaN(parsed)),
       ),
     ]
     const uniqStrs = (lists: unknown[][]): string[] => [
       ...new Set(lists.flat().map(String)),
     ]
-    const bindings = raw.map((e) => bindingWriteObj(e))
+    const bindings = raw.map((set) => bindingWriteObj(set))
     const blocklist = uniqStrs(
-      raw.map((e) => e.blocklist || []),
+      raw.map((set) => set.blocklist || []),
     )
     const audio = raw
-      .map((e) => e.audio_language)
-      .find((a) => a != null && String(a).trim())
+      .map((set) => set.audio_language)
+      .find(
+        (language) =>
+          language != null && String(language).trim(),
+      )
     const showsObj: Record<string, unknown> = {
       id: "shows_shorts",
       label: "Shows & Shorts",
       kind: "rules",
       source: "rotation",
       behavior: "progress",
-      sections: uniqInts(raw.map((e) => e.sections || [])),
+      sections: uniqInts(
+        raw.map((set) => set.sections || []),
+      ),
       item_sections: uniqInts(
-        raw.map((e) => e.item_sections || []),
+        raw.map((set) => set.item_sections || []),
       ),
     }
     if (blocklist.length) showsObj.blocklist = blocklist
@@ -2313,8 +2424,8 @@ export async function migrateLegacyTiers(): Promise<
       ],
       profiles: bindings,
     }
-    for (const n of tiers)
-      n.set(
+    for (const tier of tiers)
+      tier.set(
         "superseded_by",
         doc.createNode("shows_shorts,movies"),
       )
@@ -2326,7 +2437,9 @@ export async function migrateLegacyTiers(): Promise<
     return {
       migrated: true as const,
       channels: ["shows_shorts", "movies"],
-      bindings: bindings.map((b) => b.plex_user),
+      bindings: bindings.map(
+        (binding) => binding.plex_user,
+      ),
     }
   })
 }
@@ -2340,19 +2453,19 @@ export async function reorderSets(
     const doc = await readDoc()
     const seq = setsSeq(doc)
     const rank = new Map<string, number>(
-      ids.map((k, i) => [k, i]),
+      ids.map((id, index) => [id, index]),
     )
-    const withKeys = seq.items.map((n, i) => ({
-      n,
-      k: isMap(n) ? String(n.get("id")) : "",
-      i,
+    const withKeys = seq.items.map((item, index) => ({
+      n: item,
+      k: isMap(item) ? String(item.get("id")) : "",
+      i: index,
     }))
-    withKeys.sort((a, b) => {
-      const ra = rank.get(a.k) ?? ids.length + a.i
-      const rb = rank.get(b.k) ?? ids.length + b.i
+    withKeys.sort((left, right) => {
+      const ra = rank.get(left.k) ?? ids.length + left.i
+      const rb = rank.get(right.k) ?? ids.length + right.i
       return ra - rb
     })
-    seq.items = withKeys.map((x) => x.n)
+    seq.items = withKeys.map((withKey) => withKey.n)
     await writeDoc(doc)
     return { reordered: true }
   })

@@ -89,8 +89,8 @@ const {
 /** Lower-cased and trimmed. Account names are matched case-insensitively because
  * `sawtaytoes` (plex.tv username) and `Bob` (Kavita display name) are typed by hand into
  * a YAML file, and a capital letter is not a different person. */
-const norm = (s: unknown): string =>
-  String(s ?? "")
+const norm = (name: unknown): string =>
+  String(name ?? "")
     .trim()
     .toLowerCase()
 
@@ -101,7 +101,7 @@ function normalizeAccounts(raw: unknown): ProfileAccounts {
     raw as Record<string, unknown>,
   )) {
     const list = (Array.isArray(value) ? value : [value])
-      .map((v) => String(v ?? "").trim())
+      .map((account) => String(account ?? "").trim())
       .filter(Boolean)
     if (list.length)
       out[String(kind).trim().toLowerCase()] = list
@@ -114,8 +114,8 @@ function normalizeGroup(
   index: number,
 ): Group | null {
   if (!raw || typeof raw !== "object") return null
-  const p = raw as Record<string, unknown>
-  const id = String(p.id ?? "").trim()
+  const fields = raw as Record<string, unknown>
+  const id = String(fields.id ?? "").trim()
   if (!id) {
     console.log(
       `[groups] entry #${index} has no id — skipped`,
@@ -132,10 +132,10 @@ function normalizeGroup(
   }
   return {
     id,
-    label: String(p.label ?? id).trim() || id,
-    accounts: normalizeAccounts(p.accounts),
-    sets: (Array.isArray(p.sets) ? p.sets : [])
-      .map((s) => String(s ?? "").trim())
+    label: String(fields.label ?? id).trim() || id,
+    accounts: normalizeAccounts(fields.accounts),
+    sets: (Array.isArray(fields.sets) ? fields.sets : [])
+      .map((setId) => String(setId ?? "").trim())
       .filter(Boolean),
   }
 }
@@ -147,9 +147,9 @@ export function storedGroups(): Group[] {
     ? doc.groups
     : []
   const byId = new Map<string, Group>()
-  listed.forEach((raw, i) => {
-    const p = normalizeGroup(raw, i)
-    if (p) byId.set(p.id, p) // a duplicate id is a later entry replacing an earlier one
+  listed.forEach((raw, index) => {
+    const group = normalizeGroup(raw, index)
+    if (group) byId.set(group.id, group) // a duplicate id is a later entry replacing an earlier one
   })
   return [...byId.values()]
 }
@@ -176,14 +176,14 @@ export function accountsForSet(
   const add = (kind: string, name: unknown) => {
     const value = String(name ?? "").trim()
     if (!value) return
-    const k = String(kind).trim().toLowerCase()
-    if (!out[k]) out[k] = []
+    const normalizedKind = String(kind).trim().toLowerCase()
+    if (!out[normalizedKind]) out[normalizedKind] = []
     if (
-      !out[k].some(
+      !out[normalizedKind].some(
         (existing) => norm(existing) === norm(value),
       )
     )
-      out[k].push(value)
+      out[normalizedKind].push(value)
   }
 
   if (set.source === "rotation") {
@@ -241,40 +241,45 @@ export function resolveGroups(
   sets: SetRegistryEntry[],
 ): ResolvedGroup[] {
   const groups = storedGroups()
-  const visible = sets.filter((s) => !isSuperseded(s))
+  const visible = sets.filter((set) => !isSuperseded(set))
 
   // Pass 1: explicit claims. A set named by ANY group is settled and never derives —
   // otherwise naming `Bob & Alice — Anime` under its audience would still leave it in
   // Bob, and moving a set would be impossible without editing accounts.
   const claimed = new Set<string>()
-  for (const g of groups)
-    for (const id of g.sets) claimed.add(id)
+  for (const group of groups)
+    for (const id of group.sets) claimed.add(id)
 
   const kindsOf = (ids: string[]) => [
     ...new Set(
       ids
         .map(
           (id) =>
-            visible.find((s) => s.id === id)?.provider_kind,
+            visible.find((set) => set.id === id)
+              ?.provider_kind,
         )
-        .filter((k): k is string => Boolean(k)),
+        .filter((kind): kind is string => Boolean(kind)),
     ),
   ]
 
-  const resolved: ResolvedGroup[] = groups.map((g) => {
-    const wanted = new Set(g.sets)
+  const resolved: ResolvedGroup[] = groups.map((group) => {
+    const wanted = new Set(group.sets)
     const setIds = visible
       .filter(
-        (s) =>
-          wanted.has(s.id) ||
-          (!claimed.has(s.id) &&
-            claimsAccount(g, accountsForSet(s))),
+        (set) =>
+          wanted.has(set.id) ||
+          (!claimed.has(set.id) &&
+            claimsAccount(group, accountsForSet(set))),
       )
-      .map((s) => s.id)
-    return { ...g, providerKinds: kindsOf(setIds), setIds }
+      .map((set) => set.id)
+    return {
+      ...group,
+      providerKinds: kindsOf(setIds),
+      setIds,
+    }
   })
 
-  const everything = visible.map((s) => s.id)
+  const everything = visible.map((set) => set.id)
 
   return [
     {
@@ -295,12 +300,16 @@ export function unassignedSetIds(
   sets: SetRegistryEntry[],
 ): string[] {
   const resolved = resolveGroups(sets).filter(
-    (g) => !g.isAll,
+    (resolveGroup) => !resolveGroup.isAll,
   )
-  const filed = new Set(resolved.flatMap((g) => g.setIds))
+  const filed = new Set(
+    resolved.flatMap((group) => group.setIds),
+  )
   return sets
-    .filter((s) => !isSuperseded(s) && !filed.has(s.id))
-    .map((s) => s.id)
+    .filter(
+      (set) => !isSuperseded(set) && !filed.has(set.id),
+    )
+    .map((set) => set.id)
 }
 
 // --- seeding ------------------------------------------------------------------ //
@@ -322,10 +331,10 @@ export async function seedIfMissing(
     string,
     { kind: string; name: string }
   >()
-  for (const s of sets) {
-    if (isSuperseded(s)) continue
+  for (const set of sets) {
+    if (isSuperseded(set)) continue
     for (const [kind, names] of Object.entries(
-      accountsForSet(s),
+      accountsForSet(set),
     )) {
       for (const name of names) {
         const key = `${kind}:${norm(name)}`
@@ -405,7 +414,7 @@ function writableAccounts(
     accounts || {},
   )) {
     const list = (names || [])
-      .map((n) => String(n).trim())
+      .map((name) => String(name).trim())
       .filter(Boolean)
     if (list.length) out[kind] = list
   }
@@ -436,18 +445,21 @@ export async function createGroup(
     )
 
   const doc = await readDoc()
-  const taken = new Set(storedGroups().map((g) => g.id))
+  const taken = new Set(
+    storedGroups().map((storedGroup) => storedGroup.id),
+  )
   // Two groups may legitimately want the same label ("Movies" twice is the user's business),
   // so the ID de-duplicates rather than the save failing. `-2`, not a random suffix: it is
   // going in a URL a person reads.
   let id = base
-  for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`
+  for (let iteration = 2; taken.has(id); iteration += 1)
+    id = `${base}-${iteration}`
 
   const entry: Record<string, unknown> = { id, label }
   const accounts = writableAccounts(body.accounts ?? {})
   if (accounts) entry.accounts = accounts
   const sets = (body.sets ?? [])
-    .map((s) => String(s).trim())
+    .map((setId) => String(setId).trim())
     .filter(Boolean)
   if (sets.length) entry.sets = sets
 
@@ -485,7 +497,7 @@ export async function updateGroup(
   }
   if (body.sets != null) {
     const sets = body.sets
-      .map((s) => String(s).trim())
+      .map((set) => String(set).trim())
       .filter(Boolean)
     if (sets.length) node.set("sets", doc.createNode(sets))
     else node.delete("sets")
@@ -535,7 +547,7 @@ export async function fileSetIntoGroup(
       ? raw
       : []
   const existing = listed
-    .map((s) => String(s ?? "").trim())
+    .map((setId) => String(setId ?? "").trim())
     .filter(Boolean)
   if (existing.includes(wanted)) return id
 
@@ -549,16 +561,16 @@ export async function deleteGroup(
   id: string,
 ): Promise<{ ok: true; deleted: boolean }> {
   const doc = await readDoc()
-  let found = false
+  let isFound = false
   try {
     const { seq, index } = nodeFor(doc, id)
     seq.delete(index)
-    found = true
+    isFound = true
   } catch {
     return { ok: true, deleted: false } // deleting something already gone is not an error
   }
-  if (found) await writeDoc(doc)
-  return { ok: true, deleted: found }
+  if (isFound) await writeDoc(doc)
+  return { ok: true, deleted: isFound }
 }
 
 /**
@@ -579,12 +591,14 @@ export async function reorderGroups(
       ) ?? "",
     )
   const wanted = ids.map(String)
-  const rank = new Map(wanted.map((id, i) => [id, i]))
+  const rank = new Map(
+    wanted.map((id, index) => [id, index]),
+  )
   const items = [...seq.items]
   items.sort(
-    (a, b) =>
-      (rank.get(idOf(a)) ?? Number.MAX_SAFE_INTEGER) -
-      (rank.get(idOf(b)) ?? Number.MAX_SAFE_INTEGER),
+    (left, right) =>
+      (rank.get(idOf(left)) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(idOf(right)) ?? Number.MAX_SAFE_INTEGER),
   )
   seq.items = items
   await writeDoc(doc)

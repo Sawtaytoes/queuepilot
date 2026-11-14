@@ -108,8 +108,8 @@ export function uniqueId(
   taken: ReadonlySet<string>,
 ): string {
   if (!taken.has(base)) return base
-  for (let n = 2; ; n += 1) {
-    const candidate = `${base}-${n}`
+  for (let iteration = 2; ; iteration += 1) {
+    const candidate = `${base}-${iteration}`
     if (!taken.has(candidate)) return candidate
   }
 }

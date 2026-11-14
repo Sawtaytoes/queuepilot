@@ -34,8 +34,8 @@ import {
 import { errMessage } from "./errors.js"
 import type { CancelFlag } from "./types.js"
 
-const escapeRe = (s: string): string =>
-  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const escapeRe = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const lineRes = new Map<string, RegExp>()
 function lineRe(): RegExp {
@@ -184,7 +184,7 @@ export function setForProfile(
 }
 
 const sleep = (ms: number): Promise<void> =>
-  new Promise((r) => setTimeout(r, ms))
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * Options for `waitForProfile`. `poll` is in SECONDS (not ms) and `timeout` is too — both
@@ -226,9 +226,9 @@ export async function waitForProfile({
   let fh: FileHandle
   try {
     fh = await fs.open(path, "r")
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[profiles] cannot open ${path}: ${errMessage(e)}`,
+      `[profiles] cannot open ${path}: ${errMessage(error)}`,
     )
     return null
   }

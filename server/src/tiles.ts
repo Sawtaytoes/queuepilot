@@ -48,7 +48,7 @@ function displayFor(value: unknown): string {
     // `title` is asserted to be a string rather than stringified: a YAML `title: 2012` is a
     // NUMBER at runtime and this function has always returned it unchanged. Wrapping it in
     // `String()` would be a (small) wire change, so the assertion carries the existing lie.
-    const o = value as {
+    const entry = value as {
       title?: string
       ratingKey?: string | number
       collection?: string
@@ -56,9 +56,9 @@ function displayFor(value: unknown): string {
     // A `{collection: <name>}` entry has no `title`, so without this it read
     // "ratingKey undefined" — the caption on every collection tile the moment the file
     // stopped spelling a collection as a `Collection: <name>` string.
-    if (!o.title && o.collection)
-      return `Collection: ${o.collection}`
-    return o.title || `ratingKey ${o.ratingKey}`
+    if (!entry.title && entry.collection)
+      return `Collection: ${entry.collection}`
+    return entry.title || `ratingKey ${entry.ratingKey}`
   }
   return String(value)
 }
@@ -150,16 +150,16 @@ export async function resolveTile(
   // The in-progress leaf/movie's own resume point + runtime (ms), so the tile's "In Progress"
   // badge can say how far in and how long. A MOVIE reads its own; a SHOW/COLLECTION reads it
   // off the next-up leaf (nextEpisode/collectionNext), matching partiallyWatched's source.
-  let partiallyWatched = false
+  let isPartiallyWatched = false
   let viewOffset = 0
   let duration = 0
   if (resolved && resolved.type === "movie") {
     viewOffset = Number(resolved.viewOffset) || 0
     duration = Number(resolved.duration) || 0
-    partiallyWatched =
+    isPartiallyWatched =
       viewOffset > 0 && !(Number(resolved.viewCount) > 0)
   } else if (nextEp && nextEp.partiallyWatched) {
-    partiallyWatched = true
+    isPartiallyWatched = true
     viewOffset = Number(nextEp.viewOffset) || 0
     duration = Number(nextEp.duration) || 0
   }
@@ -207,7 +207,7 @@ export async function resolveTile(
     nextEp,
     isNextEpFailed,
     skippedCount,
-    partiallyWatched,
+    partiallyWatched: isPartiallyWatched,
     viewOffset,
     duration,
   }
