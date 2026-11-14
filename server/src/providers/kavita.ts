@@ -171,18 +171,21 @@ async function cachedRead<T>(
 }
 
 const cachedSeries = (
-  c: KavitaHttpClient,
+  httpClient: KavitaHttpClient,
   id: string | number,
   isFresh: boolean,
-) => cachedRead("series", id, isFresh, () => c.series(id))
+) =>
+  cachedRead("series", id, isFresh, () =>
+    httpClient.series(id),
+  )
 
 const cachedDetail = (
-  c: KavitaHttpClient,
+  httpClient: KavitaHttpClient,
   id: string | number,
   isFresh: boolean,
 ) =>
   cachedRead("detail", id, isFresh, () =>
-    c.seriesDetail(id),
+    httpClient.seriesDetail(id),
   )
 
 // The pool view pays one call per series and is an explicit "show me everything" action, so
@@ -248,27 +251,27 @@ function chapterItem(
       : { chapter: entry as KavitaChapterDto, volume: null }
   // A whole-volume chapter is presented AS the volume: that is what the reader opens, what
   // Kavita's own UI calls it, and the only number that means anything to a person.
-  const asVolume = isWholeVolume(ch, volume)
+  const isPresentedAsVolume = isWholeVolume(ch, volume)
   return {
     // `id` is optional on the DTO and every caller has already proved it non-null
     // (orderedUnread rejects a chapter without one), so this asserts rather than defaults —
     // a `?? 0` here would mint a chapter id that does not exist.
     chapterId: ch.id as number,
     seriesId: seriesId as number | string,
-    title: asVolume
+    title: isPresentedAsVolume
       ? volume!.name ||
         `Volume ${volume!.number ?? volume!.minNumber ?? "?"}`
       : ch.titleName ||
         ch.title ||
         ch.range ||
         String(ch.number),
-    number: asVolume
+    number: isPresentedAsVolume
       ? (volume!.number ?? volume!.minNumber)
       : ch.number,
     // What this item IS, for the tile's wording. Per ITEM and not per provider: one Kavita
     // library holds volume-based manga beside chapter-based webtoons, so `provider.unit` is
     // the default and this is the correction.
-    unit: asVolume ? "volume" : "chapter",
+    unit: isPresentedAsVolume ? "volume" : "chapter",
     pages: ch.pages,
     pagesRead: ch.pagesRead,
   }
@@ -343,22 +346,23 @@ function orderedAll(
     merged.push(entry)
   }
 
-  return merged.sort((a, b) => {
-    const aHasVol = a.volume != null
-    const bHasVol = b.volume != null
+  return merged.sort((left, right) => {
+    const hasLeftVolume = left.volume != null
+    const hasRightVolume = right.volume != null
     // Volumes before loose chapters — the catch-up read leads; weekly releases trail.
-    if (aHasVol !== bHasVol) return aHasVol ? -1 : 1
-    if (aHasVol && bHasVol) {
+    if (hasLeftVolume !== hasRightVolume)
+      return hasLeftVolume ? -1 : 1
+    if (hasLeftVolume && hasRightVolume) {
       return (
-        (a.volume!.minNumber ?? 0) -
-          (b.volume!.minNumber ?? 0) ||
-        (a.chapter.minNumber ?? 0) -
-          (b.chapter.minNumber ?? 0)
+        (left.volume!.minNumber ?? 0) -
+          (right.volume!.minNumber ?? 0) ||
+        (left.chapter.minNumber ?? 0) -
+          (right.chapter.minNumber ?? 0)
       )
     }
     return (
-      (a.chapter.minNumber ?? 0) -
-      (b.chapter.minNumber ?? 0)
+      (left.chapter.minNumber ?? 0) -
+      (right.chapter.minNumber ?? 0)
     )
   })
 }
@@ -400,9 +404,9 @@ function atOrAfterStart(
   start: Start | null | undefined,
 ): boolean {
   if (!start || start.episode == null) return true
-  const n = Number(chapterItem(entry, 0).number)
-  if (!Number.isFinite(n)) return true
-  return n >= start.episode
+  const chapterNumber = Number(chapterItem(entry, 0).number)
+  if (!Number.isFinite(chapterNumber)) return true
+  return chapterNumber >= start.episode
 }
 
 /** Map with bounded concurrency, preserving input order. */
@@ -417,11 +421,11 @@ async function mapLimit<T, R>(
     { length: Math.min(limit, items.length) },
     async () => {
       for (;;) {
-        const i = next
+        const index = next
         next += 1
-        if (i >= items.length) return
+        if (index >= items.length) return
         // In-bounds by the line above, which is what `noUncheckedIndexedAccess` cannot see.
-        out[i] = await fn(items[i] as T, i)
+        out[index] = await fn(items[index] as T, index)
       }
     },
   )
@@ -460,10 +464,10 @@ export function findSetList<T extends { title?: string }>(
   const title = listTitleFor(setLabel || setName)
   const legacy = listTitleFor(setName)
   return (
-    lists.find((l) => l.title === title) ??
+    lists.find((list) => list.title === title) ??
     (legacy === title
       ? undefined
-      : lists.find((l) => l.title === legacy))
+      : lists.find((list) => list.title === legacy))
   )
 }
 
@@ -478,7 +482,7 @@ export function kavitaProvider({
 }: KavitaProviderOptions = {}): Provider {
   if (!def?.base_url && !client)
     throw new Error(`provider '${def?.id}' has no base_url`)
-  const c: KavitaHttpClient =
+  const httpClient: KavitaHttpClient =
     client ||
     kavitaClient({ baseUrl: def?.base_url, apiKey })
 
@@ -497,8 +501,8 @@ export function kavitaProvider({
   ): Promise<string[]> {
     const named = libraries.map(String).filter(Boolean)
     if (named.length) return named
-    const libs = await c.libraries()
-    return (libs || []).map((l) => String(l.id))
+    const libs = await httpClient.libraries()
+    return (libs || []).map((library) => String(library.id))
   }
 
   return {
@@ -523,7 +527,7 @@ export function kavitaProvider({
      * is INVISIBLE to the reader meant to play it — silently, with an empty reader and no
      * error (§6). So the "profile" for this provider is whoever owns the configured key.
      */
-    profileToken: async () => c.whoami(),
+    profileToken: async () => httpClient.whoami(),
 
     /**
      * Free-text series search, scoped to the libraries this queue draws from.
@@ -534,30 +538,30 @@ export function kavitaProvider({
      * `libraries: []` means "no scope given", and searches everything.
      */
     async search(
-      q: string,
+      rawQuery: string,
       { libraries = [] }: { libraries?: string[] } = {},
     ): Promise<ProviderSearchHit[]> {
-      const query = String(q || "").trim()
+      const query = String(rawQuery || "").trim()
       if (!query) return []
       const scope = new Set(libraries.map(String))
-      const res = await c.search(query)
+      const res = await httpClient.search(query)
       return (res?.series || [])
         .filter(
-          (s) =>
-            !scope.size || scope.has(String(s.libraryId)),
+          (hit) =>
+            !scope.size || scope.has(String(hit.libraryId)),
         )
-        .map((s) => ({
-          id: String(s.seriesId),
+        .map((hit) => ({
+          id: String(hit.seriesId),
           // `name` is a REMOTE field and so optional on the DTO, while ProviderSearchHit
           // declares `title: string`. Asserted rather than defaulted to '': a nameless series
           // is a Kavita-side anomaly, and inventing an empty title here would render a blank
           // row that looks pickable. The JS this replaces passed `undefined` through the same
           // way. (Reported: ProviderSearchHit.title / ProviderLibrary.title / the pool's
           // `show` are all string-required against optional wire fields.)
-          title: s.name as string,
-          libraryId: String(s.libraryId),
-          libraryTitle: s.libraryName || null,
-          format: s.format ?? null,
+          title: hit.name as string,
+          libraryId: String(hit.libraryId),
+          libraryTitle: hit.libraryName || null,
+          format: hit.format ?? null,
           type: "series",
         }))
     },
@@ -575,15 +579,15 @@ export function kavitaProvider({
         PROBE_CONCURRENCY,
         async (id): Promise<KavitaMemberRow | null> => {
           try {
-            const s = await c.series(id)
-            if (!s) return null
+            const series = await httpClient.series(id)
+            if (!series) return null
             return {
-              id: String(s.id ?? id),
-              title: s.name,
-              libraryId: String(s.libraryId ?? ""),
-              format: s.format ?? null,
-              pagesRead: s.pagesRead ?? null,
-              pages: s.pages ?? null,
+              id: String(series.id ?? id),
+              title: series.name,
+              libraryId: String(series.libraryId ?? ""),
+              format: series.format ?? null,
+              pagesRead: series.pagesRead ?? null,
+              pages: series.pages ?? null,
               type: "series",
             }
           } catch {
@@ -592,7 +596,7 @@ export function kavitaProvider({
         },
       )
       return rows.filter(
-        (r): r is KavitaMemberRow => r != null,
+        (row): row is KavitaMemberRow => row != null,
       )
     },
 
@@ -626,19 +630,22 @@ export function kavitaProvider({
             // webhook and nothing here polls, so a clock would have to be short enough to be
             // useless; the browser revalidates instead, once, after the page paints
             // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
-            const [s, detail] = await Promise.all([
-              cachedSeries(c, id, isFresh),
-              cachedDetail(c, id, isFresh),
+            const [series, detail] = await Promise.all([
+              cachedSeries(httpClient, id, isFresh),
+              cachedDetail(httpClient, id, isFresh),
             ])
-            if (!s) return null
+            if (!series) return null
             const unread = orderedUnread(detail).filter(
-              (e) => !skipped.has(String(e.chapter.id)),
+              (unreadEntry) =>
+                !skipped.has(
+                  String(unreadEntry.chapter.id),
+                ),
             )
             return {
-              id: String(s.id ?? id),
-              title: s.name,
-              libraryId: String(s.libraryId ?? ""),
-              format: s.format ?? null,
+              id: String(series.id ?? id),
+              title: series.name,
+              libraryId: String(series.libraryId ?? ""),
+              format: series.format ?? null,
               // Chapters left, the same "how much is waiting" the pool tile means. Kavita's own
               // `unreadCount` cannot see the skip list, so it is only trusted when this queue
               // skips nothing — otherwise the tile would count chapters it will never open.
@@ -670,10 +677,10 @@ export function kavitaProvider({
      * note and `e2e/kavita-covers-test.ts`). One series read per click.
      */
     async webUrl(itemId: string): Promise<string | null> {
-      const s = await c.series(itemId)
-      if (!s || s.libraryId == null) return null
+      const series = await httpClient.series(itemId)
+      if (!series || series.libraryId == null) return null
 
-      return `${c._base}/library/${s.libraryId}/series/${s.id ?? itemId}`
+      return `${httpClient._base}/library/${series.libraryId}/series/${series.id ?? itemId}`
     },
 
     /**
@@ -686,12 +693,12 @@ export function kavitaProvider({
     async listUnits(
       itemId: string,
     ): Promise<UnitList | null> {
-      const detail = await c.seriesDetail(itemId)
+      const detail = await httpClient.seriesDetail(itemId)
       const all = orderedAll(detail)
       if (!all.length) return null
       const episodes = all.map((entry) => {
         const item = chapterItem(entry, itemId)
-        const n = Number(item.number)
+        const chapterNumber = Number(item.number)
         return {
           // The chapter's own id — the same key `tiles()` reports as the next-up leaf, and
           // what this series' skips are written as. Without it the member list can show a
@@ -700,7 +707,9 @@ export function kavitaProvider({
             item.chapterId != null
               ? String(item.chapterId)
               : null,
-          episode: Number.isFinite(n) ? n : null,
+          episode: Number.isFinite(chapterNumber)
+            ? chapterNumber
+            : null,
           title: item.title || "",
           watched: isFullyRead(entry.chapter),
         }
@@ -732,11 +741,14 @@ export function kavitaProvider({
       if (!libIds.length) return []
 
       const seriesLists = await Promise.all(
-        libIds.map((id) => c.seriesForLibrary(id)),
+        libIds.map((id) => httpClient.seriesForLibrary(id)),
       )
       const allSeries = seriesLists
         .flat()
-        .filter((s): s is KavitaSeriesDto => s != null)
+        .filter(
+          (seriesList): seriesList is KavitaSeriesDto =>
+            seriesList != null,
+        )
 
       // The pool pays for `series-detail` per series where a launch pays only for
       // `continue-point`, because the grid shows a COUNT and the series list has no chapter
@@ -748,10 +760,10 @@ export function kavitaProvider({
       const probed = await mapLimit(
         allSeries,
         POOL_CONCURRENCY,
-        async (s): Promise<KavitaPoolRow | null> => {
+        async (series): Promise<KavitaPoolRow | null> => {
           try {
-            const detail = await c.seriesDetail(
-              s.id as number | string,
+            const detail = await httpClient.seriesDetail(
+              series.id as number | string,
             )
             const unread = orderedUnread(detail)
             // Kavita's own `unreadCount` is the inclusion test, NOT the length of the run we
@@ -763,10 +775,10 @@ export function kavitaProvider({
               detail?.unreadCount ?? unread.length
             if (!count && !unread.length) return null
             return {
-              seriesId: s.id,
-              title: s.name,
-              libraryId: s.libraryId ?? null,
-              format: s.format ?? null,
+              seriesId: series.id,
+              title: series.name,
+              libraryId: series.libraryId ?? null,
+              format: series.format ?? null,
               unreadCount: count || unread.length,
               // A series whose unread chapters we could not parse still belongs in the pool;
               // it just has no next-up line to show.
@@ -774,7 +786,7 @@ export function kavitaProvider({
                 ? [
                     chapterItem(
                       unread[0] as UnreadEntry,
-                      s.id,
+                      series.id,
                     ),
                   ]
                 : [],
@@ -786,7 +798,7 @@ export function kavitaProvider({
         },
       )
       const buckets = probed.filter(
-        (b): b is KavitaPoolRow => b != null,
+        (row): row is KavitaPoolRow => row != null,
       )
       // Deliberately the PLEX PREVIEW BUCKET SHAPE — `ratingKey` / `show` / `unwatched` /
       // `next` — rather than a reading-flavoured one. The Channels grid already renders
@@ -794,24 +806,30 @@ export function kavitaProvider({
       // OPAQUE provider item id (a Kavita seriesId) rather than a Plex ratingKey. That
       // reading is safe because a queue draws from exactly one provider, so the id is never
       // ambiguous (decision 2026-08-13-a-queue-draws-from-exactly-one-provider).
-      return buckets.map((b) => ({
-        ratingKey: String(b.seriesId),
+      return buckets.map((bucket) => ({
+        ratingKey: String(bucket.seriesId),
         // See the note in search(): a wire-optional name against a string-required field.
-        show: b.title as string,
+        show: bucket.title as string,
         // Chapters left, not series left — the same "how much is waiting" the Plex tile means.
-        unwatched: b.unreadCount ?? b.items.length,
+        unwatched:
+          bucket.unreadCount ?? bucket.items.length,
         // A pinned series is still part of the pool; the flag is what lets the grid show
         // which were chosen by hand versus swept in by the rule.
-        isMember: explicit.includes(String(b.seriesId)),
+        isMember: explicit.includes(
+          String(bucket.seriesId),
+        ),
         libraryId:
-          b.libraryId == null ? "" : String(b.libraryId),
-        next: b.items[0]
+          bucket.libraryId == null
+            ? ""
+            : String(bucket.libraryId),
+        next: bucket.items[0]
           ? {
-              ratingKey: String(b.items[0].chapterId),
-              title: b.items[0].title,
+              ratingKey: String(bucket.items[0].chapterId),
+              title: bucket.items[0].title,
               // Chapters have no season; `episode` carries the chapter number so the tile's
               // existing "next up" line reads correctly without a reading-specific branch.
-              episode: Number(b.items[0].number) || null,
+              episode:
+                Number(bucket.items[0].number) || null,
               season: null,
             }
           : null,
@@ -819,16 +837,16 @@ export function kavitaProvider({
     },
 
     /** Cover bytes, re-served by the app so the API key never reaches the browser. */
-    cover: (seriesId: string) => c.cover(seriesId),
+    cover: (seriesId: string) => httpClient.cover(seriesId),
 
     /** Libraries, for the queue editor's provider block. */
     async libraries(): Promise<ProviderLibrary[]> {
-      const libs = await c.libraries()
+      const libs = await httpClient.libraries()
       // `title: l.name as string` — see the note in search().
-      return (libs || []).map((l) => ({
-        id: String(l.id),
-        title: l.name as string,
-        type: l.type,
+      return (libs || []).map((library) => ({
+        id: String(library.id),
+        title: library.name as string,
+        type: library.type,
       }))
     },
 
@@ -843,7 +861,8 @@ export function kavitaProvider({
     } = {}): Promise<KavitaProgressState> {
       if (!artifactId) return { items: [] }
       const items =
-        (await c.readingListItems(artifactId)) || []
+        (await httpClient.readingListItems(artifactId)) ||
+        []
       return {
         items: items.map((it) => ({
           chapterId: it.chapterId as number | string,
@@ -906,7 +925,9 @@ export function kavitaProvider({
           ? libraries
           : (cfgAny.libraries as string[] | undefined) || []
       ).map(String)
-      const curated = entries.filter((e) => e && e.id)
+      const curated = entries.filter(
+        (entry) => entry && entry.id,
+      )
       const addAs = normalizeAddAs(cfgAny.add_as, {
         kind: cfgAny.kind,
         source: cfgAny.source,
@@ -966,27 +987,29 @@ export function kavitaProvider({
         const rows = await mapLimit(
           curated,
           PROBE_CONCURRENCY,
-          async (e): Promise<KavitaSource | null> => {
+          async (entry): Promise<KavitaSource | null> => {
             try {
-              const s = await c.series(e.id)
+              const series = await httpClient.series(
+                entry.id,
+              )
               // A series deleted in Kavita drops out rather than throwing — one stale entry
               // must not make a ninety-three-entry queue unlaunchable.
-              return s
+              return series
                 ? {
-                    series: s,
+                    series: series,
                     chapterBatch: Math.max(
                       1,
-                      Number(e.batch ?? perSeries) ||
+                      Number(entry.batch ?? perSeries) ||
                         perSeries,
                     ),
                     volumeBatch: Math.max(
                       1,
-                      Number(e.volumes ?? perVolume) ||
+                      Number(entry.volumes ?? perVolume) ||
                         perVolume,
                     ),
-                    start: e.start ?? null,
+                    start: entry.start ?? null,
                     lane: normalizePlacement(
-                      e.placement,
+                      entry.placement,
                       addAs,
                     ),
                   }
@@ -997,7 +1020,7 @@ export function kavitaProvider({
           },
         )
         sources = rows.filter(
-          (r): r is KavitaSource => r != null,
+          (row): row is KavitaSource => row != null,
         )
         // A FILTERED queue: the parent's entries, minus the ones outside this view's
         // libraries. Applied HERE and not in `curatedEntries` because the library an entry
@@ -1008,19 +1031,24 @@ export function kavitaProvider({
           const filter = {
             libraries: filterLibraries.map(String),
           }
-          sources = sources.filter((r) =>
+          sources = sources.filter((source) =>
             passesFilter(filter, {
-              libraryId: r.series.libraryId ?? null,
+              libraryId: source.series.libraryId ?? null,
             }),
           )
         }
       } else {
         const seriesLists = await Promise.all(
-          libIds.map((id) => c.seriesForLibrary(id)),
+          libIds.map((id) =>
+            httpClient.seriesForLibrary(id),
+          ),
         )
         sources = seriesLists
           .flat()
-          .filter((s): s is KavitaSeriesDto => s != null)
+          .filter(
+            (seriesList): seriesList is KavitaSeriesDto =>
+              seriesList != null,
+          )
           .map((series) => ({
             series,
             chapterBatch: perSeries,
@@ -1036,38 +1064,43 @@ export function kavitaProvider({
         sources,
         PROBE_CONCURRENCY,
         async ({
-          series: s,
+          series,
           chapterBatch,
           volumeBatch: volWant,
           start,
           lane,
         }): Promise<KavitaSeriesBucket | null> => {
           const bucket = {
-            key: `series:${s.id}`,
-            title: s.name,
-            seriesId: s.id,
-            libraryId: s.libraryId ?? null,
-            format: s.format ?? null,
+            key: `series:${series.id}`,
+            title: series.name,
+            seriesId: series.id,
+            libraryId: series.libraryId ?? null,
+            format: series.format ?? null,
           }
 
           // Always walk series-detail. The old continue-point shortcut named the next
           // chapter WITHOUT its volume, so a whole-volume item lost its label (and a
           // mixed series could not apply the volumes-first order). series-detail is
           // the same call tiles/pool already pay for; the volume context is load-bearing.
-          const detail = await c.seriesDetail(
-            s.id as number | string,
+          const detail = await httpClient.seriesDetail(
+            series.id as number | string,
           )
           const unread = orderedUnread(detail)
-            .filter((e) => atOrAfterStart(e, start))
+            .filter((unreadEntry) =>
+              atOrAfterStart(unreadEntry, start),
+            )
             // The queue's SKIP list — chapter ids it never opens, the reading twin of the Plex
             // resolver's leaf filter. `cfg` already carries it, so no signature changes.
             .filter(
-              (e) => !skipped.has(String(e.chapter.id)),
+              (unreadEntry) =>
+                !skipped.has(
+                  String(unreadEntry.chapter.id),
+                ),
             )
           if (!unread.length) return null
           const head = chapterItem(
             unread[0] as UnreadEntry,
-            s.id,
+            series.id,
           )
           // A volume-based manga must not inherit the chapter count — that is the live
           // "3 chapters" queue dumping 3 volumes.
@@ -1079,12 +1112,15 @@ export function kavitaProvider({
             batch: want,
             items: unread
               .slice(0, want)
-              .map((e) => chapterItem(e, s.id)),
+              .map((unreadEntry) =>
+                chapterItem(unreadEntry, series.id),
+              ),
           }
         },
       )
       let buckets = probed.filter(
-        (b): b is KavitaSeriesBucket => b != null,
+        (bucket): bucket is KavitaSeriesBucket =>
+          bucket != null,
       )
 
       // A curated queue has two lanes. Priority stays in stored order, and the Random pool
@@ -1093,27 +1129,39 @@ export function kavitaProvider({
       // entry back into the pool.
       if (curated.length) {
         const priority = buckets.filter(
-          (b) => b.lane === "priority",
+          (bucket) => bucket.lane === "priority",
         )
         const random = buckets.filter(
-          (b) => b.lane === "random",
+          (bucket) => bucket.lane === "random",
         )
-        for (let i = random.length - 1; i > 0; i -= 1) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[random[i], random[j]] = [
-            random[j] as KavitaSeriesBucket,
-            random[i] as KavitaSeriesBucket,
+        for (
+          let iteration = random.length - 1;
+          iteration > 0;
+          iteration -= 1
+        ) {
+          const swapIndex = Math.floor(
+            Math.random() * (iteration + 1),
+          )
+          ;[random[iteration], random[swapIndex]] = [
+            random[swapIndex] as KavitaSeriesBucket,
+            random[iteration] as KavitaSeriesBucket,
           ]
         }
         buckets = priority.concat(random)
       } else if (isRandomOrder) {
         // Rule-based library buckets keep the existing random-channel behaviour. They have
         // no entry placement, so the set-level flag remains the only ordering signal.
-        for (let i = buckets.length - 1; i > 0; i -= 1) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[buckets[i], buckets[j]] = [
-            buckets[j] as KavitaSeriesBucket,
-            buckets[i] as KavitaSeriesBucket,
+        for (
+          let iteration = buckets.length - 1;
+          iteration > 0;
+          iteration -= 1
+        ) {
+          const swapIndex = Math.floor(
+            Math.random() * (iteration + 1),
+          )
+          ;[buckets[iteration], buckets[swapIndex]] = [
+            buckets[swapIndex] as KavitaSeriesBucket,
+            buckets[iteration] as KavitaSeriesBucket,
           ]
         }
       }
@@ -1127,17 +1175,24 @@ export function kavitaProvider({
       // shared slice width would silently apply one entry's "read 5" to every other series.
       const lanes = curated.length
         ? [
-            buckets.filter((b) => b.lane === "priority"),
-            buckets.filter((b) => b.lane === "random"),
+            buckets.filter(
+              (bucket) => bucket.lane === "priority",
+            ),
+            buckets.filter(
+              (bucket) => bucket.lane === "random",
+            ),
           ]
         : [buckets]
       const play: KavitaPlayItem[] = []
       for (const lane of lanes) {
         for (let round = 0; play.length < cap; round += 1) {
-          let placedThisRound = false
-          for (const b of lane) {
-            const width = Math.max(1, b.batch ?? perSeries)
-            const slice = b.items.slice(
+          let isPlacedThisRound = false
+          for (const bucket of lane) {
+            const width = Math.max(
+              1,
+              bucket.batch ?? perSeries,
+            )
+            const slice = bucket.items.slice(
               round * width,
               (round + 1) * width,
             )
@@ -1145,17 +1200,17 @@ export function kavitaProvider({
               if (play.length >= cap) break
               play.push({
                 ...it,
-                bucket: b.key,
-                seriesFormat: b.format,
-                libraryId: b.libraryId,
+                bucket: bucket.key,
+                seriesFormat: bucket.format,
+                libraryId: bucket.libraryId,
               })
-              placedThisRound = true
+              isPlacedThisRound = true
             }
             if (play.length >= cap) break
           }
           // Every bucket in this lane is exhausted — stop, or this loops forever on a short
           // library.
-          if (!placedThisRound) break
+          if (!isPlacedThisRound) break
         }
         // A priority lane fills the cap before the Random pool gets a turn.
         if (play.length >= cap) break
@@ -1204,7 +1259,9 @@ export function kavitaProvider({
     ): Promise<KavitaArtifact> {
       const title = listTitleFor(setLabel || setName)
       const existing = findSetList(
-        (await c.readingLists({ pageSize: 200 })) || [],
+        (await httpClient.readingLists({
+          pageSize: 200,
+        })) || [],
         { setName, setLabel },
       )
 
@@ -1222,16 +1279,16 @@ export function kavitaProvider({
         existing.title !== title
       ) {
         try {
-          await c.updateList(existing.id, {
+          await httpClient.updateList(existing.id, {
             title,
             summary: existing.summary ?? "",
             promoted: existing.promoted ?? false,
             coverImageLocked:
               existing.coverImageLocked ?? false,
           })
-        } catch (e) {
+        } catch (error) {
           console.log(
-            `[kavita] could not rename list ${existing.id}: ${errMessage(e)}`,
+            `[kavita] could not rename list ${existing.id}: ${errMessage(error)}`,
           )
         }
       }
@@ -1239,7 +1296,7 @@ export function kavitaProvider({
       let listId: number | string | null =
         existing?.id ?? null
       if (listId == null) {
-        const created = await c.createList(title)
+        const created = await httpClient.createList(title)
         // `create` normally answers with the DTO, but the client falls back to the raw body
         // for a non-JSON response — so a bare id is still accepted here, exactly as before.
         listId =
@@ -1266,14 +1323,14 @@ export function kavitaProvider({
         // leave the reader with no lineup at all. A leftover row is visible and self-corrects
         // on the next launch; a thrown error here is a dead card.
         const stale =
-          (await c.readingListItems(listId)) || []
+          (await httpClient.readingListItems(listId)) || []
         for (const row of stale) {
           if (row?.id == null) continue
           try {
-            await c.deleteItem(listId, row.id)
-          } catch (e) {
+            await httpClient.deleteItem(listId, row.id)
+          } catch (error) {
             console.log(
-              `[kavita] could not clear list item ${row.id}: ${errMessage(e)}`,
+              `[kavita] could not clear list item ${row.id}: ${errMessage(error)}`,
             )
           }
         }
@@ -1293,15 +1350,15 @@ export function kavitaProvider({
         // want of one is a dead card. The render is pure CPU (Satori, no network) and the
         // upload is one call, so the cost of trying is bounded.
         try {
-          await c.uploadListCover(
+          await httpClient.uploadListCover(
             listId,
             await readingListCoverBase64(
               setLabel || setName,
             ),
           )
-        } catch (e) {
+        } catch (error) {
           console.log(
-            `[kavita] could not set cover on list ${listId}: ${errMessage(e)}`,
+            `[kavita] could not set cover on list ${listId}: ${errMessage(error)}`,
           )
         }
       }
@@ -1309,7 +1366,7 @@ export function kavitaProvider({
       // show. A library change mid-list can leave Kavita on the previous library's reading
       // profile (see this method's header); backing out and reopening applies the right one.
       for (const it of items) {
-        await c.addChapter(
+        await httpClient.addChapter(
           listId as number | string,
           it.seriesId,
           it.chapterId,
@@ -1370,7 +1427,9 @@ export function kavitaProvider({
       unread?: number
     }> {
       const list = findSetList(
-        (await c.readingLists({ pageSize: 200 })) || [],
+        (await httpClient.readingLists({
+          pageSize: 200,
+        })) || [],
         { setName, setLabel },
       )
       // No list means nothing was ever launched for this set. Building one here would put a
@@ -1381,18 +1440,21 @@ export function kavitaProvider({
           reason: "no reading list for this set yet",
         }
 
-      const rows = (await c.readingListItems(list.id)) || []
+      const rows =
+        (await httpClient.readingListItems(list.id)) || []
       // Unread = the chapter is not finished. `pagesRead < pages` is the same test the tile
       // grid uses; a row with no page count at all is counted as unread rather than dropped,
       // because treating unknown as "read" would trim a chapter nobody has opened.
-      const isRead = (r: {
+      const isRead = (row: {
         pagesRead?: number
         pagesTotal?: number
       }) =>
-        typeof r.pagesTotal === "number" &&
-        r.pagesTotal > 0 &&
-        (r.pagesRead ?? 0) >= r.pagesTotal
-      const unread = rows.filter((r) => !isRead(r)).length
+        typeof row.pagesTotal === "number" &&
+        row.pagesTotal > 0 &&
+        (row.pagesRead ?? 0) >= row.pagesTotal
+      const unread = rows.filter(
+        (row) => !isRead(row),
+      ).length
       if (unread > at)
         return {
           ok: true,
@@ -1402,7 +1464,7 @@ export function kavitaProvider({
 
       const want = Math.max(0, window - unread)
       const alreadyChapters = new Set(
-        rows.map((r) => String(r.chapterId)),
+        rows.map((row) => String(row.chapterId)),
       )
       const fresh = (await build())
         .filter(
@@ -1416,7 +1478,7 @@ export function kavitaProvider({
         // Best-effort per item, like the rebuild path: one chapter that refuses to add must
         // not abort the top-up and leave the reader with the same short list.
         try {
-          await c.addChapter(
+          await httpClient.addChapter(
             list.id,
             it.seriesId,
             it.chapterId,
@@ -1433,9 +1495,10 @@ export function kavitaProvider({
       let trimmed = 0
       if (added) {
         try {
-          await c.removeRead(list.id)
+          await httpClient.removeRead(list.id)
           const after =
-            (await c.readingListItems(list.id)) || []
+            (await httpClient.readingListItems(list.id)) ||
+            []
           trimmed = Math.max(
             0,
             rows.length + added - after.length,
@@ -1470,7 +1533,7 @@ export function kavitaProvider({
       }
       const seg = readerSegment(head.seriesFormat)
       const url =
-        `${c._base}/library/${head.libraryId}/series/${head.seriesId}` +
+        `${httpClient._base}/library/${head.libraryId}/series/${head.seriesId}` +
         `/${seg}/${head.chapterId}` +
         `?incognitoMode=false&readingListId=${artifact.readingListId}`
       return {

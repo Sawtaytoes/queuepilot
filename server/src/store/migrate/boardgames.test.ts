@@ -653,7 +653,7 @@ describe("the board-game absorb", () => {
     ).toEqual([])
     expect(
       searchBoardGames(games, { query: "quarry" }).map(
-        (g) => g.id,
+        (searchBoardGame) => searchBoardGame.id,
       ),
     ).toEqual(["quarry-duel"])
     // A publisher name should find its games.

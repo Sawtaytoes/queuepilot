@@ -114,8 +114,8 @@ suite("fresh lineup metadata batches", () => {
     const wrapped = await queueMetadataClient(
       client,
       entries(
-        Array.from({ length: 121 }, (_, i) =>
-          String(i + 1),
+        Array.from({ length: 121 }, (_, index) =>
+          String(index + 1),
         ),
       ),
       null,

@@ -73,12 +73,12 @@ test("routes omitted control targets to the active sitting, including seek and p
 })
 test("suppresses activity off when the sitting is replaced while stop is pending", async () => {
   let release!: () => void
-  let entered = false
+  let isEntered = false
   vi.mocked(playback.transport).mockImplementationOnce(
     async () => {
-      entered = true
-      await new Promise<void>((r) => {
-        release = r
+      isEntered = true
+      await new Promise<void>((resolve) => {
+        release = resolve
       })
       return {
         ok: false,
@@ -89,7 +89,7 @@ test("suppresses activity off when the sitting is replaced while stop is pending
   const pending = request("/control", {
     action: "power_off",
   })
-  await vi.waitFor(() => expect(entered).toBe(true))
+  await vi.waitFor(() => expect(isEntered).toBe(true))
   invalidateDeviceOperations()
   state.set = "replacement-queue"
   release()

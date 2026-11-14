@@ -8,7 +8,7 @@ import {
 } from "vitest"
 import { SCHEMA_SQL } from "./store/schema.generated.js"
 
-const f = vi.hoisted(() => ({
+const fixture = vi.hoisted(() => ({
   db: null as unknown as DatabaseSync,
   routing: {} as Record<string, Record<string, unknown>>,
   bindings: {} as Record<
@@ -20,12 +20,12 @@ vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<
     typeof import("./store/db/open.js")
   >("./store/db/open.js")
-  return { ...original, bookOfRecord: () => f.db }
+  return { ...original, bookOfRecord: () => fixture.db }
 })
 vi.mock("./engine/routing.js", () => ({
-  loadSets: () => ({ sets: f.routing }),
+  loadSets: () => ({ sets: fixture.routing }),
   bindingFor: (cfg: { id: string }) =>
-    f.bindings[cfg.id] ?? {
+    fixture.bindings[cfg.id] ?? {
       user_uuid: null,
       account_id: 1,
     },
@@ -48,9 +48,9 @@ vi.mock("./nativeAccess.js", () => ({
   ) =>
     cfg.requires_profile
       ? (users.find(
-          (u) => u.name === cfg.requires_profile,
+          (user) => user.name === cfg.requires_profile,
         ) ?? null)
-      : (users.find((u) => u.admin) ?? null),
+      : (users.find((user) => user.admin) ?? null),
 }))
 vi.mock("./nativePlex.js", () => ({
   nativeHomeUsers: async () => [
@@ -157,13 +157,13 @@ function session(
     at: number | null
   }[],
 ): void {
-  f.db
+  fixture.db
     .prepare(
       "INSERT INTO native_tv_sessions(id,key_hash,data) VALUES(?,?,?)",
     )
     .run(id, `hash-${id}`, JSON.stringify({ id, ...plan }))
   events.forEach((event, sequence) => {
-    f.db
+    fixture.db
       .prepare(
         "INSERT INTO native_tv_events(session_id,id,sequence,data,recorded_at) VALUES(?,?,?,?,?)",
       )
@@ -183,9 +183,9 @@ function session(
 }
 
 beforeEach(() => {
-  f.db = new DatabaseSync(":memory:")
-  f.db.exec(SCHEMA_SQL)
-  f.routing = {
+  fixture.db = new DatabaseSync(":memory:")
+  fixture.db.exec(SCHEMA_SQL)
+  fixture.routing = {
     family_shows: { id: "family_shows", source: "queue" },
     grace_films: {
       id: "grace_films",
@@ -193,7 +193,7 @@ beforeEach(() => {
       requires_profile: "Grace",
     },
   }
-  f.bindings = {}
+  fixture.bindings = {}
 })
 
 describe("native TV watch history", () => {
@@ -372,7 +372,7 @@ describe("native TV watch history", () => {
 
   test("counts a ledger row for every queue, whoever it plays as", () => {
     const completed = Math.floor((NOW - 3600_000) / 1000)
-    const insert = f.db.prepare(
+    const insert = fixture.db.prepare(
       `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
        VALUES(?,?,?,?,?,?,?)`,
     )
@@ -416,7 +416,7 @@ describe("native TV watch history", () => {
     )
     const rows = ledgerPlays(
       NOW - 24 * 3600_000,
-      f.routing as never,
+      fixture.routing as never,
       () => null,
     )
     expect(
@@ -470,22 +470,22 @@ describe("native TV watch history", () => {
       [echo, elsewhere],
     )
     expect(
-      kept.map((p) => [p.ratingKey, p.source]),
+      kept.map((play) => [play.ratingKey, play.source]),
     ).toEqual([
       ["501", "native-tv"],
       ["601", "native-tv"],
       ["502", "queue-ledger"],
     ])
-    expect(kept.every((p) => !("profileUuid" in p))).toBe(
-      true,
-    )
+    expect(
+      kept.every((play) => !("profileUuid" in play)),
+    ).toBe(true)
   })
 
   test("answers queue, sitting, and item for every queue, titled through each queue's profile", async () => {
     const completed = Math.floor(
       (NOW - 2 * 3600_000) / 1000,
     )
-    const insert = f.db.prepare(
+    const insert = fixture.db.prepare(
       `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
        VALUES(?,?,?,?,1,0,0)`,
     )
@@ -515,7 +515,7 @@ describe("native TV watch history", () => {
       since: NOW - 30 * 24 * 3600_000,
     })
     expect(
-      history.queues.map((q) => q.title).sort(),
+      history.queues.map((queue) => queue.title).sort(),
     ).toEqual([
       "Title of family_shows",
       "Title of grace_films",
@@ -536,7 +536,7 @@ describe("native TV watch history", () => {
     const completed = Math.floor(
       (NOW - 2 * 3600_000) / 1000,
     )
-    const insert = f.db.prepare(
+    const insert = fixture.db.prepare(
       `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
        VALUES(?,?,?,?,1,0,0)`,
     )
@@ -561,9 +561,9 @@ describe("native TV watch history", () => {
         now: NOW,
       },
     )
-    expect(history.queues.map((q) => q.setId)).toEqual([
-      "family_shows",
-    ])
+    expect(
+      history.queues.map((queue) => queue.setId),
+    ).toEqual(["family_shows"])
     expect(history.hiddenLockedQueues).toBe(1)
   })
 })

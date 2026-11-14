@@ -105,7 +105,7 @@ function claims(db = bookOfRecord()): ClaimRow[] {
  * queue that already has members. There is no flag that does; see the header.
  */
 export function seedQueuePeople({
-  force = false,
+  force: isForced = false,
 } = {}): QueuePeopleSeedReport {
   if (STORE_BACKEND === "yaml") {
     return {
@@ -119,7 +119,7 @@ export function seedQueuePeople({
   ensureImported()
   const db = bookOfRecord()
 
-  if (!force && readPeopleMeta(SEEDED_KEY, db)) {
+  if (!isForced && readPeopleMeta(SEEDED_KEY, db)) {
     return {
       ...EMPTY,
       reason: "already seeded",
@@ -205,7 +205,7 @@ export function seedQueuePeople({
     .sort()
 
   return {
-    reason: force ? "forced" : "first run",
+    reason: isForced ? "forced" : "first run",
     seeded: true,
     seededSets,
     skippedSetIds: skippedSetIds.sort(),
@@ -252,13 +252,13 @@ export function ensureQueuePeopleSeeded(): QueuePeopleSeedReport {
       )
     }
     return report
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[queue-people] seed skipped: ${errMessage(e)}`,
+      `[queue-people] seed skipped: ${errMessage(error)}`,
     )
     return {
       ...EMPTY,
-      reason: errMessage(e),
+      reason: errMessage(error),
       seeded: false,
     }
   }

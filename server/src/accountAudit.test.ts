@@ -283,7 +283,10 @@ describe("auditAttribution", () => {
 
     expect(report.pushesChecked).toBe(2)
     expect(
-      report.findings.map((f) => [f.setId, f.ratingKey]),
+      report.findings.map((finding) => [
+        finding.setId,
+        finding.ratingKey,
+      ]),
     ).toEqual([
       ["younger_kids_shows", "191157"],
       ["older_kids_shows", "443228"],

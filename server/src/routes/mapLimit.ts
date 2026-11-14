@@ -11,13 +11,13 @@ export async function mapLimit<TItem, TOut>(
   fn: (item: TItem, index: number) => Promise<TOut>,
 ): Promise<TOut[]> {
   const out = new Array<TOut>(items.length)
-  let i = 0
+  let nextIndex = 0
   await Promise.all(
     Array.from(
       { length: Math.min(limit, items.length) },
       async () => {
-        while (i < items.length) {
-          const idx = i++
+        while (nextIndex < items.length) {
+          const idx = nextIndex++
           out[idx] = await fn(items[idx] as TItem, idx)
         }
       },

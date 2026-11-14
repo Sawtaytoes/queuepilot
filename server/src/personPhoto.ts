@@ -76,7 +76,9 @@ const startsWith = (
   at = 0,
 ): boolean =>
   bytes.length >= at + signature.length &&
-  signature.every((value, i) => bytes[at + i] === value)
+  signature.every(
+    (value, index) => bytes[at + index] === value,
+  )
 
 /** The image type the magic bytes say, or null when they are not one of the three accepted. */
 export function sniffImageType(
@@ -143,9 +145,9 @@ export async function normalizePersonPhoto(
       })
       .webp({ quality: 82 })
       .toBuffer({ resolveWithObject: true })
-  } catch (e) {
+  } catch (error) {
     const message =
-      e instanceof Error ? e.message : String(e)
+      error instanceof Error ? error.message : String(error)
     throw new PhotoRejected(
       /pixel limit/i.test(message)
         ? "the image has too many pixels to process"

@@ -326,12 +326,12 @@ export function assembleFullQueue(
     string,
     { entry: number; item: number }[]
   >()
-  expanded.forEach((entry, e) => {
-    entry.items.forEach((item, i) => {
+  expanded.forEach((entry, index) => {
+    entry.items.forEach((item, position) => {
       const key = itemKey(item)
       claims.set(key, [
         ...(claims.get(key) ?? []),
-        { entry: e, item: i },
+        { entry: index, item: position },
       ])
     })
   })
@@ -345,15 +345,19 @@ export function assembleFullQueue(
       firstLineupOfEntry.set(slot.entry, index)
   })
   const order = expanded
-    .map((_, e) => e)
-    .sort((a, b) => {
-      const la = firstLineupOfEntry.get(a),
-        lb = firstLineupOfEntry.get(b)
+    .map((_, index) => index)
+    .sort((left, right) => {
+      const la = firstLineupOfEntry.get(left),
+        lb = firstLineupOfEntry.get(right)
       if (la != null || lb != null)
-        return (la ?? Infinity) - (lb ?? Infinity) || a - b
-      const pa = expanded[a]!.lane === "priority" ? 0 : 1,
-        pb = expanded[b]!.lane === "priority" ? 0 : 1
-      return pa - pb || a - b
+        return (
+          (la ?? Infinity) - (lb ?? Infinity) ||
+          left - right
+        )
+      const pa =
+          expanded[left]!.lane === "priority" ? 0 : 1,
+        pb = expanded[right]!.lane === "priority" ? 0 : 1
+      return pa - pb || left - right
     })
   const nextKey = lineup[0] ? itemKey(lineup[0]) : null
   let position = 0,
@@ -361,15 +365,16 @@ export function assembleFullQueue(
     isTruncated = false,
     isNextPlaced = false
   const entries: FullQueueEntry[] = []
-  for (const e of order) {
-    const entry = expanded[e]!
+  for (const entryIndex of order) {
+    const entry = expanded[entryIndex]!
     const items: FullQueueItem[] = []
-    entry.items.forEach((item, i) => {
+    entry.items.forEach((item, index) => {
       if (position >= FULL_QUEUE_MAX_ITEMS) {
         isTruncated = true
         return
       }
-      const lineupIndex = lineupOf.get(`${e}/${i}`) ?? null
+      const lineupIndex =
+        lineupOf.get(`${entryIndex}/${index}`) ?? null
       const isNext =
         !isNextPlaced &&
         lineupIndex === 0 &&

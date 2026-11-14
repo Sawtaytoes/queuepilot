@@ -25,22 +25,27 @@ export function parsePlaybackTargets(
   return value.map((row: unknown) => {
     if (!row || typeof row !== "object")
       throw new Error("invalid playback target")
-    const r = row as Record<string, unknown>
+    const target = row as Record<string, unknown>
     if (
-      typeof r.id !== "string" ||
-      !/^[a-zA-Z0-9_-]+$/.test(r.id) ||
-      ids.has(r.id)
+      typeof target.id !== "string" ||
+      !/^[a-zA-Z0-9_-]+$/.test(target.id) ||
+      ids.has(target.id)
     )
       throw new Error(
         "invalid or duplicate playback target id",
       )
-    if (typeof r.name !== "string" || !r.name.trim())
+    if (
+      typeof target.name !== "string" ||
+      !target.name.trim()
+    )
       throw new Error(
-        `playback target ${r.id} needs a name`,
+        `playback target ${target.id} needs a name`,
       )
-    if (typeof r.uri !== "string")
-      throw new Error(`playback target ${r.id} needs a uri`)
-    const uri = new URL(r.uri)
+    if (typeof target.uri !== "string")
+      throw new Error(
+        `playback target ${target.id} needs a uri`,
+      )
+    const uri = new URL(target.uri)
     if (
       !["http:", "https:"].includes(uri.protocol) ||
       uri.username ||
@@ -50,36 +55,40 @@ export function parsePlaybackTargets(
       uri.hash
     )
       throw new Error(
-        `invalid playback target uri for ${r.id}`,
+        `invalid playback target uri for ${target.id}`,
       )
-    if (r.adb_target != null && !isAdbTarget(r.adb_target))
-      throw new Error(`invalid adb_target for ${r.id}`)
     if (
-      r.adb_target &&
-      String(r.adb_target).split(":")[0] !== uri.hostname
+      target.adb_target != null &&
+      !isAdbTarget(target.adb_target)
+    )
+      throw new Error(`invalid adb_target for ${target.id}`)
+    if (
+      target.adb_target &&
+      String(target.adb_target).split(":")[0] !==
+        uri.hostname
     )
       throw new Error(
-        `adb_target and uri must name the same player for ${r.id}`,
+        `adb_target and uri must name the same player for ${target.id}`,
       )
     const machine =
-      typeof r.machine_identifier === "string"
-        ? r.machine_identifier
+      typeof target.machine_identifier === "string"
+        ? target.machine_identifier
         : ""
     if (machine && machines.has(machine))
       throw new Error(
         "duplicate playback target machine identifier",
       )
-    ids.add(r.id)
+    ids.add(target.id)
     if (machine) machines.add(machine)
     return {
-      id: r.id,
-      name: r.name,
+      id: target.id,
+      name: target.name,
       uri: uri.origin,
       machineIdentifier: machine,
       mode: "client",
       default: false,
-      ...(r.adb_target
-        ? { adbTarget: String(r.adb_target) }
+      ...(target.adb_target
+        ? { adbTarget: String(target.adb_target) }
         : {}),
     }
   })

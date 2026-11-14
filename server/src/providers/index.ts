@@ -181,8 +181,9 @@ export function availableProviders(): ProviderDefinition[] {
   // above had already drifted apart once in review, and a provider that instantiates but is
   // invisible in the editor is a bug nobody reports as one.
   return definitions().filter(
-    (d) =>
-      KINDS.includes(d.kind) && isConfigured(d.id, d.kind),
+    (definition) =>
+      KINDS.includes(definition.kind) &&
+      isConfigured(definition.id, definition.kind),
   )
 }
 

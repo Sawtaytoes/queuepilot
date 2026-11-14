@@ -53,26 +53,28 @@ export function undoSnapshot(
   const TOKEN_PATH = /^\/providers\/[^/]+\/token$/
   const PHOTO_PATH = /^\/people\/[^/]+\/photo$/
 
-  return async (c, next) => {
-    const full = c.req.path
+  return async (context, next) => {
+    const full = context.req.path
     // `|| '/'` so a request to the mount point itself ("/api") reads as "/" rather than "".
     const mounted = full.startsWith(mountPrefix)
       ? full.slice(mountPrefix.length) || "/"
       : full
 
-    const isMutating = MUTATING.includes(c.req.method)
+    const isMutating = MUTATING.includes(context.req.method)
     const isManaged =
       MANAGED.some(
-        (p) => mounted === p || mounted.startsWith(`${p}/`),
+        (prefix) =>
+          mounted === prefix ||
+          mounted.startsWith(`${prefix}/`),
       ) ||
       TOKEN_PATH.test(mounted) ||
       PHOTO_PATH.test(mounted)
     if (isMutating && !isManaged) {
       try {
         await history.snapshot()
-      } catch (e) {
+      } catch (error) {
         console.log(
-          `[history] snapshot failed: ${errMessage(e)}`,
+          `[history] snapshot failed: ${errMessage(error)}`,
         )
       }
     }

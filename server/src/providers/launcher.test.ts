@@ -6,7 +6,7 @@ import {
   vi,
 } from "vitest"
 
-const f = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => ({
   materialize: vi.fn(async () => ({ readingListId: 7 })),
   handoff: vi.fn(() => ({
     mode: "pull",
@@ -29,11 +29,13 @@ vi.mock("./index.js", () => ({
   providerFor: () => ({
     delivery: "pull",
     kind: "kavita",
-    materialize: f.materialize,
-    handoff: f.handoff,
+    materialize: mocks.materialize,
+    handoff: mocks.handoff,
   }),
 }))
-vi.mock("./pullLineup.js", () => ({ pullLineup: f.lineup }))
+vi.mock("./pullLineup.js", () => ({
+  pullLineup: mocks.lineup,
+}))
 
 import { launcherRoutes } from "./launcher.js"
 import { readerHandoff } from "./readerHandoff.js"
@@ -69,8 +71,8 @@ describe("Android reader handoff", () => {
     expect(
       response.headers.get("content-security-policy"),
     ).toContain("default-src 'none'")
-    expect(f.materialize).toHaveBeenCalledTimes(1)
-    expect(f.lineup.mock.calls[0]?.[3]).toEqual({
+    expect(mocks.materialize).toHaveBeenCalledTimes(1)
+    expect(mocks.lineup.mock.calls[0]?.[3]).toEqual({
       only: "chapter:4",
     })
     const body = await response.text()
@@ -100,7 +102,7 @@ describe("Android reader handoff", () => {
     })
     expect(response.status).toBe(404)
     expect(await response.text()).toContain("unknown queue")
-    expect(f.materialize).not.toHaveBeenCalled()
+    expect(mocks.materialize).not.toHaveBeenCalled()
   })
 
   test("escapes navigation attributes and rejects executable or credential-bearing URLs", () => {

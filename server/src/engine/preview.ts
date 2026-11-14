@@ -60,16 +60,18 @@ export type RotationPreview = {
 export function formatBuckets(
   buckets: readonly Bucket[] | null | undefined,
 ): PreviewBucket[] {
-  return (buckets || []).map((b) => {
-    const eps: readonly PoolItem[] = b.episodes || []
-    const isLib = String(b.ratingKey).startsWith("section-")
+  return (buckets || []).map((bucket) => {
+    const eps: readonly PoolItem[] = bucket.episodes || []
+    const isLib = String(bucket.ratingKey).startsWith(
+      "section-",
+    )
     return {
-      show: b.show,
-      ratingKey: b.ratingKey,
+      show: bucket.show,
+      ratingKey: bucket.ratingKey,
       unwatched: eps.length,
       // Slots per round when the channel is randomized. Always sent (1 = normal) so the pool
       // tile can render its control without a second lookup into the set registry.
-      weight: toWeight(b.weight),
+      weight: toWeight(bucket.weight),
       next: eps.length
         ? {
             // Guarded by `eps.length` on the line above.
@@ -77,20 +79,20 @@ export function formatBuckets(
             title: eps[0]!.title,
             season: eps[0]!.season,
             episode: eps[0]!.episode,
-            multiSeason: Boolean(b.multi_season),
+            multiSeason: Boolean(bucket.multi_season),
           }
         : null,
       items: isLib
         ? [...eps]
-            .map((e) => ({
-              ratingKey: e.ratingKey,
-              title: e.title,
+            .map((episode) => ({
+              ratingKey: episode.ratingKey,
+              title: episode.title,
             }))
-            .sort((a, b) =>
-              String(a.title || "")
+            .sort((left, right) =>
+              String(left.title || "")
                 .toLowerCase()
                 .localeCompare(
-                  String(b.title || "").toLowerCase(),
+                  String(right.title || "").toLowerCase(),
                 ),
             )
         : null,
@@ -125,26 +127,29 @@ export function bucketsSignature(
   buckets: readonly SignatureBucket[] | null | undefined,
 ): string {
   return JSON.stringify(
-    (buckets || []).map((b) => {
-      const rk = String(b.ratingKey)
+    (buckets || []).map((bucket) => {
+      const rk = String(bucket.ratingKey)
       const isLib =
-        rk.startsWith("section-") || Array.isArray(b.items)
+        rk.startsWith("section-") ||
+        Array.isArray(bucket.items)
       const base = {
-        show: b.show,
+        show: bucket.show,
         ratingKey: rk,
-        unwatched: b.unwatched,
-        items: b.items
-          ? b.items.map((i) => String(i.ratingKey)).sort()
+        unwatched: bucket.unwatched,
+        items: bucket.items
+          ? bucket.items
+              .map((item) => String(item.ratingKey))
+              .sort()
           : null,
       }
       if (isLib) return base
       return {
         ...base,
-        next: b.next
+        next: bucket.next
           ? {
-              ratingKey: String(b.next.ratingKey),
-              season: b.next.season,
-              episode: b.next.episode,
+              ratingKey: String(bucket.next.ratingKey),
+              season: bucket.next.season,
+              episode: bucket.next.episode,
             }
           : null,
       }
@@ -159,9 +164,9 @@ export function moviePoolSignature(
     | undefined,
 ): string {
   return JSON.stringify(
-    (pool || []).map((m) => ({
-      ratingKey: String(m.ratingKey),
-      count: m.count,
+    (pool || []).map((member) => ({
+      ratingKey: String(member.ratingKey),
+      count: member.count,
     })),
   )
 }
@@ -173,22 +178,28 @@ function pickRewatch(
   excludes: ReadonlySet<string> = new Set<string>(),
 ): { ratingKey: string; title: string | null } | null {
   const candidates: [string, number][] = []
-  for (const [rk, n] of counts) {
+  for (const [rk, count] of counts) {
     if (excludes.has(String(rk))) continue
-    if (n < 1) continue
-    candidates.push([rk, n])
+    if (count < 1) continue
+    candidates.push([rk, count])
   }
   if (!candidates.length) return null
-  const weights = candidates.map(([, n]) => 1 / (n * n))
+  const weights = candidates.map(
+    ([, candidate]) => 1 / (candidate * candidate),
+  )
   let total = 0
-  for (const w of weights) total += w
-  let r = Math.random() * total
+  for (const weight of weights) total += weight
+  let roll = Math.random() * total
   // The index reads below are all in-bounds by construction (`weights` is `candidates.map`, and
   // the last-element fallback runs only after the empty check above).
-  for (let i = 0; i < candidates.length; i += 1) {
-    r -= weights[i]!
-    if (r <= 0) {
-      const rk = candidates[i]![0]
+  for (
+    let index = 0;
+    index < candidates.length;
+    index += 1
+  ) {
+    roll -= weights[index]!
+    if (roll <= 0) {
+      const rk = candidates[index]![0]
       return {
         ratingKey: rk,
         title: titles.get(rk) || null,
@@ -219,7 +230,7 @@ export async function previewRotation(
     err.code = "not_rotation"
     throw err
   }
-  const c = client || liveClient()
+  const plexClient = client || liveClient()
   const binding = routing.bindingFor(
     cfg,
     profileTitle || "",
@@ -236,7 +247,7 @@ export async function previewRotation(
 
   if (behavior !== "rewatch") {
     const raw = await rotation.channelBuckets(
-      c,
+      plexClient,
       cfg,
       binding,
     )
@@ -244,9 +255,11 @@ export async function previewRotation(
   }
   if (behavior !== "progress") {
     try {
-      const tok = await c.accountToken(binding.user_uuid)
+      const tok = await plexClient.accountToken(
+        binding.user_uuid,
+      )
       const { counts, titles } = await select.rewatchCounts(
-        c,
+        plexClient,
         routing.rewatchSections(cfg),
         binding.movie_ratings,
         binding.watch_count_accounts,
@@ -256,7 +269,7 @@ export async function previewRotation(
         (binding.movie_excludes || []).map(String),
       )
       await rotation.mergeManualMoviesIntoRewatch(
-        c,
+        plexClient,
         cfg,
         binding,
         counts,
@@ -266,19 +279,19 @@ export async function previewRotation(
       )
       const pool = [...counts.entries()]
         .filter(([rk]) => !excludes.has(String(rk)))
-        .sort((a, b) => a[1] - b[1])
+        .sort((left, right) => left[1] - right[1])
         .slice(0, 500)
-        .map(([rk, n]) => ({
+        .map(([rk, value]) => ({
           ratingKey: rk,
           title: titles.get(rk) ?? null,
-          count: n,
+          count: value,
         }))
       out.movie_pool = pool
       out.movie = pickRewatch(counts, titles, excludes)
-    } catch (e) {
+    } catch (error) {
       // Movie sample is best-effort, matching Python do_preview.
       console.log(
-        `[engine] rewatch sample failed for ${setId}: ${errMessage(e)}`,
+        `[engine] rewatch sample failed for ${setId}: ${errMessage(error)}`,
       )
     }
   }

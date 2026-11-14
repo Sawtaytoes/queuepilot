@@ -126,7 +126,7 @@ export function prepareChecked<Result = unknown>(
     )
     if (missing.length > 0) {
       throw new Error(
-        `sqlite: missing named parameter(s) ${missing.map((n) => `:${n}`).join(", ")} — ` +
+        `sqlite: missing named parameter(s) ${missing.map((name) => `:${name}`).join(", ")} — ` +
           `node:sqlite would have bound NULL. SQL: ${sql.trim().split("\n")[0]}…`,
       )
     }
@@ -264,12 +264,12 @@ const RETIRED_COLUMNS: readonly {
 
 function dropRetiredColumns(db: SqliteDatabase): void {
   for (const { table, column } of RETIRED_COLUMNS) {
-    const present = (
+    const hasColumn = (
       db.pragma(`table_xinfo(${table})`) as {
         name: string
       }[]
     ).some((row) => row.name === column)
-    if (!present) continue
+    if (!hasColumn) continue
     db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
     console.log(`[store] dropped ${table}.${column}`)
   }
@@ -363,8 +363,10 @@ export function closeBookOfRecord(): void {
   if (!handle) return
   try {
     handle.close()
-  } catch (e) {
-    console.log(`[store] close failed: ${errMessage(e)}`)
+  } catch (error) {
+    console.log(
+      `[store] close failed: ${errMessage(error)}`,
+    )
   }
   handle = null
 }

@@ -37,13 +37,13 @@ export interface ParsedSearchQuery {
 export function parseSearchQuery(
   raw: unknown,
 ): ParsedSearchQuery {
-  const q = String(raw ?? "").trim()
-  if (!q) return { text: "", year: null }
-  const { title, year } = parseTitleString(q)
+  const query = String(raw ?? "").trim()
+  if (!query) return { text: "", year: null }
+  const { title, year } = parseTitleString(query)
   // A query that is NOTHING but a year (`(1992)`) leaves no title to match on. Searching the
   // empty string would return the whole library, so the original text stands and the year is
   // dropped — a useless search beats a 500-row one.
-  if (!title) return { text: q, year: null }
+  if (!title) return { text: query, year: null }
   return { text: title, year }
 }
 
@@ -60,7 +60,7 @@ export function rankByYear<
   if (year == null) return [...hits]
   const matched: T[] = []
   const rest: T[] = []
-  for (const h of hits)
-    (h.year === year ? matched : rest).push(h)
+  for (const hit of hits)
+    (hit.year === year ? matched : rest).push(hit)
   return [...matched, ...rest]
 }

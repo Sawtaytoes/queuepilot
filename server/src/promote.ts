@@ -51,9 +51,9 @@ export async function recordLead(
       INSERT INTO lead_cooldown (set_id, entry_key, led_at) VALUES (?, ?, ?)
       ON CONFLICT (set_id, entry_key) DO UPDATE SET led_at = excluded.led_at
     `).run(setId, entryKey, Math.floor(at.getTime() / 1000))
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[promote] recordLead failed: ${errMessage(e)}`,
+      `[promote] recordLead failed: ${errMessage(error)}`,
     )
   }
 }
@@ -71,9 +71,9 @@ export async function lastLedAt(
       | undefined
     if (!row || row.led_at == null) return null
     return new Date(Number(row.led_at) * 1000)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[promote] lastLedAt failed: ${errMessage(e)}`,
+      `[promote] lastLedAt failed: ${errMessage(error)}`,
     )
     return null
   }
@@ -115,9 +115,9 @@ export async function clearLead(
     stmt(
       "DELETE FROM lead_cooldown WHERE set_id = ? AND entry_key = ?",
     ).run(setId, entryKey)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[promote] clearLead failed: ${errMessage(e)}`,
+      `[promote] clearLead failed: ${errMessage(error)}`,
     )
   }
 }

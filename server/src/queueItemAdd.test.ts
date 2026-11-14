@@ -6,7 +6,7 @@ import {
   vi,
 } from "vitest"
 
-const f = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => ({
   findDuplicateItem: vi.fn(),
   addItem: vi.fn(),
   listSet: vi.fn(),
@@ -20,22 +20,23 @@ vi.mock("./engine/plex-live.js", () => ({
   liveClient: () => ({}),
 }))
 vi.mock("./engine/routing.js", () => ({
-  loadSets: () => ({ sets: f.routing }),
+  loadSets: () => ({ sets: mocks.routing }),
 }))
 vi.mock("./entryIdentity.js", () => ({
-  findDuplicateItem: f.findDuplicateItem,
+  findDuplicateItem: mocks.findDuplicateItem,
 }))
 vi.mock("./plex.js", () => ({
   machineIdentifier: async () => "fixture-home-server",
   profileScope: async () => ({ account: "ada-uuid" }),
 }))
 vi.mock("./plexSources.js", () => ({
-  plexServerAccessForProfile: f.plexServerAccessForProfile,
-  plexServerGet: f.plexServerGet,
+  plexServerAccessForProfile:
+    mocks.plexServerAccessForProfile,
+  plexServerGet: mocks.plexServerGet,
 }))
 vi.mock("./queues.js", () => ({
-  addItem: f.addItem,
-  listSet: f.listSet,
+  addItem: mocks.addItem,
+  listSet: mocks.listSet,
 }))
 
 import {
@@ -46,16 +47,16 @@ import {
 describe("addQueueItem", () => {
   beforeEach(() => {
     for (const spy of [
-      f.findDuplicateItem,
-      f.addItem,
-      f.listSet,
-      f.plexServerAccessForProfile,
-      f.plexServerGet,
+      mocks.findDuplicateItem,
+      mocks.addItem,
+      mocks.listSet,
+      mocks.plexServerAccessForProfile,
+      mocks.plexServerGet,
     ])
       spy.mockReset()
-    f.listSet.mockResolvedValue([])
-    f.findDuplicateItem.mockResolvedValue(null)
-    f.addItem.mockResolvedValue({
+    mocks.listSet.mockResolvedValue([])
+    mocks.findDuplicateItem.mockResolvedValue(null)
+    mocks.addItem.mockResolvedValue({
       added: true,
       key: "rk:401",
     })
@@ -69,17 +70,19 @@ describe("addQueueItem", () => {
         "top",
       ),
     ).resolves.toEqual({ added: true, key: "rk:401" })
-    expect(f.addItem).toHaveBeenCalledWith(
+    expect(mocks.addItem).toHaveBeenCalledWith(
       "watch",
       { ratingKey: "401", title: "Glass City" },
       "top",
       { allowDuplicate: false },
     )
-    expect(f.plexServerGet).not.toHaveBeenCalled()
+    expect(mocks.plexServerGet).not.toHaveBeenCalled()
   })
 
   test("names the line a duplicate repeats, unless a duplicate was asked for", async () => {
-    f.findDuplicateItem.mockResolvedValue({ key: "rk:401" })
+    mocks.findDuplicateItem.mockResolvedValue({
+      key: "rk:401",
+    })
     await expect(
       addQueueItem(
         "watch",
@@ -91,7 +94,7 @@ describe("addQueueItem", () => {
       key: "rk:401",
       duplicateOf: "rk:401",
     })
-    expect(f.addItem).not.toHaveBeenCalled()
+    expect(mocks.addItem).not.toHaveBeenCalled()
     await addQueueItem(
       "watch",
       { ratingKey: "401", title: "Glass City" },
@@ -100,7 +103,7 @@ describe("addQueueItem", () => {
         allowDuplicate: true,
       },
     )
-    expect(f.addItem).toHaveBeenCalledWith(
+    expect(mocks.addItem).toHaveBeenCalledWith(
       "watch",
       { ratingKey: "401", title: "Glass City" },
       "bottom",
@@ -109,10 +112,10 @@ describe("addQueueItem", () => {
   })
 
   test("checks a shared-server item through the queue profile before writing it", async () => {
-    f.plexServerAccessForProfile.mockResolvedValue({
+    mocks.plexServerAccessForProfile.mockResolvedValue({
       baseUrl: "https://shared.example.com",
     })
-    f.plexServerGet.mockResolvedValue({
+    mocks.plexServerGet.mockResolvedValue({
       MediaContainer: { Metadata: [{ type: "show" }] },
     })
     const value = {
@@ -122,17 +125,17 @@ describe("addQueueItem", () => {
     }
     await addQueueItem("watch", value, "top")
     expect(
-      f.plexServerAccessForProfile,
+      mocks.plexServerAccessForProfile,
     ).toHaveBeenCalledWith("ada-uuid", "fixture-shared")
-    expect(f.addItem).toHaveBeenCalled()
+    expect(mocks.addItem).toHaveBeenCalled()
   })
 
   test("refuses a shared-server item it cannot vouch for", async () => {
     const refusal = (value: unknown) =>
       addQueueItem("watch", value as never, "top").catch(
-        (e: QueueAddError) => [
-          e instanceof QueueAddError,
-          e.status,
+        (error: QueueAddError) => [
+          error instanceof QueueAddError,
+          error.status,
         ],
       )
     expect(
@@ -149,7 +152,7 @@ describe("addQueueItem", () => {
         plex_server: "fixture-shared",
       }),
     ).toEqual([true, 400])
-    f.plexServerAccessForProfile.mockResolvedValue(null)
+    mocks.plexServerAccessForProfile.mockResolvedValue(null)
     expect(
       await refusal({
         ratingKey: "402",
@@ -157,10 +160,10 @@ describe("addQueueItem", () => {
         plex_server: "fixture-shared",
       }),
     ).toEqual([true, 403])
-    f.plexServerAccessForProfile.mockResolvedValue({
+    mocks.plexServerAccessForProfile.mockResolvedValue({
       baseUrl: "https://shared.example.com",
     })
-    f.plexServerGet.mockResolvedValue({
+    mocks.plexServerGet.mockResolvedValue({
       MediaContainer: { Metadata: [{ type: "episode" }] },
     })
     expect(
@@ -170,6 +173,6 @@ describe("addQueueItem", () => {
         plex_server: "fixture-shared",
       }),
     ).toEqual([true, 400])
-    expect(f.addItem).not.toHaveBeenCalled()
+    expect(mocks.addItem).not.toHaveBeenCalled()
   })
 })

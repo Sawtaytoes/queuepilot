@@ -65,12 +65,13 @@ export function toEntryObject(
     !Array.isArray(value)
   )
     return value
-  const s = String(value).trim()
-  if (/^\d+$/.test(s))
+  const trimmed = String(value).trim()
+  if (/^\d+$/.test(trimmed))
     return {
-      ratingKey: typeof value === "number" ? value : s,
+      ratingKey:
+        typeof value === "number" ? value : trimmed,
     }
-  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1]
+  const coll = COLLECTION_PREFIX_RE.exec(trimmed)?.[1]
   if (coll !== undefined) return { collection: coll.trim() }
   return { title: String(value) }
 }
@@ -224,8 +225,10 @@ export function hasSection(value: unknown): boolean {
     Array.isArray(value)
   )
     return false
-  const m = value as { start?: unknown; end?: unknown }
-  return hasPositionMs(m.start) || hasPositionMs(m.end)
+  const range = value as { start?: unknown; end?: unknown }
+  return (
+    hasPositionMs(range.start) || hasPositionMs(range.end)
+  )
 }
 
 /**

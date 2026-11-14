@@ -115,23 +115,25 @@ async function clearRemovedLeads(
 // byte, so nothing on disk re-keys and no `queue_entry_history` or `lead_cooldown` row is
 // orphaned ([decision] docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md).
 export function entryKey(value: unknown): string | null {
-  const m = asMapping(value)
-  if (m) {
-    const id = entryIdOf(m)
+  const mapping = asMapping(value)
+  if (mapping) {
+    const id = entryIdOf(mapping)
     if (id) return `id:${id}`
-    if (m.plex_server && m.ratingKey != null)
-      return `server:${m.plex_server}:rk:${m.ratingKey}`
-    if (m.ratingKey != null) return `rk:${m.ratingKey}`
+    if (mapping.plex_server && mapping.ratingKey != null)
+      return `server:${mapping.plex_server}:rk:${mapping.ratingKey}`
+    if (mapping.ratingKey != null)
+      return `rk:${mapping.ratingKey}`
     // {collection: X} keys like a `Collection: X` string — the older, string-encoded spelling
     // of the same entry, so re-shaping one into the other never moves a line.
-    if (m.collection)
-      return `title:Collection: ${String(m.collection).trim()}`
-    if (m.title) return `title:${String(m.title).trim()}`
+    if (mapping.collection)
+      return `title:Collection: ${String(mapping.collection).trim()}`
+    if (mapping.title)
+      return `title:${String(mapping.title).trim()}`
     return null
   }
-  const s = String(value).trim()
-  if (/^\d+$/.test(s)) return `rk:${s}`
-  return s ? `title:${s}` : null
+  const trimmed = String(value).trim()
+  if (/^\d+$/.test(trimmed)) return `rk:${trimmed}`
+  return trimmed ? `title:${trimmed}` : null
 }
 
 // --- the entry FORMAT (2026-08-21) ------------------------------------------- //
@@ -160,10 +162,10 @@ export function entryDone(value: unknown): boolean {
 // non-numeric. `sweepCompleted` measures the TTL against this, so a hand-marked `done: true`
 // with no timestamp reads as null and is never auto-removed.
 export function entryDoneAt(value: unknown): number | null {
-  const m = asMapping(value)
-  if (m && m.done_at != null) {
-    const n = Number(m.done_at)
-    return Number.isFinite(n) ? n : null
+  const mapping = asMapping(value)
+  if (mapping && mapping.done_at != null) {
+    const doneAt = Number(mapping.done_at)
+    return Number.isFinite(doneAt) ? doneAt : null
   }
   return null
 }
@@ -192,21 +194,21 @@ export function parseDuration(
   value: unknown,
 ): number | null {
   if (value == null) return null
-  const s = String(value).trim().toLowerCase()
+  const normalized = String(value).trim().toLowerCase()
   if (
     ["", "0", "never", "off", "none", "disabled"].includes(
-      s,
+      normalized,
     )
   )
     return null
-  const m = /^(\d+)\s*([smhdw]?)$/.exec(s)
-  if (!m) return null
-  const n = parseInt(m[1] ?? "", 10)
-  if (!n) return null
+  const match = /^(\d+)\s*([smhdw]?)$/.exec(normalized)
+  if (!match) return null
+  const amount = parseInt(match[1] ?? "", 10)
+  if (!amount) return null
   // Both defaults are unreachable: group 1 is required and group 2 is optional-but-always-
   // captured (`''` when the unit is omitted), and `''` is itself a DURATION_UNITS key worth 1.
   // They exist only because `noUncheckedIndexedAccess` cannot know that.
-  return n * (DURATION_UNITS[m[2] ?? ""] ?? 1)
+  return amount * (DURATION_UNITS[match[2] ?? ""] ?? 1)
 }
 
 /**
@@ -229,8 +231,8 @@ export function parseDuration(
 export async function entryOwner(
   setName: string,
 ): Promise<string> {
-  const s = await sets.getSet(setName)
-  return s?.filtered_from || setName
+  const setEntry = await sets.getSet(setName)
+  return setEntry?.filtered_from || setName
 }
 
 function seqFor(doc: Document, setName: string): YAMLSeq {
@@ -262,7 +264,9 @@ function entriesOf(
         doneAt: entryDoneAt(value),
       }
     })
-    .filter((e): e is QueueEntry => e.key !== null)
+    .filter(
+      (entry): entry is QueueEntry => entry.key !== null,
+    )
 }
 
 // Ordered raw entries for one set: [{ key, value }]. `value` is plain JS (scalar or object).
@@ -329,10 +333,10 @@ export async function listAll(): Promise<
   // above is keyed on `queues.yaml`'s stat, so the aliases are rebuilt on the next set edit
   // only if the queue file also moved. `getSet()` is a Map lookup on a registry memoized on
   // ITS own file, so re-deriving them every call is cheaper than a second cache key.
-  for (const s of (await sets.getRegistry()).sets) {
-    if (!s.filtered_from) continue
-    const parent = map.get(s.filtered_from)
-    if (parent) map.set(s.id, parent)
+  for (const set of (await sets.getRegistry()).sets) {
+    if (!set.filtered_from) continue
+    const parent = map.get(set.filtered_from)
+    if (parent) map.set(set.id, parent)
   }
   if (st)
     _allCache = { mtimeMs: st.mtimeMs, size: st.size, map }
@@ -352,8 +356,8 @@ export async function removeCompleted(
     const seq = doc.get(owner)
     if (!(seq instanceof YAMLSeq)) return { removed: 0 }
     const before = seq.items.length
-    seq.items = seq.items.filter((n) => {
-      const value = plain(n)
+    seq.items = seq.items.filter((item) => {
+      const value = plain(item)
       if (!entryDone(value)) return true
       const key = entryKey(value)
       if (key) removedKeys.push(key)
@@ -392,12 +396,12 @@ export async function sweepCompleted(
   opts: SweepOptions = {},
 ): Promise<{ removed: number }> {
   const {
-    keepCompleted = false,
-    reel = false,
+    keepCompleted: isKeepingCompleted = false,
+    reel: isReel = false,
     removeCompletedAfter = DEFAULT_REMOVE_COMPLETED_AFTER,
     now,
   } = opts
-  if (keepCompleted || reel) return { removed: 0 }
+  if (isKeepingCompleted || isReel) return { removed: 0 }
   const ttl = parseDuration(removeCompletedAfter)
   if (ttl == null) return { removed: 0 }
   const nowSec = now == null ? Date.now() / 1000 : now
@@ -408,18 +412,18 @@ export async function sweepCompleted(
     const seq = doc.get(owner)
     if (!(seq instanceof YAMLSeq)) return { removed: 0 }
     const before = seq.items.length
-    seq.items = seq.items.filter((n) => {
-      const v = plain(n)
-      const doneAt = entryDoneAt(v)
-      const shouldRemove =
-        entryDone(v) &&
+    seq.items = seq.items.filter((item) => {
+      const value = plain(item)
+      const doneAt = entryDoneAt(value)
+      const isExpired =
+        entryDone(value) &&
         doneAt != null &&
         nowSec - doneAt >= ttl
-      if (shouldRemove) {
-        const key = entryKey(v)
+      if (isExpired) {
+        const key = entryKey(value)
         if (key) removedKeys.push(key)
       }
-      return !shouldRemove
+      return !isExpired
     })
     const removed = before - seq.items.length
     if (removed) {
@@ -484,7 +488,9 @@ export async function addItem(
   setName: string,
   value: EntryValue,
   position: "top" | "bottom" = "top",
-  { allowDuplicate = false }: AddItemOptions = {},
+  {
+    allowDuplicate: isDuplicateAllowed = false,
+  }: AddItemOptions = {},
 ): Promise<{ added: boolean; key: string }> {
   const owner = await entryOwner(setName)
   return withLock(async () => {
@@ -501,10 +507,14 @@ export async function addItem(
       entry.queued_at = Math.floor(Date.now() / 1000)
     let key = entryKey(entry)
     if (!key) throw new Error("empty entry")
-    if (seq.items.some((n) => entryKey(plain(n)) === key)) {
+    if (
+      seq.items.some(
+        (item) => entryKey(plain(item)) === key,
+      )
+    ) {
       // An add that names a WINDOW is asking for a line, not for the item, so it says "yes"
       // on its own — the same reasoning that lets it past `entryIdentity.findDuplicateItem`.
-      if (!allowDuplicate && !hasSection(entry))
+      if (!isDuplicateAllowed && !hasSection(entry))
         return { added: false, key }
       // MINTED HERE AND NOWHERE ELSE. This is the only refusal an id removes, which is what
       // keeps every existing line's key byte-identical: an entry that was never going to be
@@ -532,7 +542,7 @@ export async function removeItem(
     if (!(seq instanceof YAMLSeq)) return { removed: false }
     const before = seq.items.length
     seq.items = seq.items.filter(
-      (n) => entryKey(plain(n)) !== key,
+      (item) => entryKey(plain(item)) !== key,
     )
     if (seq.items.length === before)
       return { removed: false }
@@ -548,19 +558,19 @@ function applyOrder(seq: YAMLSeq, keys: string[]): void {
   // Keyed by `string | null` because entryKey() returns null for an unidentifiable node, and
   // those must still sort (to the tail) rather than blow up the lookup.
   const rank = new Map<string | null, number>(
-    keys.map((k, i) => [k, i]),
+    keys.map((key, index) => [key, index]),
   )
-  const withKeys = seq.items.map((n, i) => ({
-    n,
-    k: entryKey(plain(n)),
-    i,
+  const withKeys = seq.items.map((item, index) => ({
+    n: item,
+    k: entryKey(plain(item)),
+    i: index,
   }))
-  withKeys.sort((a, b) => {
-    const ra = rank.get(a.k) ?? keys.length + a.i
-    const rb = rank.get(b.k) ?? keys.length + b.i
+  withKeys.sort((left, right) => {
+    const ra = rank.get(left.k) ?? keys.length + left.i
+    const rb = rank.get(right.k) ?? keys.length + right.i
     return ra - rb
   })
-  seq.items = withKeys.map((x) => x.n)
+  seq.items = withKeys.map((withKey) => withKey.n)
 }
 
 // Move an entry from one set to another (cross-queue drag), placing it per `toKeys` (the
@@ -579,14 +589,18 @@ export async function moveItem(
     const src = doc.get(fromSet)
     if (!(src instanceof YAMLSeq)) return { moved: false }
     const idx = src.items.findIndex(
-      (n) => entryKey(plain(n)) === key,
+      (item) => entryKey(plain(item)) === key,
     )
     if (idx < 0) return { moved: false }
     const [node] = src.items.splice(idx, 1)
     if (src.items.length === 0) src.flow = true // source emptied → compact `[]`
     const dst = seqFor(doc, toSet)
     dst.flow = false
-    if (!dst.items.some((n) => entryKey(plain(n)) === key))
+    if (
+      !dst.items.some(
+        (item) => entryKey(plain(item)) === key,
+      )
+    )
       dst.items.push(node)
     applyOrder(dst, toKeys)
     await writeDoc(doc)
@@ -619,15 +633,17 @@ export async function moveBulk(
       if (fromSet === toSet) continue
       const src = doc.get(fromSet)
       if (!(src instanceof YAMLSeq)) continue
-      const i = src.items.findIndex(
-        (n) => entryKey(plain(n)) === key,
+      const index = src.items.findIndex(
+        (item) => entryKey(plain(item)) === key,
       )
-      if (i < 0) continue
-      const [node] = src.items.splice(i, 1)
+      if (index < 0) continue
+      const [node] = src.items.splice(index, 1)
       removedItems.push({ fromSet, key })
       if (src.items.length === 0) src.flow = true
       if (
-        !dst.items.some((n) => entryKey(plain(n)) === key)
+        !dst.items.some(
+          (item) => entryKey(plain(item)) === key,
+        )
       ) {
         dst.flow = false
         dst.items.push(node)
@@ -657,7 +673,7 @@ export async function removeBulk(
       if (!(src instanceof YAMLSeq)) continue
       const before = src.items.length
       src.items = src.items.filter(
-        (n) => entryKey(plain(n)) !== key,
+        (item) => entryKey(plain(item)) !== key,
       )
       if (src.items.length < before) {
         removed += 1
@@ -693,14 +709,18 @@ interface SplitEntry {
 // Exported for providers/launcher.ts, which needs an entry's stored id + its `episodes:`
 // override to build a PULL provider's lineup — the same decomposition every writer here uses.
 export function splitEntry(cur: unknown): SplitEntry {
-  const m = asMapping(cur)
-  if (m) {
-    const { ratingKey = null, title = null, ...extras } = m
+  const mapping = asMapping(cur)
+  if (mapping) {
+    const {
+      ratingKey = null,
+      title = null,
+      ...extras
+    } = mapping
     return { ratingKey, title, extras }
   }
-  const s = String(cur).trim()
-  if (/^\d+$/.test(s))
-    return { ratingKey: s, title: null, extras: {} }
+  const trimmed = String(cur).trim()
+  if (/^\d+$/.test(trimmed))
+    return { ratingKey: trimmed, title: null, extras: {} }
   return { ratingKey: null, title: String(cur), extras: {} }
 }
 
@@ -716,17 +736,17 @@ function entryNode(
   { ratingKey, title, extras }: SplitEntry,
 ): Node {
   const keys = Object.keys(extras).filter(
-    (k) => extras[k] != null,
+    (key) => extras[key] != null,
   )
-  const o: Record<string, unknown> = {}
+  const ordered: Record<string, unknown> = {}
   // `id` LEADS when the entry carries one. It is what keys the line, and this file is read and
   // edited by hand over SMB — the identity belongs above the payload. Setting the key here and
   // again in the loop below is harmless: an existing key keeps its position.
-  if (extras.id != null) o.id = extras.id
-  if (ratingKey != null) o.ratingKey = ratingKey
-  if (title != null) o.title = title
-  for (const k of keys) o[k] = extras[k]
-  return doc.createNode(o)
+  if (extras.id != null) ordered.id = extras.id
+  if (ratingKey != null) ordered.ratingKey = ratingKey
+  if (title != null) ordered.title = title
+  for (const key of keys) ordered[key] = extras[key]
+  return doc.createNode(ordered)
 }
 
 // Replace one entry in a set, addressed by its stable key. `mutate({ratingKey,title,extras})`
@@ -778,8 +798,12 @@ export async function preserveInheritedPlacements(
     const seq = doc.get(owner)
     if (!(seq instanceof YAMLSeq)) return { changed: 0 }
     let changed = 0
-    for (let i = 0; i < seq.items.length; i += 1) {
-      const split = splitEntry(plain(seq.items[i]))
+    for (
+      let index = 0;
+      index < seq.items.length;
+      index += 1
+    ) {
+      const split = splitEntry(plain(seq.items[index]))
       if (
         split.extras.placement === "priority" ||
         split.extras.placement === "random"
@@ -790,7 +814,7 @@ export async function preserveInheritedPlacements(
         delete split.extras.lead
         delete split.extras.promote_window
       }
-      seq.items[i] = entryNode(doc, split)
+      seq.items[index] = entryNode(doc, split)
       changed += 1
     }
     if (changed) {
@@ -824,7 +848,7 @@ export async function stampQueuedAt(
       ? Math.floor(Date.now() / 1000)
       : Math.floor(nowSec)
   let stamped: number | null = null
-  const ok = await rewriteEntry(setName, key, (split) => {
+  const isOk = await rewriteEntry(setName, key, (split) => {
     const existing = Number(split.extras.queued_at)
     if (Number.isFinite(existing) && existing > 0) {
       stamped = existing
@@ -833,7 +857,7 @@ export async function stampQueuedAt(
     split.extras.queued_at = now
     stamped = now
   })
-  return ok ? stamped : null
+  return isOk ? stamped : null
 }
 
 // Tag the given entry keys **done** in place — kept in the file, excluded from play.
@@ -859,33 +883,41 @@ export async function markDone(
     const doc = await readDoc()
     const seq = doc.get(owner)
     if (!(seq instanceof YAMLSeq)) return { changed: false }
-    let changed = false
-    for (let i = 0; i < seq.items.length; i += 1) {
-      const cur = plain(seq.items[i])
+    let hasChanged = false
+    for (
+      let index = 0;
+      index < seq.items.length;
+      index += 1
+    ) {
+      const cur = plain(seq.items[index])
       const key = entryKey(cur)
       if (!want.has(key)) continue
-      const m = asMapping(cur)
-      if (m) {
-        if (m.done === true && m.done_at != null) continue
+      const mapping = asMapping(cur)
+      if (mapping) {
+        if (
+          mapping.done === true &&
+          mapping.done_at != null
+        )
+          continue
         const split = splitEntry(cur)
         split.extras.done = true
         split.extras.done_at = now
-        seq.items[i] = entryNode(doc, split)
-        changed = true
+        seq.items[index] = entryNode(doc, split)
+        hasChanged = true
       } else {
         // Scalar → mapping carrying identity + done flags, the shape every entry holds now.
         const split = splitEntry(cur)
         split.extras.done = true
         split.extras.done_at = now
-        seq.items[i] = entryNode(doc, split)
-        changed = true
+        seq.items[index] = entryNode(doc, split)
+        hasChanged = true
       }
     }
-    if (changed) {
+    if (hasChanged) {
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed }
+    return { changed: hasChanged }
   })
 }
 
@@ -905,24 +937,29 @@ export async function clearDone(
     const doc = await readDoc()
     const seq = doc.get(owner)
     if (!(seq instanceof YAMLSeq)) return { changed: false }
-    let changed = false
-    for (let i = 0; i < seq.items.length; i += 1) {
-      const cur = plain(seq.items[i])
-      const m = asMapping(cur)
-      if (!m) continue
+    let hasChanged = false
+    for (
+      let index = 0;
+      index < seq.items.length;
+      index += 1
+    ) {
+      const cur = plain(seq.items[index])
+      const mapping = asMapping(cur)
+      if (!mapping) continue
       if (!want.has(entryKey(cur))) continue
-      if (m.done == null && m.done_at == null) continue
+      if (mapping.done == null && mapping.done_at == null)
+        continue
       const split = splitEntry(cur)
       delete split.extras.done
       delete split.extras.done_at
-      seq.items[i] = entryNode(doc, split)
-      changed = true
+      seq.items[index] = entryNode(doc, split)
+      hasChanged = true
     }
-    if (changed) {
+    if (hasChanged) {
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed }
+    return { changed: hasChanged }
   })
 }
 
@@ -931,10 +968,10 @@ async function setCountDefault(
   setName: string,
   field: "episodes" | "volumes",
 ): Promise<number> {
-  const s = await sets.getSet(setName)
-  if (!s || s.source !== "queue") return 1
-  const n = s[field]
-  return n != null && n >= 1 ? n : 1
+  const setEntry = await sets.getSet(setName)
+  if (!setEntry || setEntry.source !== "queue") return 1
+  const stored = setEntry[field]
+  return stored != null && stored >= 1 ? stored : 1
 }
 
 /**
@@ -945,8 +982,10 @@ async function setCountDefault(
  */
 export function storedCount(raw: unknown): number | null {
   if (raw == null || raw === "") return null
-  const n = parseInt(String(raw), 10)
-  return Number.isFinite(n) && n >= 1 ? n : null
+  const parsed = parseInt(String(raw), 10)
+  return Number.isFinite(parsed) && parsed >= 1
+    ? parsed
+    : null
 }
 
 // Set a series entry's per-show `episodes` (episodes queued per play). Rewrites the entry as
@@ -960,7 +999,7 @@ export async function setEpisodes(
   // Capped at the ENGINE's own hard cap rather than a second, smaller magic number: the editor
   // offers a free-typed count, and a value this accepted but resolve.js then clamped would have
   // the file disagreeing with what actually plays.
-  const n = Math.max(
+  const episodeCount = Math.max(
     1,
     Math.min(
       parseInt(String(episodes), 10) || 1,
@@ -971,11 +1010,14 @@ export async function setEpisodes(
     setName,
     "episodes",
   )
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (n === setDefault) delete e.extras.episodes
-    else e.extras.episodes = n
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (episodeCount === setDefault)
+      delete split.extras.episodes
+    else split.extras.episodes = episodeCount
   })
-  return ok ? { ok: true, episodes: n } : { ok: false }
+  return isOk
+    ? { ok: true, episodes: episodeCount }
+    : { ok: false }
 }
 
 /**
@@ -990,12 +1032,12 @@ export async function setItemOrder(
   { ok: true; item_order: "shuffle" | null } | { ok: false }
 > {
   const order = normalizeEntryItemOrder(value)
-  const ok = await rewriteEntry(setName, key, (entry) => {
+  const isOk = await rewriteEntry(setName, key, (entry) => {
     if (order === "shuffle")
       entry.extras.item_order = "shuffle"
     else delete entry.extras.item_order
   })
-  return ok
+  return isOk
     ? {
         ok: true,
         item_order: order === "shuffle" ? "shuffle" : null,
@@ -1011,7 +1053,7 @@ export async function setVolumes(
   key: string,
   volumes: unknown,
 ): Promise<{ ok: true; volumes: number } | { ok: false }> {
-  const n = Math.max(
+  const volumeCount = Math.max(
     1,
     Math.min(
       parseInt(String(volumes), 10) || 1,
@@ -1022,11 +1064,14 @@ export async function setVolumes(
     setName,
     "volumes",
   )
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (n === setDefault) delete e.extras.volumes
-    else e.extras.volumes = n
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (volumeCount === setDefault)
+      delete split.extras.volumes
+    else split.extras.volumes = volumeCount
   })
-  return ok ? { ok: true, volumes: n } : { ok: false }
+  return isOk
+    ? { ok: true, volumes: volumeCount }
+    : { ok: false }
 }
 
 // Set a queue entry's WEIGHT — how many slots it takes per round when the set is randomized
@@ -1037,12 +1082,15 @@ export async function setWeight(
   key: string,
   weight: unknown,
 ): Promise<{ ok: true; weight: number } | { ok: false }> {
-  const n = toWeight(weight)
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (n > 1) e.extras.weight = n
-    else delete e.extras.weight
+  const normalizedWeight = toWeight(weight)
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (normalizedWeight > 1)
+      split.extras.weight = normalizedWeight
+    else delete split.extras.weight
   })
-  return ok ? { ok: true, weight: n } : { ok: false }
+  return isOk
+    ? { ok: true, weight: normalizedWeight }
+    : { ok: false }
 }
 
 // PROMOTE / DEMOTE — move one entry between a Picks queue's two lanes.
@@ -1062,23 +1110,25 @@ export async function setPlacement(
 ): Promise<
   { ok: true; placement: string | null } | { ok: false }
 > {
-  const v =
+  const normalized =
     value == null ? "" : String(value).trim().toLowerCase()
   const placement =
-    v === "priority" || v === "random" ? v : null
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (placement) e.extras.placement = placement
-    else delete e.extras.placement
+    normalized === "priority" || normalized === "random"
+      ? normalized
+      : null
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (placement) split.extras.placement = placement
+    else delete split.extras.placement
     // `lead` and `promote_window` only mean anything inside the Priority lane. Leaving them
     // on a demoted entry is dead YAML that reads as a setting.
     if (placement !== "priority") {
-      delete e.extras.lead
-      delete e.extras.promote_window
+      delete split.extras.lead
+      delete split.extras.promote_window
     }
   })
-  if (ok && placement !== "priority")
+  if (isOk && placement !== "priority")
     await promote.clearLead(setName, key)
-  return ok ? { ok: true, placement } : { ok: false }
+  return isOk ? { ok: true, placement } : { ok: false }
 }
 
 // How often a Priority entry LEADS: "always" (sticky head every sitting) or "once" (at most
@@ -1101,33 +1151,36 @@ export async function setLead(
     }
   | { ok: false }
 > {
-  const v =
+  const normalizedLead =
     lead == null ? "" : String(lead).trim().toLowerCase()
-  const mode = v === "once" || v === "always" ? v : null
-  const w =
+  const mode =
+    normalizedLead === "once" || normalizedLead === "always"
+      ? normalizedLead
+      : null
+  const normalizedWindow =
     window == null
       ? ""
       : String(window).trim().toLowerCase()
   const win =
     mode === "once" &&
-    w &&
+    normalizedWindow &&
     !["0", "never", "off", "none", "disabled"].includes(
-      w,
+      normalizedWindow,
     ) &&
-    parsePromoteWindow(w) != null
-      ? w
+    parsePromoteWindow(normalizedWindow) != null
+      ? normalizedWindow
       : null
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (mode) e.extras.lead = mode
-    else delete e.extras.lead
-    if (win) e.extras.promote_window = win
-    else delete e.extras.promote_window
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (mode) split.extras.lead = mode
+    else delete split.extras.lead
+    if (win) split.extras.promote_window = win
+    else delete split.extras.promote_window
   })
   // Going sticky, or widening the window, should take effect NOW rather than after the old
   // window expires — the owner just told the queue what to do.
-  if (ok && mode !== "once")
+  if (isOk && mode !== "once")
     await promote.clearLead(setName, key)
-  return ok
+  return isOk
     ? { ok: true, lead: mode, promote_window: win }
     : { ok: false }
 }
@@ -1144,14 +1197,16 @@ export async function setBatchStop(
   | { ok: true; batch_stops_at: string | null }
   | { ok: false }
 > {
-  const s =
+  const normalized =
     value == null ? "" : String(value).trim().toLowerCase()
-  const stop = ["member", "season"].includes(s) ? s : null
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (stop) e.extras.batch_stops_at = stop
-    else delete e.extras.batch_stops_at
+  const stop = ["member", "season"].includes(normalized)
+    ? normalized
+    : null
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (stop) split.extras.batch_stops_at = stop
+    else delete split.extras.batch_stops_at
   })
-  return ok
+  return isOk
     ? { ok: true, batch_stops_at: stop }
     : { ok: false }
 }
@@ -1191,22 +1246,24 @@ export function normalizeStart(
     positionMs == null
   )
     return null
-  const s: Start = {}
-  if (hasSeries) s.series = String(src.series).trim()
+  const normalized: Start = {}
+  if (hasSeries)
+    normalized.series = String(src.series).trim()
   if (src.episode != null) {
-    s.season = Math.max(
+    normalized.season = Math.max(
       1,
       parseInt(String(src.season), 10) || 1,
     )
-    s.episode = Math.max(
+    normalized.episode = Math.max(
       1,
       parseInt(String(src.episode), 10) || 1,
     )
   }
-  if (positionMs != null) s.position_ms = positionMs
+  if (positionMs != null)
+    normalized.position_ms = positionMs
   if (src.history === "queue" || src.history === "provider")
-    s.history = src.history
-  return s
+    normalized.history = src.history
+  return normalized
 }
 
 // Normalize an END point off the wire — where the first played unit STOPS. `start`'s mirror,
@@ -1287,34 +1344,36 @@ export async function setStart(
 ): Promise<
   { ok: true; start: Start | null } | EntryWriteRefusal
 > {
-  const s = normalizeStart(start)
+  const normalized = normalizeStart(start)
   let refused: string | null = null
-  const ok = await rewriteEntry(setName, key, (e) => {
+  const isOk = await rewriteEntry(setName, key, (split) => {
     refused = sectionRefusal(
-      s?.position_ms ?? null,
-      e.extras.end?.position_ms ?? null,
+      normalized?.position_ms ?? null,
+      split.extras.end?.position_ms ?? null,
     )
     if (refused) return false
     // Promote the first model's `start.history` to the entry. History is independent of the
     // floor now, so clearing or moving a start must not silently change its source.
     const source =
-      normalizeWatchHistory(s?.history) ??
-      normalizeWatchHistory(e.extras.start?.history)
+      normalizeWatchHistory(normalized?.history) ??
+      normalizeWatchHistory(split.extras.start?.history)
     if (
       source &&
-      !normalizeWatchHistory(e.extras.watch_history)
+      !normalizeWatchHistory(split.extras.watch_history)
     ) {
-      e.extras.watch_history = source
+      split.extras.watch_history = source
     }
-    if (s) {
-      const next = { ...s }
+    if (normalized) {
+      const next = { ...normalized }
       delete next.history
-      e.extras.start = next
-    } else delete e.extras.start
+      split.extras.start = next
+    } else delete split.extras.start
     return undefined
   })
   if (refused) return { ok: false, error: refused }
-  return ok ? { ok: true, start: s } : { ok: false }
+  return isOk
+    ? { ok: true, start: normalized }
+    : { ok: false }
 }
 
 // Set (or clear) an entry's END point — stop the first played unit here and advance to the
@@ -1329,20 +1388,22 @@ export async function setEnd(
 ): Promise<
   { ok: true; end: End | null } | EntryWriteRefusal
 > {
-  const e = normalizeEnd(end)
+  const normalizedEnd = normalizeEnd(end)
   let refused: string | null = null
-  const ok = await rewriteEntry(setName, key, (split) => {
+  const isOk = await rewriteEntry(setName, key, (split) => {
     refused = sectionRefusal(
       split.extras.start?.position_ms ?? null,
-      e?.position_ms ?? null,
+      normalizedEnd?.position_ms ?? null,
     )
     if (refused) return false
-    if (e) split.extras.end = e
+    if (normalizedEnd) split.extras.end = normalizedEnd
     else delete split.extras.end
     return undefined
   })
   if (refused) return { ok: false, error: refused }
-  return ok ? { ok: true, end: e } : { ok: false }
+  return isOk
+    ? { ok: true, end: normalizedEnd }
+    : { ok: false }
 }
 
 /** Set an entry's history source, or clear it so the entry follows its queue. */
@@ -1355,18 +1416,18 @@ export async function setWatchHistory(
   | { ok: false }
 > {
   const source = normalizeWatchHistory(value)
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (source) e.extras.watch_history = source
-    else delete e.extras.watch_history
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (source) split.extras.watch_history = source
+    else delete split.extras.watch_history
     // One source of truth after this entry is edited. The compatibility read remains for
     // untouched rows, but a new writer never leaves the old nested override behind.
-    if (e.extras.start?.history) {
-      const next = { ...e.extras.start }
+    if (split.extras.start?.history) {
+      const next = { ...split.extras.start }
       delete next.history
-      e.extras.start = next
+      split.extras.start = next
     }
   })
-  return ok
+  return isOk
     ? { ok: true, watch_history: source }
     : { ok: false }
 }
@@ -1385,16 +1446,16 @@ export async function setCollectionOrder(
         ...new Set(
           value
             .map(String)
-            .map((v) => v.trim())
+            .map((member) => member.trim())
             .filter(Boolean),
         ),
       ]
     : []
-  const ok = await rewriteEntry(setName, key, (e) => {
-    if (order.length) e.extras.collection_order = order
-    else delete e.extras.collection_order
+  const isOk = await rewriteEntry(setName, key, (split) => {
+    if (order.length) split.extras.collection_order = order
+    else delete split.extras.collection_order
   })
-  return ok
+  return isOk
     ? {
         ok: true,
         collection_order: order.length ? order : null,

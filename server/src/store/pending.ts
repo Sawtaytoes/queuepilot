@@ -84,10 +84,10 @@ export async function read(): Promise<PendingState> {
             .filter((id) => Number.isFinite(id))
         : null,
     }
-  } catch (e) {
-    if (!isNodeError(e) || e.code !== "ENOENT") {
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT") {
       console.log(
-        `[pending] could not read ${path}: ${errMessage(e)}`,
+        `[pending] could not read ${path}: ${errMessage(error)}`,
       )
     }
     return {

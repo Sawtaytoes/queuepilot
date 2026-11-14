@@ -54,9 +54,9 @@ function argFor(
   argv: readonly string[],
   name: string,
 ): string | null {
-  const i = argv.indexOf(name)
-  return i >= 0 && argv[i + 1] != null
-    ? String(argv[i + 1])
+  const index = argv.indexOf(name)
+  return index >= 0 && argv[index + 1] != null
+    ? String(argv[index + 1])
     : null
 }
 
@@ -170,28 +170,30 @@ async function main(): Promise<number> {
   for (const [name, label] of labels) {
     console.log(label)
     if (opts.verbose) {
-      for (const c of kept) {
-        if (c.set === name)
+      for (const change of kept) {
+        if (change.set === name)
           console.log(
-            `  [${String(c.index).padStart(3)}] keep       ${short(c.before)}`,
+            `  [${String(change.index).padStart(3)}] keep       ${short(change.before)}`,
           )
       }
     }
-    for (const c of changes) {
-      if (c.set !== name) continue
+    for (const change of changes) {
+      if (change.set !== name) continue
       console.log(
-        `  [${String(c.index).padStart(3)}] ${c.verdict.padEnd(11)}${short(c.before)}  ->  ${short(c.after)}${c.why ? `   (${c.why})` : ""}`,
+        `  [${String(change.index).padStart(3)}] ${change.verdict.padEnd(11)}${short(change.before)}  ->  ${short(change.after)}${change.why ? `   (${change.why})` : ""}`,
       )
     }
     console.log("")
   }
 
-  const by = (v: string) =>
-    changes.filter((c) => c.verdict === v)
+  const by = (verdict: string) =>
+    changes.filter((change) => change.verdict === verdict)
   const unresolved = by("unresolved")
   // Only a REWRITE is a change to the file. An unresolvable entry that is already an object is
   // reported on every run and edits nothing, so a file holding one is still "nothing to do".
-  const rewrites = changes.filter((c) => c.rewritten)
+  const rewrites = changes.filter(
+    (change) => change.rewritten,
+  )
   console.log("summary")
   console.log(
     `  entries               ${kept.length + changes.length}`,
@@ -214,9 +216,9 @@ async function main(): Promise<number> {
     console.log(
       "UNRESOLVED — these keep their title and gain no rating key. Fix them by hand:",
     )
-    for (const u of unresolved)
+    for (const change of unresolved)
       console.log(
-        `  ${u.set}[${u.index}]  ${short(u.before)}   ${u.why ?? ""}`,
+        `  ${change.set}[${change.index}]  ${short(change.before)}   ${change.why ?? ""}`,
       )
   }
   console.log("")
@@ -274,8 +276,8 @@ async function withLock<T>(
     } catch {
       if (Date.now() > deadline)
         throw new Error(`timed out acquiring ${dir}`)
-      await new Promise<void>((r) => {
-        setTimeout(r, 50)
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50)
       })
     }
   }

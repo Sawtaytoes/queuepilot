@@ -82,11 +82,11 @@ function entryRefOf(
   value: unknown,
   id: string,
 ): CuratedEntryRef {
-  const o = (
+  const fields = (
     value && typeof value === "object" ? value : {}
   ) as { episodes?: unknown; queued_at?: unknown }
-  const batch = Number(o.episodes)
-  const queuedAt = Number(o.queued_at)
+  const batch = Number(fields.episodes)
+  const queuedAt = Number(fields.queued_at)
   return {
     id,
     batch:
@@ -101,8 +101,9 @@ function entryRefOf(
 /** The provider item id an entry names, or null for a value that carries none. */
 function idOf(value: unknown): string | null {
   if (value && typeof value === "object") {
-    const o = value as { ratingKey?: string | number }
-    if (o.ratingKey != null) return String(o.ratingKey)
+    const fields = value as { ratingKey?: string | number }
+    if (fields.ratingKey != null)
+      return String(fields.ratingKey)
   }
   return null
 }
@@ -111,15 +112,15 @@ function displayFor(value: unknown): string {
   if (value && typeof value === "object") {
     // Same assertion (and same latent lie) as `tiles.ts displayFor()`: a YAML `title: 2012`
     // is a NUMBER at runtime and has always been returned unchanged.
-    const o = value as {
+    const fields = value as {
       title?: string
       ratingKey?: string | number
       collection?: string
     }
     // Same as tiles.ts displayFor: a `{collection: <name>}` entry carries no title.
-    if (!o.title && o.collection)
-      return `Collection: ${o.collection}`
-    return o.title || `item ${o.ratingKey}`
+    if (!fields.title && fields.collection)
+      return `Collection: ${fields.collection}`
+    return fields.title || `item ${fields.ratingKey}`
   }
   return String(value)
 }
@@ -164,9 +165,9 @@ export async function resolveTiles(
   try {
     block = blocks.resolveSingle(set)
     provider = providerFor(block.provider)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[providers] tiles for set '${set.id}': ${errMessage(e)}`,
+      `[providers] tiles for set '${set.id}': ${errMessage(error)}`,
     )
     return values.map(unresolvedTile)
   }
@@ -193,9 +194,9 @@ export async function resolveTiles(
       isFresh,
       skipped: set.skipped || [],
     })
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[providers] tiles for set '${set.id}': ${errMessage(e)}`,
+      `[providers] tiles for set '${set.id}': ${errMessage(error)}`,
     )
     return values.map(unresolvedTile)
   }
@@ -203,15 +204,15 @@ export async function resolveTiles(
     string,
     NonNullable<(typeof rows)[number]>
   >()
-  wanted.forEach((id, i) => {
-    const r = rows[i]
-    if (r) byId.set(id, r)
+  wanted.forEach((id, index) => {
+    const row = rows[index]
+    if (row) byId.set(id, row)
   })
 
-  return values.map((value, i) => {
+  return values.map((value, index) => {
     // Hoisted out of upstream's `ids[i] == null ? null : byId.get(ids[i])` only because
     // `noUncheckedIndexedAccess` cannot see that the second read is the same element.
-    const id = ids[i]
+    const id = ids[index]
     const row = id == null ? null : byId.get(id)
     if (!row) return unresolvedTile(value)
     const next = row.next || null

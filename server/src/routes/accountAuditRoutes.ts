@@ -20,8 +20,8 @@ import { ACCOUNT_AUDIT_LOOKBACK_SECONDS } from "../env.js"
 export function accountAuditRoutes(): Hono {
   const app = new Hono()
 
-  app.get("/account-audit", async (c) => {
-    const raw = c.req.query("lookbackSeconds")
+  app.get("/account-audit", async (context) => {
+    const raw = context.req.query("lookbackSeconds")
     const parsed = raw == null ? NaN : Number(raw)
     const lookbackSeconds =
       Number.isFinite(parsed) && parsed > 0
@@ -34,7 +34,7 @@ export function accountAuditRoutes(): Hono {
     console.log(`[audit] attribution: ${summarise(report)}`)
     // 200 even when there are findings: the request succeeded, and the findings are the
     // answer. A non-2xx would make a caller treat a correct report as a broken endpoint.
-    return c.json(report)
+    return context.json(report)
   })
 
   return app

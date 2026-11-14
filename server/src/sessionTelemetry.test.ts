@@ -34,8 +34,8 @@ vi.mock("./providers/index.js", () => ({
     profileBinding: async () => ({}),
     profileToken: () => {
       ctl.tokenEntered = true
-      return new Promise<string>((r) => {
-        ctl.release = r
+      return new Promise<string>((resolve) => {
+        ctl.release = resolve
       })
     },
   }),

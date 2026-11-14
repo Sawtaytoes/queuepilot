@@ -359,20 +359,24 @@ export function parseTitleString(text: unknown): {
   year: number | null
   guid: string | null
 } {
-  let s = String(text).trim()
+  let remainder = String(text).trim()
   let guid: string | null = null
-  let m = GUID_RE.exec(s)
-  if (m) {
-    guid = m[1]!.trim()
-    s = s.slice(0, m.index).replace(/\s+$/, "")
+  let match = GUID_RE.exec(remainder)
+  if (match) {
+    guid = match[1]!.trim()
+    remainder = remainder
+      .slice(0, match.index)
+      .replace(/\s+$/, "")
   }
   let year: number | null = null
-  m = YEAR_RE.exec(s)
-  if (m) {
-    year = parseInt(m[1]!, 10)
-    s = s.slice(0, m.index).replace(/\s+$/, "")
+  match = YEAR_RE.exec(remainder)
+  if (match) {
+    year = parseInt(match[1]!, 10)
+    remainder = remainder
+      .slice(0, match.index)
+      .replace(/\s+$/, "")
   }
-  return { title: s.trim(), year, guid }
+  return { title: remainder.trim(), year, guid }
 }
 
 // True if `value` is (or stringifies to) a bare numeric ratingKey. Port of _is_rating_key.
@@ -385,8 +389,10 @@ function isRatingKey(value: unknown): boolean {
   )
 }
 
-const isObj = (e: unknown): e is RawEntryObject =>
-  e != null && typeof e === "object" && !Array.isArray(e)
+const isObj = (entry: unknown): entry is RawEntryObject =>
+  entry != null &&
+  typeof entry === "object" &&
+  !Array.isArray(entry)
 
 // Stable identity for one LINE of a queue — the READ side's copy.
 //
@@ -601,22 +607,23 @@ export function loadEntries(
         string,
         unknown
       > | null) || {}
-  } catch (e) {
-    if (isNodeError(e) && e.code === "ENOENT") return []
-    throw e
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT")
+      return []
+    throw error
   }
   const seq = ((data && data[setName]) || []) as unknown[]
   const out: EntryDescriptor[] = []
   const seen = new Set<string>()
-  seq.forEach((e, index) => {
-    const desc = describe(e)
+  seq.forEach((entry, index) => {
+    const desc = describe(entry)
     if (desc.key == null) return
     if (desc.legacy) {
       complainOnce(
         setName,
         index,
-        e,
-        legacyEntryMessage(setName, index, e),
+        entry,
+        legacyEntryMessage(setName, index, entry),
       )
       return
     }
@@ -626,8 +633,13 @@ export function loadEntries(
       complainOnce(
         setName,
         index,
-        e,
-        duplicateEntryMessage(setName, index, e, desc.key),
+        entry,
+        duplicateEntryMessage(
+          setName,
+          index,
+          entry,
+          desc.key,
+        ),
       )
       return
     }
@@ -669,7 +681,10 @@ export function hasRealSeasons(
   allEps: readonly { season?: unknown }[],
 ): boolean {
   return allEps.some(
-    (e) => !["0", "None", ""].includes(String(e.season)),
+    (allEpisode) =>
+      !["0", "None", ""].includes(
+        String(allEpisode.season),
+      ),
   )
 }
 
@@ -704,7 +719,7 @@ export function keepEpisode(
     include_specials?: unknown
     included_specials?: readonly unknown[] | null
   },
-  specialsOk = false,
+  isSpecialsAllowed = false,
 ): boolean {
   if (isExtraOrPromo(ep)) return false
   const isIncluded = new Set(
@@ -713,7 +728,7 @@ export function keepEpisode(
   if (
     !cfg.include_specials &&
     !isIncluded &&
-    !specialsOk &&
+    !isSpecialsAllowed &&
     String(ep.season) === "0"
   )
     return false
@@ -728,25 +743,27 @@ function matchGuidHint(
   guids: readonly unknown[],
 ): boolean {
   if (!hint) return false
-  const i = hint.indexOf("-")
-  if (i <= 0 || i >= hint.length - 1) return false
+  const dashIndex = hint.indexOf("-")
+  if (dashIndex <= 0 || dashIndex >= hint.length - 1)
+    return false
   const want =
-    `${hint.slice(0, i)}://${hint.slice(i + 1)}`.toLowerCase()
+    `${hint.slice(0, dashIndex)}://${hint.slice(dashIndex + 1)}`.toLowerCase()
   return guids.some(
-    (g) => String(g || "").toLowerCase() === want,
+    (guid) => String(guid || "").toLowerCase() === want,
   )
 }
 
 // urllib.parse.quote(title) with the default safe="/" — space→%20, `/` kept, but `!*'()` escaped
 // (encodeURIComponent leaves them). The sha1 corpus key is over the literal path, so this must
 // match _resolve_title's Python quoting byte-for-byte.
-function quote(s: unknown): string {
-  return encodeURIComponent(String(s))
+function quote(value: unknown): string {
+  return encodeURIComponent(String(value))
     .replace(/%2F/gi, "/")
     .replace(
       /[!'()*]/g,
-      (c) =>
-        "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+      (match) =>
+        "%" +
+        match.charCodeAt(0).toString(16).toUpperCase(),
     )
 }
 
@@ -774,11 +791,11 @@ export async function itemType(
   }
   const md = mc.Metadata || []
   if (!md.length) return [null, null, 0, 0]
-  const t = md[0]!.type
-  if (t !== "movie" && t !== "show")
+  const mediaType = md[0]!.type
+  if (mediaType !== "movie" && mediaType !== "show")
     return [null, null, 0, 0]
   return [
-    t,
+    mediaType,
     md[0]!.title,
     int0(md[0]!.viewOffset),
     int0(md[0]!.viewCount),
@@ -851,11 +868,11 @@ export async function resolveTitle(
   | [string, "movie" | "show", string, number, number]
   | [null, null, null, 0, 0]
 > {
-  const q = quote(title)
+  const quotedTitle = quote(title)
   let mc: Awaited<ReturnType<typeof client.container>>
   try {
     mc = await client.container(
-      `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`,
+      `/library/sections/${section}/all?title=${quotedTitle}&includeGuids=1&X-Plex-Container-Size=50`,
       token,
     )
   } catch {
@@ -866,15 +883,16 @@ export async function resolveTitle(
     | null = null
   let bestScore = 0
   const tl = title.toLowerCase()
-  for (const e of mc.Metadata || []) {
-    const et = e.type
+  for (const candidate of mc.Metadata || []) {
+    const et = candidate.type
     if (et !== "movie" && et !== "show") continue
-    const candTitle = e.title || ""
-    const candYear = e.year
+    const candTitle = candidate.title || ""
+    const candYear = candidate.year
     // `Guid` is not on `PlexMetadata`'s named fields (it arrives only with includeGuids=1).
     const guids = (
-      (e.Guid as { id?: unknown }[] | undefined) || []
-    ).map((g) => g.id)
+      (candidate.Guid as { id?: unknown }[] | undefined) ||
+      []
+    ).map((guid) => guid.id)
     let score = 0
     if (guid && matchGuidHint(guid, guids)) score += 100
     if (year != null && candYear === year) score += 10
@@ -887,20 +905,20 @@ export async function resolveTitle(
     const cl = candTitle.toLowerCase()
     if (cl === tl) score += 5
     else if (cl.startsWith(tl)) score += 1
-    const rk = String(e.ratingKey)
-    const better =
+    const rk = String(candidate.ratingKey)
+    const isBetter =
       best === null ||
       score > bestScore ||
       (score === bestScore &&
         /^\d+$/.test(rk) &&
         parseInt(rk, 10) < parseInt(best[0], 10))
-    if (better) {
+    if (isBetter) {
       best = [
         rk,
         et,
         candTitle,
-        int0(e.viewOffset),
-        int0(e.viewCount),
+        int0(candidate.viewOffset),
+        int0(candidate.viewCount),
       ]
       bestScore = score
     }
@@ -983,16 +1001,16 @@ function startMemberIndex(
   if (!start || start.series == null || start.series === "")
     return -1
   const want = String(start.series).trim().toLowerCase()
-  for (let i = 0; i < children.length; i += 1) {
-    const ch = children[i]!
+  for (let index = 0; index < children.length; index += 1) {
+    const ch = children[index]!
     if (String(ch.ratingKey).trim().toLowerCase() === want)
-      return i
+      return index
     if (
       String(ch.title || "")
         .trim()
         .toLowerCase() === want
     )
-      return i
+      return index
   }
   return -1
 }
@@ -1006,9 +1024,9 @@ export async function collectionItems(
   watched: ReadonlySet<string>,
   token: Token,
   start: Start | null = null,
-  resume = false,
+  isResuming = false,
   collectionOrder: readonly string[] = [],
-  includeWatched = false,
+  isWatchedIncluded = false,
 ): Promise<ResolvedItem[] | null> {
   let collRk: string | null = null
   let children: PlexMetadata[] = []
@@ -1032,48 +1050,49 @@ export async function collectionItems(
   const floorAt = startMemberIndex(children, start)
   const skipped = skippedKeys(cfg)
   const items: ResolvedItem[] = []
-  for (let i = 0; i < children.length; i += 1) {
-    if (floorAt >= 0 && i < floorAt) continue
-    const ch = children[i]!
+  for (let index = 0; index < children.length; index += 1) {
+    if (floorAt >= 0 && index < floorAt) continue
+    const ch = children[index]!
     const rk = String(ch.ratingKey)
     // A skipped CHILD goes whole — the film, or the whole child show. The collection is the
     // member here; its children are the items inside it, which is exactly what `skipped`
     // addresses. A child show's individual episodes are skippable too, in the loop below.
     if (skipped.has(rk)) continue
     if (ch.type === "show") {
-      const epStart = i === floorAt ? start : null
+      const epStart = index === floorAt ? start : null
       const childEps: ResolvedItem[] = await showEpisodes(
         client,
         rk,
         token,
       )
       const ordered = episodesAtOrAfterStart(
-        orderedPlayableEpisodes(childEps, cfg, resume),
+        orderedPlayableEpisodes(childEps, cfg, isResuming),
         epStart,
       )
-      for (const e of ordered) {
-        if (skipped.has(e.ratingKey)) continue
+      for (const item of ordered) {
+        if (skipped.has(item.ratingKey)) continue
         if (
-          includeWatched ||
-          !watched.has(e.ratingKey) ||
-          (resume && inProgress(e.viewOffset, e.viewCount))
+          isWatchedIncluded ||
+          !watched.has(item.ratingKey) ||
+          (isResuming &&
+            inProgress(item.viewOffset, item.viewCount))
         ) {
           // Which collection CHILD this leaf came from, so a `batch_stops_at` cut can see the
           // member boundary (segmentKey). showEpisodes builds fresh objects per call, so
           // tagging in place is local to this resolve.
-          e.member_key = rk
-          items.push(e)
+          item.member_key = rk
+          items.push(item)
         }
       }
     } else {
       const [viewOffset, viewCount] =
-        resume || includeWatched
+        isResuming || isWatchedIncluded
           ? await itemViewState(client, rk, token)
           : [int0(ch.viewOffset), int0(ch.viewCount)]
       if (
-        !includeWatched &&
+        !isWatchedIncluded &&
         watched.has(rk) &&
-        !(resume && inProgress(viewOffset, viewCount))
+        !(isResuming && inProgress(viewOffset, viewCount))
       )
         continue
       items.push({
@@ -1086,7 +1105,7 @@ export async function collectionItems(
         season: ch.parentIndex,
         episode: ch.index,
         duration: ch.duration,
-        ...(includeWatched
+        ...(isWatchedIncluded
           ? { viewOffset, viewCount }
           : {}),
       })
@@ -1113,9 +1132,9 @@ export function orderCollectionChildren<
       rank: rank.get(String(child.ratingKey)),
     }))
     .sort(
-      (a, b) =>
-        (a.rank ?? order.length + a.plexIndex) -
-        (b.rank ?? order.length + b.plexIndex),
+      (left, right) =>
+        (left.rank ?? order.length + left.plexIndex) -
+        (right.rank ?? order.length + right.plexIndex),
     )
     .map(({ child }) => child)
 }
@@ -1191,9 +1210,12 @@ function segmentKey(
 function setBatch(
   cfg: ResolveCfg | null | undefined,
 ): number {
-  const n = parseInt(String(cfg?.episodes ?? ""), 10)
-  return Number.isFinite(n) && n > 0
-    ? Math.min(n, QUEUE_SERIES_LENGTH)
+  const episodeCount = parseInt(
+    String(cfg?.episodes ?? ""),
+    10,
+  )
+  return Number.isFinite(episodeCount) && episodeCount > 0
+    ? Math.min(episodeCount, QUEUE_SERIES_LENGTH)
     : QUEUE_SERIES_DEFAULT
 }
 
@@ -1208,14 +1230,14 @@ function applyBatch(
   stop: string,
 ): ResolvedItem[] {
   if (!batch) return items
-  const n = Math.max(
+  const batchSize = Math.max(
     1,
     Math.min(
       parseInt(String(batch), 10),
       QUEUE_SERIES_LENGTH,
     ),
   )
-  let out = items.slice(0, n)
+  let out = items.slice(0, batchSize)
   if (BATCH_STOPS.includes(stop) && out.length > 1) {
     const head = segmentKey(out[0]!, stop)
     let cut = 1
@@ -1267,7 +1289,7 @@ export async function resolveMember(
   watched: ReadonlySet<string>,
   token: Token,
   defaultBatch: number | null = null,
-  resume = false,
+  isResuming = false,
   rng: Rng | null = null,
   progress: EntryProgress | null = null,
 ): Promise<ResolvedMember | null> {
@@ -1282,7 +1304,7 @@ export async function resolveMember(
       watched,
       token,
       desc.start,
-      resume,
+      isResuming,
       desc.collectionOrder,
       isShuffled,
     )
@@ -1326,25 +1348,25 @@ export async function resolveMember(
     // an entry in the file that can never play and says nothing about why, which is the state
     // `skipped` exists to avoid. The tile agrees: a movie has no next-up leaf, so the grid
     // offers Remove there and Skip only where there is an item inside a member.
-    let keepMovie =
+    let isMovieKept =
       desc.plexServer && progress == null
         ? !(Number(viewCount) > 0)
         : !watched.has(rk)
-    if (!keepMovie && resume) {
+    if (!isMovieKept && isResuming) {
       const own = progress?.get(String(rk))
-      keepMovie = progress
+      isMovieKept = progress
         ? Boolean(
             own && !own.isCompleted && own.positionMs > 0,
           )
         : inProgress(viewOffset, viewCount)
     }
     const providerProgress =
-      resume &&
+      isResuming &&
       progress == null &&
       inProgress(viewOffset, viewCount)
         ? { viewOffset, viewCount }
         : {}
-    const items: ResolvedItem[] = keepMovie
+    const items: ResolvedItem[] = isMovieKept
       ? // `show: null` is kept LITERALLY — the curated-parity oracle compares this JSON, and
         // `undefined` would drop the key entirely. The cast is only how `PlexPlayItem`'s
         // `show?: string` (types.ts) is satisfied without changing what is emitted.
@@ -1393,32 +1415,35 @@ export async function resolveMember(
       }
     : cfg
   let eps = episodesAtOrAfterStart(
-    orderedPlayableEpisodes(allEps, episodeCfg, resume),
+    orderedPlayableEpisodes(allEps, episodeCfg, isResuming),
     start,
   )
   if (!isShuffled) {
     eps = eps.filter(
-      (e) =>
+      (episode) =>
         !(desc.plexServer && progress == null
-          ? Number(e.viewCount) > 0
-          : watched.has(e.ratingKey)) ||
-        (resume &&
+          ? Number(episode.viewCount) > 0
+          : watched.has(episode.ratingKey)) ||
+        (isResuming &&
           (progress
             ? Boolean(
-                progress.get(String(e.ratingKey))
+                progress.get(String(episode.ratingKey))
                   ?.positionMs,
               )
-            : inProgress(e.viewOffset, e.viewCount))),
+            : inProgress(
+                episode.viewOffset,
+                episode.viewCount,
+              ))),
     )
   }
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
   eps = eps.filter(
-    (e) =>
+    (episode) =>
       !skipped.has(
         desc.plexServer
-          ? `server:${desc.plexServer}:rk:${e.ratingKey}`
-          : e.ratingKey,
+          ? `server:${desc.plexServer}:rk:${episode.ratingKey}`
+          : episode.ratingKey,
       ),
   )
   if (isShuffled)
@@ -1582,7 +1607,10 @@ export async function buildReel(
     } else {
       const eps = (
         await showEpisodes(entryClient, rk, token)
-      ).filter((e) => !skipped.has(e.ratingKey))
+      ).filter(
+        (showEpisode) =>
+          !skipped.has(showEpisode.ratingKey),
+      )
       const batch = Math.max(
         1,
         Math.min(
@@ -1593,10 +1621,10 @@ export async function buildReel(
           QUEUE_SERIES_LENGTH,
         ),
       )
-      for (const e of eps.slice(0, batch))
+      for (const episode of eps.slice(0, batch))
         play.push({
-          title: e.title || title,
-          ratingKey: e.ratingKey,
+          title: episode.title || title,
+          ratingKey: episode.ratingKey,
           ...(desc.plexServer
             ? { plexServer: desc.plexServer }
             : {}),
@@ -1667,7 +1695,7 @@ function leadWindowMs(
 function logLineup(
   setName: string,
   cfg: ResolveCfg,
-  x: {
+  lineup: {
     addAs: string
     ordered: Batch[]
     priority: Batch[]
@@ -1679,12 +1707,16 @@ function logLineup(
     unresolved: string[]
   },
 ): void {
-  const head = x.playItems.length ? x.playItems[0]! : null
-  const headBatch = x.ordered.length ? x.ordered[0]! : null
+  const head = lineup.playItems.length
+    ? lineup.playItems[0]!
+    : null
+  const headBatch = lineup.ordered.length
+    ? lineup.ordered[0]!
+    : null
   const lane = headBatch
-    ? x.resuming.includes(headBatch)
+    ? lineup.resuming.includes(headBatch)
       ? "resuming"
-      : x.priority.includes(headBatch)
+      : lineup.priority.includes(headBatch)
         ? "priority"
         : "pool"
     : "-"
@@ -1693,9 +1725,9 @@ function logLineup(
       ? "in order"
       : "shuffled"
   console.log(
-    `[lineup] ${setName}: add_as=${x.addAs} (${order}), length=${playbackLength(cfg)} ` +
-      `-> ${x.playItems.length} item(s) from ${x.ordered.length} entry(s) ` +
-      `[priority ${x.priority.length}, pool ${x.pool.length}, resuming ${x.resuming.length}]`,
+    `[lineup] ${setName}: add_as=${lineup.addAs} (${order}), length=${playbackLength(cfg)} ` +
+      `-> ${lineup.playItems.length} item(s) from ${lineup.ordered.length} entry(s) ` +
+      `[priority ${lineup.priority.length}, pool ${lineup.pool.length}, resuming ${lineup.resuming.length}]`,
   )
   if (head) {
     console.log(
@@ -1707,26 +1739,29 @@ function logLineup(
       `[lineup] ${setName} head: NOTHING — every entry is finished or unresolved`,
     )
   }
-  const titles = x.ordered
+  const titles = lineup.ordered
     .slice(0, 10)
-    .map((b, i) => `${i + 1} ${b.title}`)
+    .map((batch, index) => `${index + 1} ${batch.title}`)
   const more =
-    x.ordered.length > titles.length
-      ? ` (+${x.ordered.length - titles.length} more)`
+    lineup.ordered.length > titles.length
+      ? ` (+${lineup.ordered.length - titles.length} more)`
       : ""
   if (titles.length)
     console.log(
       `[lineup] ${setName} order: ${titles.join(" | ")}${more}`,
     )
-  if (x.suppressed.length) {
+  if (lineup.suppressed.length) {
     console.log(
-      `[lineup] ${setName} held back by their lead window: ${x.suppressed.join(", ")}`,
+      `[lineup] ${setName} held back by their lead window: ${lineup.suppressed.join(", ")}`,
     )
   }
-  if (x.doneFlagged.length || x.unresolved.length) {
+  if (
+    lineup.doneFlagged.length ||
+    lineup.unresolved.length
+  ) {
     console.log(
-      `[lineup] ${setName} not playable: ${x.doneFlagged.length} finished, ` +
-        `${x.unresolved.length} unresolved`,
+      `[lineup] ${setName} not playable: ${lineup.doneFlagged.length} finished, ` +
+        `${lineup.unresolved.length} unresolved`,
     )
   }
 }
@@ -1800,8 +1835,8 @@ export async function nextQueue(
     // section is not a history concern — an entry on provider history has one too.
     const section = res ? sectionOf(desc) : null
     if (res && section && res.items.length) {
-      res.items = res.items.map((item, i) =>
-        i === 0 ? { ...item, ...section } : item,
+      res.items = res.items.map((item, index) =>
+        index === 0 ? { ...item, ...section } : item,
       )
     }
     if (res && isOwnHistory && desc.key) {
@@ -1903,13 +1938,13 @@ export async function nextQueue(
     })
   }
 
-  const leadsInProgress = (b: Batch): boolean => {
-    const it = b.items.length ? b.items[0] : null
+  const leadsInProgress = (batch: Batch): boolean => {
+    const it = batch.items.length ? batch.items[0] : null
     // An entry with a SECTION is never "in the middle of" anything: it begins at its own
     // start mark every single sitting, so a resume marker left behind by the last one says
     // nothing about it. Without this, an entry that stops at 40% by design reads as
     // half-watched and hoists itself to the front of the random pool every night, forever.
-    if (sectionOf(b.desc)) return false
+    if (sectionOf(batch.desc)) return false
     return Boolean(
       it &&
         ((it.queueResumeOffset ?? 0) > 0 ||
@@ -1928,8 +1963,8 @@ export async function nextQueue(
     kind: cfg.kind,
     source: cfg.source,
   })
-  const laneOf = (b: Batch) =>
-    normalizePlacement(b.desc.placement, addAs)
+  const laneOf = (batch: Batch) =>
+    normalizePlacement(batch.desc.placement, addAs)
 
   // A Priority entry with an unexpired lead window YIELDS this sitting: it stays in the queue
   // and simply does not lead. It falls back to the pool rather than vanishing, so a promoted
@@ -1942,20 +1977,22 @@ export async function nextQueue(
   const ledCandidates = new Map<Batch, string>()
   const priority: Batch[] = []
   const pool: Batch[] = []
-  for (const b of batches) {
-    if (laneOf(b) !== "priority") {
-      pool.push(b)
+  for (const batch of batches) {
+    if (laneOf(batch) !== "priority") {
+      pool.push(batch)
       continue
     }
-    const isPromoted = isExplicitPlacement(b.desc.placement)
+    const isPromoted = isExplicitPlacement(
+      batch.desc.placement,
+    )
     // `isMovie` is the batch's resolved TYPE, not a guess off the descriptor: an entry is a
     // movie when Plex says so, and a one-member collection is still a collection.
-    const mode = normalizeLead(b.desc.lead, {
+    const mode = normalizeLead(batch.desc.lead, {
       isPromoted,
-      isMovie: b.type === "movie",
+      isMovie: batch.type === "movie",
     })
     if (mode === "always") {
-      priority.push(b)
+      priority.push(batch)
       continue
     }
     // A HALF-WATCHED Priority entry keeps its rank and is asked no gate. The window says
@@ -1967,22 +2004,22 @@ export async function nextQueue(
     // time. It spends nothing here either: an unfulfilled promise is not re-charged, and a
     // finished film leaves the lane by being done rather than by being suppressed.
     // (decision `2026-09-11-a-half-watched-priority-entry-keeps-its-rank`)
-    if (leadsInProgress(b)) {
-      priority.push(b)
+    if (leadsInProgress(batch)) {
+      priority.push(batch)
       continue
     }
-    const windowMs = leadWindowMs(b.desc, cfg)
+    const windowMs = leadWindowMs(batch.desc, cfg)
     // No gate injected (the parity corpus, a unit test) means "nothing has ever led" — the
     // deterministic answer, and the one that keeps the engine runnable without the store.
-    const mayLead = canLead
-      ? await canLead(b.desc.key as string, windowMs)
+    const isLeadAllowed = canLead
+      ? await canLead(batch.desc.key as string, windowMs)
       : true
-    if (mayLead) {
-      priority.push(b)
-      ledCandidates.set(b, b.desc.key as string)
+    if (isLeadAllowed) {
+      priority.push(batch)
+      ledCandidates.set(batch, batch.desc.key as string)
     } else {
-      suppressed.push(b.desc.key as string)
-      pool.push(b)
+      suppressed.push(batch.desc.key as string)
+      pool.push(batch)
     }
   }
 
@@ -1999,7 +2036,9 @@ export async function nextQueue(
   //     stays scoped to the pool, where it already lived, and a priority-default queue with
   //     no pool never reaches it.
   const resuming = pool.filter(leadsInProgress)
-  const rest = pool.filter((b) => !leadsInProgress(b))
+  const rest = pool.filter(
+    (batch) => !leadsInProgress(batch),
+  )
   // A channel plays each member ONCE per scan and gets cut at ROTATION_LENGTH, so "comes up
   // more often" here means "lands near the front more often": a weighted shuffle, not the
   // slots-per-round interleave the rotation channels use (they replay a member across rounds;
@@ -2022,20 +2061,21 @@ export async function nextQueue(
   const contributingBatches = new Set<Batch>()
   if (isRandomOrder(cfg)) {
     playItems = []
-    for (const b of ordered) {
-      const contribution = b.items.slice(
+    for (const batch of ordered) {
+      const contribution = batch.items.slice(
         0,
         cap - playItems.length,
       )
-      if (contribution.length) contributingBatches.add(b)
+      if (contribution.length)
+        contributingBatches.add(batch)
       playItems.push(...contribution)
       if (playItems.length >= cap) break
     }
   } else {
     playItems = []
-    for (const b of ordered.slice(0, cap)) {
-      contributingBatches.add(b)
-      playItems.push(...b.items)
+    for (const batch of ordered.slice(0, cap)) {
+      contributingBatches.add(batch)
+      playItems.push(...batch.items)
     }
   }
   const leadBatch: Batch | null = ordered.length

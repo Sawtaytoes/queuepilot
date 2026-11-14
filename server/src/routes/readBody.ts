@@ -15,9 +15,9 @@ import type { Context } from "hono"
  */
 
 export async function readBody(
-  c: Context,
+  context: Context,
 ): Promise<Record<string, any>> {
-  const parsed = await c.req.json().catch(() => null)
+  const parsed = await context.req.json().catch(() => null)
   return parsed && typeof parsed === "object"
     ? (parsed as Record<string, unknown>)
     : {}

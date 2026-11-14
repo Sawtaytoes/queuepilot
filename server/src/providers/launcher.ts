@@ -96,9 +96,9 @@ export async function launchDescriptor(
   let provider: ReturnType<typeof providerFor>
   try {
     provider = providerFor(block.provider, { client })
-  } catch (e) {
+  } catch (error) {
     // NOT CONFIGURED lands here, by name, rather than as a silent empty reader.
-    return { error: errMessage(e), status: 503 }
+    return { error: errMessage(error), status: 503 }
   }
 
   if (provider.delivery !== "pull") {
@@ -165,44 +165,46 @@ export async function launchDescriptor(
 export function launcherRoutes(): Hono {
   const app = new Hono()
 
-  app.get("/go/:setId", async (c) => {
-    c.header("Cache-Control", "no-store")
-    c.header("Vary", "User-Agent")
+  app.get("/go/:setId", async (context) => {
+    context.header("Cache-Control", "no-store")
+    context.header("Vary", "User-Agent")
     try {
       // `?only=<entryKey>` is "read THIS one now" — the ▶ on a single tile. The pull
       // counterpart of the play-one-entry key the push path already threads; without it a
       // reading tile's ▶ could only open the Plex device menu, which offered a Shield, a
       // Plex Dash and a phone for something none of them can open (reported live 2026-08-15).
-      const d = await launchDescriptor(
-        c.req.param("setId") || "",
+      const descriptor = await launchDescriptor(
+        context.req.param("setId") || "",
         {
-          only: c.req.query("only") || null,
+          only: context.req.query("only") || null,
         },
       )
       // `d.url === undefined` and not `d.error` — same branch, but it discriminates the union
       // so the redirect below knows it has a string.
-      if (d.url === undefined)
-        return c.text(
-          d.error,
-          d.status as ContentfulStatusCode,
+      if (descriptor.url === undefined)
+        return context.text(
+          descriptor.error,
+          descriptor.status as ContentfulStatusCode,
         )
       // 302, not 301: the target chapter changes every time you read one, so this must
       // never be cached by the browser as a permanent move.
-      c.header("Cache-Control", "no-store")
+      context.header("Cache-Control", "no-store")
       if (
-        d.providerKind === "kavita" &&
-        /Android/i.test(c.req.header("User-Agent") || "")
+        descriptor.providerKind === "kavita" &&
+        /Android/i.test(
+          context.req.header("User-Agent") || "",
+        )
       ) {
-        c.header("Referrer-Policy", "no-referrer")
-        c.header(
+        context.header("Referrer-Policy", "no-referrer")
+        context.header(
           "Content-Security-Policy",
           "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
         )
-        return c.html(readerHandoff(d.url))
+        return context.html(readerHandoff(descriptor.url))
       }
-      return c.redirect(d.url, 302)
-    } catch (e) {
-      return c.text(errMessage(e), 500)
+      return context.redirect(descriptor.url, 302)
+    } catch (error) {
+      return context.text(errMessage(error), 500)
     }
   })
 

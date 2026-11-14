@@ -27,8 +27,8 @@ const LOCK_DIR = path + ".lock"
 const LOCK_STALE_MS = 15000
 const LOCK_WAIT_MS = 10000
 const sleep = (ms: number) =>
-  new Promise<void>((r) => {
-    setTimeout(r, ms)
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
   })
 
 async function acquireLock(): Promise<void> {
@@ -37,8 +37,9 @@ async function acquireLock(): Promise<void> {
     try {
       await fs.mkdir(LOCK_DIR)
       return
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== "EEXIST") throw e
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "EEXIST")
+        throw error
       try {
         const st = await fs.stat(LOCK_DIR)
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
@@ -230,8 +231,9 @@ export async function ensureFile(): Promise<void> {
       console.log(
         `[sets] seeded ${path} from built-in defaults`,
       )
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== "EEXIST") throw e // a concurrent seeder won the race — fine
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "EEXIST")
+        throw error // a concurrent seeder won the race — fine
     }
   }
 }

@@ -25,17 +25,17 @@ export const parseCsv = (text: string): string[][] => {
     row = []
   }
 
-  for (let i = 0; i < text.length; i += 1) {
+  for (let index = 0; index < text.length; index += 1) {
     // `!`: the loop condition `i < text.length` on the line above is what proves this index
     // is in range. Without it `char` reads as `string | undefined` and `field += char` would
     // append the literal text "undefined".
-    const char = text[i]!
+    const char = text[index]!
 
     if (isQuoted) {
       if (char === '"') {
-        if (text[i + 1] === '"') {
+        if (text[index + 1] === '"') {
           field += '"'
-          i += 1
+          index += 1
         } else {
           isQuoted = false
         }

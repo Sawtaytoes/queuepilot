@@ -36,10 +36,12 @@ const child: FilterableEntry = {
 
 const resolve = (entries: FilterableEntry[]) => {
   const out = new Map(
-    inheritFilteredQueues(entries).map((e) => [
-      String(e.id),
-      e,
-    ]),
+    inheritFilteredQueues(entries).map(
+      (inheritFilteredQueue) => [
+        String(inheritFilteredQueue.id),
+        inheritFilteredQueue,
+      ],
+    ),
   )
   return out
 }

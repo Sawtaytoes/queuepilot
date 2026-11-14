@@ -55,11 +55,11 @@ export async function read(): Promise<PendingState> {
               .map(Number)
               .filter((id) => Number.isFinite(id)),
     }
-  } catch (e) {
+  } catch (error) {
     // The file store logs and returns the empty state rather than throwing, because the
     // Pending screen is not worth a 500. Same policy.
     console.log(
-      `[pending] could not read the store: ${errMessage(e)}`,
+      `[pending] could not read the store: ${errMessage(error)}`,
     )
     return {
       seen_through: 0,

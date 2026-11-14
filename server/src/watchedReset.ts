@@ -101,9 +101,9 @@ export async function resetQueueWatchedState(
   // successful reset into an error.
   try {
     await cache.bumpGeneration()
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[reset] cache generation bump failed: ${errMessage(e)}`,
+      `[reset] cache generation bump failed: ${errMessage(error)}`,
     )
   }
 
@@ -158,11 +158,11 @@ export async function applySeasonalReset(
     settledAt =
       queueWatchedReset.settlementFor(setId)?.settledAt ??
       null
-  } catch (e) {
+  } catch (error) {
     // A store that cannot be read must not stop the queue playing. Skipping the reset is the
     // safe direction: it happens on the next read, which is what a missed day already means.
     console.log(
-      `[reset] ${setId}: could not read the reset settlement (${errMessage(e)})`,
+      `[reset] ${setId}: could not read the reset settlement (${errMessage(error)})`,
     )
     return null
   }
@@ -210,5 +210,5 @@ export async function applySeasonalReset(
 
 /** The spellings `sets.ts` and `queues.sweepCompleted` already treat as "no TTL". */
 const TTL_OFF = ["0", "never", "off", "none", "disabled"]
-const isTtlOff = (v: unknown): boolean =>
-  TTL_OFF.includes(String(v).trim().toLowerCase())
+const isTtlOff = (value: unknown): boolean =>
+  TTL_OFF.includes(String(value).trim().toLowerCase())

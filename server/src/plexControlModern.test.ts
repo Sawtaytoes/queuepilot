@@ -13,11 +13,11 @@ const ACTIVITY =
 type Node = Record<string, string>
 const node = (
   id: string,
-  focused = false,
+  isFocused = false,
   name = "",
 ): Node => ({
   "resource-id": id,
-  focused: String(focused),
+  focused: String(isFocused),
   "content-desc": name,
 })
 const picker = (
@@ -46,8 +46,8 @@ function harness(
 ) {
   let nodes = initial
   let activity: string | null = ACTIVITY
-  let cancelled = false
-  let playerActive = false
+  let isCancelled = false
+  let isPlayerActive = false
   let offset = 1
   const keys: string[] = []
   const batches: { key: string; count: number }[] = []
@@ -64,7 +64,11 @@ function harness(
       parse: (xml) => JSON.parse(xml || "[]") as Node[],
       press: async (key, count = 1) => {
         batches.push({ key, count })
-        for (let i = 0; i < count; i += 1) {
+        for (
+          let iteration = 0;
+          iteration < count;
+          iteration += 1
+        ) {
           keys.push(key)
           nodes = onPress(key, nodes)
         }
@@ -74,7 +78,7 @@ function harness(
         current.toLowerCase() === target.toLowerCase() ||
         (current === "Bob Smith" && target === "bob"),
       offset: async () => offset,
-      playerActive: () => playerActive,
+      playerActive: () => isPlayerActive,
       sleep: async () => {},
     },
     { maxPresses, waitSeconds: 0.03 },
@@ -84,7 +88,7 @@ function harness(
     keys,
     batches,
     dumpCount: () => dumps,
-    cancel: { isSet: () => cancelled },
+    cancel: { isSet: () => isCancelled },
     setOffset: (next: number) => {
       offset = next
     },
@@ -95,10 +99,10 @@ function harness(
       activity = next
     },
     cancelNow: () => {
-      cancelled = true
+      isCancelled = true
     },
-    setPlayerActive: (active: boolean) => {
-      playerActive = active
+    setPlayerActive: (isActive: boolean) => {
+      isPlayerActive = isActive
     },
     beforeDump: (hook: () => void) => {
       beforeDump = hook
@@ -140,9 +144,9 @@ describe("modern Plex control adapter", () => {
   })
 
   test("opens the account submenu and profile picker by focused controls", async () => {
-    const h = harness(home(), (key, nodes) => {
+    const testHarness = harness(home(), (key, nodes) => {
       const focus = nodes.find(
-        (n) => n.focused === "true",
+        (node) => node.focused === "true",
       )?.["resource-id"]
       if (
         focus === "primary-navigation-home" &&
@@ -166,11 +170,10 @@ describe("modern Plex control adapter", () => {
         return picker(["Bob", "Alice"], 0)
       throw new Error(`unexpected press ${key}`)
     })
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.keys).toEqual([
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.keys).toEqual([
       "KEYCODE_DPAD_UP",
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_CENTER",
@@ -178,18 +181,20 @@ describe("modern Plex control adapter", () => {
   })
 
   test("checks onboarding and picker together with one screen dump", () => {
-    const h = harness(picker(["Bob", "Alice"], 0))
-    expect(h.control.profileScreen()).toEqual({
+    const testHarness = harness(picker(["Bob", "Alice"], 0))
+    expect(testHarness.control.profileScreen()).toEqual({
       onboarding: false,
       picker: true,
     })
-    expect(h.dumpCount()).toBe(1)
-    h.setNodes([node("whats-new-onboarding-welcome")])
-    expect(h.control.profileScreen()).toEqual({
+    expect(testHarness.dumpCount()).toBe(1)
+    testHarness.setNodes([
+      node("whats-new-onboarding-welcome"),
+    ])
+    expect(testHarness.control.profileScreen()).toEqual({
       onboarding: true,
       picker: false,
     })
-    expect(h.dumpCount()).toBe(2)
+    expect(testHarness.dumpCount()).toBe(2)
   })
 
   const rail = (selected: number): Node[] =>
@@ -199,11 +204,14 @@ describe("modern Plex control adapter", () => {
       "search",
       "home",
       "libraries-test",
-    ].map((id, i) => ({
-      ...node(`primary-navigation-${id}`, i === selected),
+    ].map((id, index) => ({
+      ...node(
+        `primary-navigation-${id}`,
+        index === selected,
+      ),
       focusable: "true",
       enabled: "true",
-      bounds: `[66,${66 + i * 80}][386,${130 + i * 80}]`,
+      bounds: `[66,${66 + index * 80}][386,${130 + index * 80}]`,
     }))
 
   test("batches visible menu focus stops, ignoring non-focusable headings", async () => {
@@ -216,7 +224,7 @@ describe("modern Plex control adapter", () => {
         bounds: "[66,250][386,270]",
       },
     ]
-    const h = harness(
+    const testHarness = harness(
       menu(),
       (key) => {
         if (key === "KEYCODE_DPAD_UP")
@@ -238,26 +246,25 @@ describe("modern Plex control adapter", () => {
       selected -= 1
       return menu()
     }
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.batches).toEqual([
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.batches).toEqual([
       { key: "KEYCODE_DPAD_UP", count: 3 },
       { key: "KEYCODE_DPAD_RIGHT", count: 1 },
       { key: "KEYCODE_DPAD_CENTER", count: 1 },
     ])
     // Six screen reads with one-arrow navigation, four with measured menu movement.
-    expect(h.dumpCount()).toBe(4)
+    expect(testHarness.dumpCount()).toBe(4)
   })
 
   test("replans menu navigation after a missed arrow and counts each arrow against its budget", async () => {
     let selected = 3
-    const h = harness(
+    const testHarness = harness(
       rail(selected),
       (key) => {
         if (key === "KEYCODE_DPAD_UP") {
-          if (h.keys.length !== 2) selected -= 1
+          if (testHarness.keys.length !== 2) selected -= 1
           return rail(selected)
         }
         if (key === "KEYCODE_DPAD_RIGHT")
@@ -271,11 +278,10 @@ describe("modern Plex control adapter", () => {
       },
       8,
     )
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.batches.slice(0, 2)).toEqual([
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.batches.slice(0, 2)).toEqual([
       { key: "KEYCODE_DPAD_UP", count: 3 },
       { key: "KEYCODE_DPAD_UP", count: 1 },
     ])
@@ -300,12 +306,13 @@ describe("modern Plex control adapter", () => {
     ]) {
       const nodes = rail(3)
       change(nodes)
-      const h = harness(nodes, () => picker(["Bob"], 0))
-      expect(await h.control.summonPicker()).toEqual([
-        "Bob",
-        true,
-      ])
-      expect(h.batches).toEqual([
+      const testHarness = harness(nodes, () =>
+        picker(["Bob"], 0),
+      )
+      expect(
+        await testHarness.control.summonPicker(),
+      ).toEqual(["Bob", true])
+      expect(testHarness.batches).toEqual([
         { key: "KEYCODE_DPAD_UP", count: 1 },
       ])
     }
@@ -314,42 +321,49 @@ describe("modern Plex control adapter", () => {
   test("batches the measured visible distance, reads it back, and verifies before committing", async () => {
     let index = 0
     const names = ["Bob", "Carol", "Alice"]
-    const h = harness(picker(names, index), (key) => {
-      if (key === "KEYCODE_DPAD_RIGHT")
-        return picker(names, ++index)
-      if (key === "KEYCODE_DPAD_CENTER") return home()
-      throw new Error(key)
-    })
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      true,
+    const testHarness = harness(
+      picker(names, index),
+      (key) => {
+        if (key === "KEYCODE_DPAD_RIGHT")
+          return picker(names, ++index)
+        if (key === "KEYCODE_DPAD_CENTER") return home()
+        throw new Error(key)
+      },
     )
-    expect(h.keys).toEqual([
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(true)
+    expect(testHarness.keys).toEqual([
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_CENTER",
     ])
-    expect(h.batches).toEqual([
+    expect(testHarness.batches).toEqual([
       { key: "KEYCODE_DPAD_RIGHT", count: 2 },
       { key: "KEYCODE_DPAD_CENTER", count: 1 },
     ])
     // Previously ten costly dumps for the same two-slot switch; five retain the guards.
-    expect(h.dumpCount()).toBe(5)
+    expect(testHarness.dumpCount()).toBe(5)
   })
 
   test("batches leftward navigation and counts arrows against the budget", async () => {
     let index = 3
     const names = ["Bob", "Carol", "Dave", "Alice"]
-    const h = harness(picker(names, index), (key) =>
-      key === "KEYCODE_DPAD_CENTER"
-        ? home()
-        : picker(names, --index),
+    const testHarness = harness(
+      picker(names, index),
+      (key) =>
+        key === "KEYCODE_DPAD_CENTER"
+          ? home()
+          : picker(names, --index),
     )
-    expect((await h.control.switchTo("Bob"))[0]).toBe(true)
-    expect(h.batches).toEqual([
+    expect(
+      (await testHarness.control.switchTo("Bob"))[0],
+    ).toBe(true)
+    expect(testHarness.batches).toEqual([
       { key: "KEYCODE_DPAD_LEFT", count: 3 },
       { key: "KEYCODE_DPAD_CENTER", count: 1 },
     ])
-    expect(h.dumpCount()).toBe(5)
+    expect(testHarness.dumpCount()).toBe(5)
 
     let boundedIndex = 0
     const farNames = [
@@ -375,16 +389,18 @@ describe("modern Plex control adapter", () => {
   })
 
   test("uses one arrow for an off-screen target even when the roster hints at several", async () => {
-    const h = harness(picker(["Bob"], 0), (key) =>
-      key === "KEYCODE_DPAD_CENTER"
-        ? home()
-        : picker(["Alice"], 0),
+    const testHarness = harness(
+      picker(["Bob"], 0),
+      (key) =>
+        key === "KEYCODE_DPAD_CENTER"
+          ? home()
+          : picker(["Alice"], 0),
     )
-    h.setOffset(3)
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      true,
-    )
-    expect(h.batches).toEqual([
+    testHarness.setOffset(3)
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(true)
+    expect(testHarness.batches).toEqual([
       { key: "KEYCODE_DPAD_RIGHT", count: 1 },
       { key: "KEYCODE_DPAD_CENTER", count: 1 },
     ])
@@ -393,16 +409,16 @@ describe("modern Plex control adapter", () => {
   test("replans from the measured landing when a batch moves fewer slots", async () => {
     let index = 0
     const names = ["Bob", "Carol", "Alice"]
-    const h = harness(picker(names, 0), (key) => {
+    const testHarness = harness(picker(names, 0), (key) => {
       if (key === "KEYCODE_DPAD_CENTER") return home()
       // The second event of the first batch is ignored by the UI.
-      if (h.keys.length !== 2) index += 1
+      if (testHarness.keys.length !== 2) index += 1
       return picker(names, index)
     })
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      true,
-    )
-    expect(h.batches).toEqual([
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(true)
+    expect(testHarness.batches).toEqual([
       { key: "KEYCODE_DPAD_RIGHT", count: 2 },
       { key: "KEYCODE_DPAD_RIGHT", count: 1 },
       { key: "KEYCODE_DPAD_CENTER", count: 1 },
@@ -410,62 +426,80 @@ describe("modern Plex control adapter", () => {
   })
 
   test("refuses a batch if the target tile changes during account lookup", async () => {
-    const h = harness(picker(["Bob", "Carol", "Alice"], 0))
-    h.beforeDump(() => {
-      if (h.dumpCount() === 2)
-        h.setNodes(picker(["Bob", "Carol", "Dave"], 0))
-    })
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      false,
+    const testHarness = harness(
+      picker(["Bob", "Carol", "Alice"], 0),
     )
-    expect(h.keys).toEqual([])
+    testHarness.beforeDump(() => {
+      if (testHarness.dumpCount() === 2)
+        testHarness.setNodes(
+          picker(["Bob", "Carol", "Dave"], 0),
+        )
+    })
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(false)
+    expect(testHarness.keys).toEqual([])
   })
 
   test("refuses a batch if the focused account moves to a different index", async () => {
-    const h = harness(picker(["Bob", "Carol", "Alice"], 0))
-    h.beforeDump(() => {
-      if (h.dumpCount() === 2)
-        h.setNodes(picker(["Carol", "Bob", "Alice"], 1))
-    })
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      false,
+    const testHarness = harness(
+      picker(["Bob", "Carol", "Alice"], 0),
     )
-    expect(h.keys).toEqual([])
+    testHarness.beforeDump(() => {
+      if (testHarness.dumpCount() === 2)
+        testHarness.setNodes(
+          picker(["Carol", "Bob", "Alice"], 1),
+        )
+    })
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(false)
+    expect(testHarness.keys).toEqual([])
   })
 
   test("sends no further arrows or CENTER when a batch leaves the picker", async () => {
-    const h = harness(picker(["Bob", "Alice"], 0), () =>
-      home(),
+    const testHarness = harness(
+      picker(["Bob", "Alice"], 0),
+      () => home(),
     )
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      false,
-    )
-    expect(h.keys).toEqual(["KEYCODE_DPAD_RIGHT"])
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(false)
+    expect(testHarness.keys).toEqual(["KEYCODE_DPAD_RIGHT"])
   })
 
   test("matches the owner display-name alias and verifies signed-in navigation", async () => {
-    const h = harness(picker(["Bob Smith"], 0), () =>
-      home(),
+    const testHarness = harness(
+      picker(["Bob Smith"], 0),
+      () => home(),
     )
-    expect((await h.control.switchTo("bob"))[0]).toBe(true)
-    expect(h.keys).toEqual(["KEYCODE_DPAD_CENTER"])
+    expect(
+      (await testHarness.control.switchTo("bob"))[0],
+    ).toBe(true)
+    expect(testHarness.keys).toEqual([
+      "KEYCODE_DPAD_CENTER",
+    ])
   })
 
   test("acquires focus on a fresh picker before selecting a named profile", async () => {
-    const h = harness(picker(["Bob"], -1), (key) =>
-      key === "KEYCODE_DPAD_LEFT"
-        ? picker(["Bob"], 0)
-        : home(),
+    const testHarness = harness(
+      picker(["Bob"], -1),
+      (key) =>
+        key === "KEYCODE_DPAD_LEFT"
+          ? picker(["Bob"], 0)
+          : home(),
     )
-    expect((await h.control.switchTo("Bob"))[0]).toBe(true)
-    expect(h.keys).toEqual([
+    expect(
+      (await testHarness.control.switchTo("Bob"))[0],
+    ).toBe(true)
+    expect(testHarness.keys).toEqual([
       "KEYCODE_DPAD_LEFT",
       "KEYCODE_DPAD_CENTER",
     ])
   })
 
   test("recovers the collapsed navigation rail after leaving playback", async () => {
-    const h = harness(
+    const testHarness = harness(
       [
         node("screen-home"),
         { ...node("", true), bounds: "[0,20][20,1080]" },
@@ -473,7 +507,7 @@ describe("modern Plex control adapter", () => {
       (key, nodes) => {
         if (
           key === "KEYCODE_DPAD_RIGHT" &&
-          nodes.some((n) => n.bounds)
+          nodes.some((node) => node.bounds)
         )
           return [
             node("screen-home"),
@@ -489,11 +523,10 @@ describe("modern Plex control adapter", () => {
         ]
       },
     )
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.keys).toEqual([
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.keys).toEqual([
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_CENTER",
@@ -531,7 +564,7 @@ describe("modern Plex control adapter", () => {
     "leaves a deep Home row with one Back instead of a Left per column (named focus: %s)",
     async (isNamedFocus) => {
       let selected = 3
-      const h = harness(
+      const testHarness = harness(
         deepRow(isNamedFocus),
         (key) => {
           if (key === "KEYCODE_BACK") return rail(selected)
@@ -541,23 +574,22 @@ describe("modern Plex control adapter", () => {
         },
         12,
       )
-      expect(await h.control.summonPicker()).toEqual([
-        "Bob",
-        true,
-      ])
-      expect(h.batches).toEqual([
+      expect(
+        await testHarness.control.summonPicker(),
+      ).toEqual(["Bob", true])
+      expect(testHarness.batches).toEqual([
         { key: "KEYCODE_BACK", count: 1 },
         { key: "KEYCODE_DPAD_UP", count: 3 },
         { key: "KEYCODE_DPAD_RIGHT", count: 1 },
         { key: "KEYCODE_DPAD_CENTER", count: 1 },
       ])
       // A LEFT per column from column 8 spent the 12-press budget before CENTER.
-      expect(h.dumpCount()).toBe(5)
+      expect(testHarness.dumpCount()).toBe(5)
     },
   )
 
   test("sends Back on Home only once, and acquires a missing focus with Left", async () => {
-    const h = harness(
+    const testHarness = harness(
       deepRow(),
       (key, nodes) => {
         if (key === "KEYCODE_BACK") return nodes
@@ -566,11 +598,10 @@ describe("modern Plex control adapter", () => {
       },
       12,
     )
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.keys).toEqual([
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.keys).toEqual([
       "KEYCODE_BACK",
       "KEYCODE_DPAD_LEFT",
       "KEYCODE_DPAD_RIGHT",
@@ -596,7 +627,7 @@ describe("modern Plex control adapter", () => {
   })
 
   test("leaves a protected Plex player before opening the profile picker", async () => {
-    const h = harness(
+    const testHarness = harness(
       [node("android:id/content")],
       (key) => {
         if (key === "KEYCODE_MEDIA_STOP")
@@ -614,12 +645,11 @@ describe("modern Plex control adapter", () => {
         return picker(["Bob"], 0)
       },
     )
-    h.setPlayerActive(true)
-    expect(await h.control.summonPicker()).toEqual([
-      "Bob",
-      true,
-    ])
-    expect(h.keys).toEqual([
+    testHarness.setPlayerActive(true)
+    expect(
+      await testHarness.control.summonPicker(),
+    ).toEqual(["Bob", true])
+    expect(testHarness.keys).toEqual([
       "KEYCODE_MEDIA_STOP",
       "KEYCODE_DPAD_RIGHT",
       "KEYCODE_DPAD_CENTER",
@@ -693,15 +723,20 @@ describe("modern Plex control adapter", () => {
   })
 
   test("rechecks cancellation after reading the screen and before a press", async () => {
-    const h = harness(picker(["Bob"], 0))
+    const testHarness = harness(picker(["Bob"], 0))
     let dumps = 0
-    h.beforeDump(() => {
-      if (++dumps === 2) h.cancelNow()
+    testHarness.beforeDump(() => {
+      if (++dumps === 2) testHarness.cancelNow()
     })
     expect(
-      (await h.control.switchTo("Bob", h.cancel))[0],
+      (
+        await testHarness.control.switchTo(
+          "Bob",
+          testHarness.cancel,
+        )
+      )[0],
     ).toBe(false)
-    expect(h.keys).toEqual([])
+    expect(testHarness.keys).toEqual([])
   })
 
   test("fails on an unknown screen and bounds navigation on a stuck menu", async () => {
@@ -718,10 +753,10 @@ describe("modern Plex control adapter", () => {
   })
 
   test("does not keep walking when a picker fails to move", async () => {
-    const h = harness(picker(["Bob", "Alice"], 0))
-    expect((await h.control.switchTo("Alice"))[0]).toBe(
-      false,
-    )
-    expect(h.keys).toEqual(["KEYCODE_DPAD_RIGHT"])
+    const testHarness = harness(picker(["Bob", "Alice"], 0))
+    expect(
+      (await testHarness.control.switchTo("Alice"))[0],
+    ).toBe(false)
+    expect(testHarness.keys).toEqual(["KEYCODE_DPAD_RIGHT"])
   })
 })

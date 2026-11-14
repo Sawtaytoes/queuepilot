@@ -61,9 +61,9 @@ export interface FilterableEntry {
   [field: string]: unknown
 }
 
-const toIdList = (v: unknown): string[] =>
-  Array.isArray(v)
-    ? v.map((x) => String(x).trim()).filter(Boolean)
+const toIdList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((id) => String(id).trim()).filter(Boolean)
     : []
 
 /** The parent queue's id, or null when this entry is an ordinary queue. */
@@ -139,13 +139,13 @@ function narrowBlocks(
       Array.isArray(block)
     )
       return block
-    const b = block as Partial<ProviderBlock> &
+    const typedBlock = block as Partial<ProviderBlock> &
       Record<string, unknown>
-    const own = toIdList(b.libraries)
+    const own = toIdList(typedBlock.libraries)
     const narrowed = own.length
       ? own.filter((id) => filter.libraries.includes(id))
       : [...filter.libraries]
-    return { ...b, libraries: narrowed }
+    return { ...typedBlock, libraries: narrowed }
   })
 }
 

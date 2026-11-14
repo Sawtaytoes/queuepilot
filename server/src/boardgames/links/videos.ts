@@ -121,7 +121,10 @@ export const selectHowToPlayVideo = (
 
   const official = usable
     .filter((video) => video.username === WATCH_IT_PLAYED)
-    .sort((a, b) => b.numrecommend - a.numrecommend)[0]
+    .sort(
+      (left, right) =>
+        right.numrecommend - left.numrecommend,
+    )[0]
 
   if (official)
     return {
@@ -132,7 +135,10 @@ export const selectHowToPlayVideo = (
 
   const [best] = usable
     .filter((video) => HOW_TO_PLAY.test(video.title))
-    .sort((a, b) => b.numrecommend - a.numrecommend)
+    .sort(
+      (left, right) =>
+        right.numrecommend - left.numrecommend,
+    )
 
   return best
     ? {

@@ -207,13 +207,17 @@ describe("hasSection agrees with the normalizers", () => {
 
   test("answers true exactly when a normalizer keeps a position", () => {
     for (const value of cases) {
-      const m = value as { start?: unknown; end?: unknown }
-      const normalized =
-        normalizeStart(m.start)?.position_ms != null ||
-        normalizeEnd(m.end)?.position_ms != null
+      const mapping = value as {
+        start?: unknown
+        end?: unknown
+      }
+      const hasPosition =
+        normalizeStart(mapping.start)?.position_ms !=
+          null ||
+        normalizeEnd(mapping.end)?.position_ms != null
       expect([value, hasSection(value)]).toEqual([
         value,
-        normalized,
+        hasPosition,
       ])
     }
   })

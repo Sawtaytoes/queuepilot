@@ -93,8 +93,8 @@ export interface DuplicateOptions {
 const RESOLVE_CONCURRENCY = 6
 
 const sleep = (ms: number) =>
-  new Promise<void>((r) => {
-    setTimeout(r, ms)
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
   })
 
 /**
@@ -139,16 +139,16 @@ export async function findDuplicateItem(
   // Collects the title-only lines on the way past, so the file is walked once.
   const titled: QueueEntry[] = []
   for (const entry of entries) {
-    const d = describe(entry.value)
-    if (d.ratingKey) {
+    const descriptor = describe(entry.value)
+    if (descriptor.ratingKey) {
       if (
-        d.ratingKey === want &&
-        d.plexServer === wantServer
+        descriptor.ratingKey === want &&
+        descriptor.plexServer === wantServer
       )
         return { key: entry.key, ratingKey: want }
       continue
     }
-    if (d.collection || !d.title) continue
+    if (descriptor.collection || !descriptor.title) continue
     titled.push(entry)
   }
   if (wantServer || !titled.length) return null

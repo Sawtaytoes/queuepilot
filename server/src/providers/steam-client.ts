@@ -161,8 +161,9 @@ export function steamClient({
       const wanted = String(appid)
       const games = await library()
       return (
-        games.find((g) => String(g.appid) === wanted) ||
-        null
+        games.find(
+          (game) => String(game.appid) === wanted,
+        ) || null
       )
     },
 
@@ -174,10 +175,10 @@ export function steamClient({
      * typing "port" should surface *Portal* above *Teleportation Simulator*.
      */
     async search(query: string): Promise<SteamGameDto[]> {
-      const q = String(query || "")
+      const needle = String(query || "")
         .trim()
         .toLowerCase()
-      if (!q) return []
+      if (!needle) return []
 
       const games = await library()
       const scored: { game: SteamGameDto; rank: number }[] =
@@ -185,23 +186,23 @@ export function steamClient({
       for (const game of games) {
         const name = String(game.name ?? "").toLowerCase()
         if (!name) continue
-        const at = name.indexOf(q)
+        const at = name.indexOf(needle)
         if (at < 0) continue
         // 0 = exact, 1 = starts-with, 2 = contains. Ties break on playtime, so the games
         // actually played float up — a library this size is mostly things bought in a sale.
-        const rank = name === q ? 0 : at === 0 ? 1 : 2
+        const rank = name === needle ? 0 : at === 0 ? 1 : 2
         scored.push({ game, rank })
       }
       scored.sort(
-        (a, b) =>
-          a.rank - b.rank ||
-          Number(b.game.playtime_forever ?? 0) -
-            Number(a.game.playtime_forever ?? 0) ||
-          String(a.game.name).localeCompare(
-            String(b.game.name),
+        (left, right) =>
+          left.rank - right.rank ||
+          Number(right.game.playtime_forever ?? 0) -
+            Number(left.game.playtime_forever ?? 0) ||
+          String(left.game.name).localeCompare(
+            String(right.game.name),
           ),
       )
-      return scored.map((s) => s.game)
+      return scored.map((scoredGame) => scoredGame.game)
     },
 
     /**

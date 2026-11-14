@@ -183,11 +183,11 @@ export async function topup({
         // lineup is its entries, and the call that omits them serves the library shelf.
         build: () => pullLineup(setName, cfg, provider),
       })
-    } catch (e) {
+    } catch (error) {
       return {
         ok: false,
         set: setName,
-        error: `list top-up failed: ${errMessage(e)}`,
+        error: `list top-up failed: ${errMessage(error)}`,
       }
     }
     // The cooldown is only spent when something actually landed, so a run of "already full"
@@ -365,11 +365,11 @@ export async function topup({
         let built: PlexPlayItem[]
         try {
           built = (await buildLineup()) as PlexPlayItem[]
-        } catch (e) {
+        } catch (error) {
           return {
             ok: false,
             set: setName,
-            error: `lineup build failed: ${errMessage(e)}`,
+            error: `lineup build failed: ${errMessage(error)}`,
           }
         }
         if (cancelled()) return replaced()
@@ -405,11 +405,11 @@ export async function topup({
             appendItems,
             { token },
           )
-        } catch (e) {
+        } catch (error) {
           return {
             ok: false,
             set: setName,
-            error: `extend failed: ${errMessage(e)}`,
+            error: `extend failed: ${errMessage(error)}`,
           }
         }
         if (cancelled()) return replaced()

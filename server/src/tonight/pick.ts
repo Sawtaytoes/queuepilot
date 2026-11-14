@@ -283,12 +283,16 @@ export function orderCandidates(
   random: () => number,
 ): TonightCandidate[] {
   const out = [...candidates]
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = indexOf(i + 1, random)
-    const a = out[i] as TonightCandidate
-    const b = out[j] as TonightCandidate
-    out[i] = b
-    out[j] = a
+  for (
+    let iteration = out.length - 1;
+    iteration > 0;
+    iteration -= 1
+  ) {
+    const swapIndex = indexOf(iteration + 1, random)
+    const current = out[iteration] as TonightCandidate
+    const other = out[swapIndex] as TonightCandidate
+    out[iteration] = other
+    out[swapIndex] = current
   }
   return out
 }

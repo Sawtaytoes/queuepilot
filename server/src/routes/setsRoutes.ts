@@ -31,7 +31,7 @@ export function setsRoutes(): Hono {
   // The registry + the Plex library list (all video libraries) — one call feeds the
   // queue-editor modal and the Channels filter editor. Membership is opt-in per set; there
   // is no global hide list, so every video library is offered.
-  app.get("/sets", async (c) => {
+  app.get("/sets", async (context) => {
     try {
       const reg = await sets.getRegistry()
       let libraries: Awaited<
@@ -52,9 +52,9 @@ export function setsRoutes(): Hono {
         max: ROTATION_LENGTH_MAX,
         topup_at: TOPUP_AT,
       }
-      return c.json({ ...reg, libraries, lineup })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json({ ...reg, libraries, lineup })
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -77,14 +77,14 @@ export function setsRoutes(): Hono {
    * A failed filing is therefore a 200 carrying `groupError`, never a 400. The queue exists
    * by then, and answering "create failed" would invite a retry that makes a second one.
    */
-  app.post("/sets", async (c) => {
+  app.post("/sets", async (context) => {
     let body: Record<string, unknown>
     let created: { id: string }
     try {
-      body = await readBody(c)
+      body = await readBody(context)
       created = await sets.createSet(body)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
 
     try {
@@ -92,33 +92,35 @@ export function setsRoutes(): Hono {
         body.group == null ? "" : String(body.group),
         created.id,
       )
-      return c.json({ ...created, group })
-    } catch (e) {
-      return c.json({
+      return context.json({ ...created, group })
+    } catch (error) {
+      return context.json({
         ...created,
         group: null,
-        groupError: errMessage(e),
+        groupError: errMessage(error),
       })
     }
   })
 
   // Shelf order. Body: {ids} — the new full order.
-  app.patch("/sets-order", async (c) => {
-    const { ids } = await readBody(c)
+  app.patch("/sets-order", async (context) => {
+    const { ids } = await readBody(context)
     if (!Array.isArray(ids))
-      return c.json({ error: "ids[] required" }, 400)
+      return context.json({ error: "ids[] required" }, 400)
     try {
-      return c.json(await sets.reorderSets(ids.map(String)))
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json(
+        await sets.reorderSets(ids.map(String)),
+      )
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Edit one set: label/kind/sections (+ rotation filter knobs). Ids never change.
-  app.patch("/sets/:id", async (c) => {
+  app.patch("/sets/:id", async (context) => {
     try {
-      const body = await readBody(c)
-      const id = c.req.param("id")
+      const body = await readBody(context)
+      const id = context.req.param("id")
       const current = await sets.getSet(id)
       if (!current) throw new Error(`unknown set ${id}`)
       if (current.source === "queue" && "add_as" in body) {
@@ -162,16 +164,16 @@ export function setsRoutes(): Hono {
         ]
         await cache.dropSectionListings(secs.map(String))
       }
-      return c.json(out)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json(out)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
   // Delete a curated queue — registry entry AND its queues.yaml list.
-  app.delete("/sets/:id", async (c) => {
+  app.delete("/sets/:id", async (context) => {
     try {
-      const id = c.req.param("id")
+      const id = context.req.param("id")
       const out = await sets.deleteSet(id)
       if (out.deleted) {
         await queues.deleteSetKey(id)
@@ -181,9 +183,9 @@ export function setsRoutes(): Hono {
         // the delete path names it, the way it already names `deleteSetKey`.
         deleteQueueMembers(id)
       }
-      return c.json(out)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json(out)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -201,19 +203,20 @@ export function setsRoutes(): Hono {
    *
    * Order is the file's, so a row does not move under the pointer between two skips.
    */
-  app.get("/sets/:id/skipped", async (c) => {
+  app.get("/sets/:id/skipped", async (context) => {
     try {
-      const s = await sets.getSet(c.req.param("id"))
-      if (!s) return c.json({ error: "unknown set" }, 404)
-      const keys = s.skipped || []
+      const set = await sets.getSet(context.req.param("id"))
+      if (!set)
+        return context.json({ error: "unknown set" }, 404)
+      const keys = set.skipped || []
       // A PULL set's keys are its own provider's (a Kavita chapter id), NOT Plex ratingKeys —
       // and the two id spaces overlap, so a Plex lookup here would not merely fail, it would
       // sometimes SUCCEED and name a completely unrelated film. The row degrades to the bare
       // key instead, which still lists the skip and still clears it. Naming a chapter would
       // mean walking every series in the queue (Kavita can look up a series, not a loose
       // chapter id), which is a read per entry to label a handful of rows.
-      if (s.delivery === "pull") {
-        return c.json({
+      if (set.delivery === "pull") {
+        return context.json({
           items: keys.map((ratingKey) => ({
             ratingKey,
             type: null,
@@ -238,7 +241,7 @@ export function setsRoutes(): Hono {
           const bareKey = shared[2]!
           try {
             const scope = await plex.profileScope(
-              s.requires_profile || null,
+              set.requires_profile || null,
             )
             const access = await plexServerAccessForProfile(
               scope.account ?? null,
@@ -263,7 +266,7 @@ export function setsRoutes(): Hono {
                   episode: md.index ?? null,
                   posterRatingKey: null,
                   cover: md.thumb
-                    ? `/api/shared-plex-thumb/${encodeURIComponent(s.id)}` +
+                    ? `/api/shared-plex-thumb/${encodeURIComponent(set.id)}` +
                       `/${encodeURIComponent(access.id)}/${bareKey}`
                     : null,
                   sourceTitle: access.name,
@@ -297,30 +300,30 @@ export function setsRoutes(): Hono {
           ),
         }
       })
-      return c.json({ items })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json({ items })
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
-  app.get("/sets/:id/members", async (c) => {
+  app.get("/sets/:id/members", async (context) => {
     try {
-      const s = await sets.getSet(c.req.param("id"))
-      if (!s || s.source !== "rotation")
-        return c.json(
+      const set = await sets.getSet(context.req.param("id"))
+      if (!set || set.source !== "rotation")
+        return context.json(
           { error: "not a rotation channel" },
           400,
         )
       const sections = [
         ...new Set([
-          ...(s.sections || []),
-          ...(s.item_sections || []),
+          ...(set.sections || []),
+          ...(set.item_sections || []),
         ]),
       ]
       // A per-profile channel passes the active binding's user_uuid so each member tile's next-up
       // reflects THAT profile's watched state, not the admin's — matching the per-account pool
       // below it. Absent (legacy/admin) => admin view, unchanged; a mint failure degrades to admin.
-      const uuidQ = (c.req.query("uuid") ?? "").trim()
+      const uuidQ = (context.req.query("uuid") ?? "").trim()
       let scope = {}
       if (uuidQ) {
         try {
@@ -335,13 +338,13 @@ export function setsRoutes(): Hono {
       // A READING channel's members are its provider's, resolved in one bounded round-trip —
       // the same seam the queue grid uses, and for the same reason: Plex cannot resolve them.
       // (A pull channel has no Plex Home profile to scope by, so `scope` does not apply.)
-      if (s.delivery === "pull") {
-        const values = s.members || []
+      if (set.delivery === "pull") {
+        const values = set.members || []
         const cores = await providerTiles.resolveTiles(
-          s,
+          set,
           values,
         )
-        return c.json({
+        return context.json({
           members: values.map((value, index) => ({
             index,
             raw: value,
@@ -369,11 +372,11 @@ export function setsRoutes(): Hono {
         })
       }
       const members = await mapLimit(
-        s.members || [],
+        set.members || [],
         6,
         async (value, index) => {
           // A hand-written {collection: <name>} mapping resolves like its string spelling.
-          const v =
+          const memberValue =
             value &&
             typeof value === "object" &&
             value.collection &&
@@ -390,7 +393,7 @@ export function setsRoutes(): Hono {
           // collection read identically (member poster + title, collection as the badge).
           const core = await tiles.resolveTile(
             sections,
-            v,
+            memberValue,
             start,
             scope,
           )
@@ -415,9 +418,9 @@ export function setsRoutes(): Hono {
           }
         },
       )
-      return c.json({ members })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json({ members })
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 

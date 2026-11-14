@@ -113,8 +113,8 @@ let topupScheduler: TopupScheduler | null = null
 // The one place anything in this file reaches the broker: JSON-encodes non-string payloads,
 // defaults to qos 1, and drops the message when the client is not connected.
 const pub: Publish = (topic, payload, opts = {}) => {
-  const c = client
-  if (!c?.connected) return
+  const liveClient = client
+  if (!liveClient?.connected) return
   const body =
     typeof payload === "string"
       ? payload
@@ -123,7 +123,7 @@ const pub: Publish = (topic, payload, opts = {}) => {
     qos: opts.qos ?? 1,
     retain: Boolean(opts.retain),
   }
-  c.publish(topic, body, settings)
+  liveClient.publish(topic, body, settings)
 }
 
 const chooser = createChooser({
@@ -202,19 +202,19 @@ async function handleStart(
   )
   try {
     await session.startSession(payload)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[mqttd] start failed: ${(isNodeError(e) && e.stack) || errMessage(e)}`,
+      `[mqttd] start failed: ${(isNodeError(error) && error.stack) || errMessage(error)}`,
     )
-    publishState({ error: errMessage(e) })
+    publishState({ error: errMessage(error) })
   }
 }
 
 async function handleAdvance(): Promise<void> {
   try {
     await session.advanceSession()
-  } catch (e) {
-    publishState({ error: errMessage(e) })
+  } catch (error) {
+    publishState({ error: errMessage(error) })
   }
 }
 
@@ -274,10 +274,13 @@ async function handleTopup(
       // optional list detail.
       ...(lists.length ? { lists } : {}),
     })
-  } catch (e) {
+  } catch (error) {
     // topup() is written not to throw; if it ever does, that is a bug worth seeing on the
     // broker rather than a silently swallowed tick.
-    pub(T_RESP_TOPUP, { ok: false, error: errMessage(e) })
+    pub(T_RESP_TOPUP, {
+      ok: false,
+      error: errMessage(error),
+    })
   }
 }
 
@@ -331,11 +334,11 @@ async function handleResetWatched(
     console.log(
       `[mqttd] reset-watched ${setId}: ${result.total} cleared`,
     )
-  } catch (e) {
+  } catch (error) {
     pub(T_RESP_RESET_WATCHED, {
       ok: false,
       set: setId,
-      error: errMessage(e),
+      error: errMessage(error),
     })
   }
 }
@@ -373,10 +376,10 @@ async function handleAccountAudit(
     console.log(
       `[mqttd] account-audit: ${summarise(report)}`,
     )
-  } catch (e) {
+  } catch (error) {
     pub(T_RESP_ACCOUNT_AUDIT, {
       ok: false,
-      error: errMessage(e),
+      error: errMessage(error),
     })
   }
 }
@@ -406,8 +409,8 @@ async function handlePreview(
     console.log(
       `[mqttd] preview ${setName}: ${(data.buckets || []).length} buckets`,
     )
-  } catch (e) {
-    pub(reply, { set: setName, error: errMessage(e) })
+  } catch (error) {
+    pub(reply, { set: setName, error: errMessage(error) })
   }
 }
 
@@ -432,8 +435,8 @@ function handleSoundtrack(
 function announceDevices(): void {
   devices
     .announceDevices(pub)
-    .catch((e: unknown) =>
-      console.log(`[devices] ${errMessage(e)}`),
+    .catch((error: unknown) =>
+      console.log(`[devices] ${errMessage(error)}`),
     )
 }
 
@@ -486,7 +489,7 @@ export function start(): MqttClient | null {
   }
   // Bound to a const as well as to `client`, so the handlers below keep the narrowing that a
   // module-level `let` loses inside a closure. Same client object either way.
-  const c = connect({
+  const mqttClient = connect({
     host: MQTT_HOST,
     port: MQTT_PORT,
     protocol: MQTT_PORT === 8883 ? "mqtts" : "mqtt",
@@ -495,12 +498,12 @@ export function start(): MqttClient | null {
     reconnectPeriod: 5000,
     clientId: `queuepilot-node-${randomUUID().slice(0, 8)}`,
   })
-  client = c
-  c.on("connect", () => {
+  client = mqttClient
+  mqttClient.on("connect", () => {
     console.log(
       `[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`,
     )
-    c.subscribe([
+    mqttClient.subscribe([
       T_CMD_START,
       T_CMD_ADVANCE,
       T_CMD_SOUNDTRACK,
@@ -519,8 +522,10 @@ export function start(): MqttClient | null {
       Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000,
     )
   })
-  c.on("error", (e) => console.log(`[mqttd] ${e.message}`))
-  c.on("message", (topic, buf, packet) => {
+  mqttClient.on("error", (error) =>
+    console.log(`[mqttd] ${error.message}`),
+  )
+  mqttClient.on("message", (topic, buf, packet) => {
     // One parse for five command topics, so it stays `unknown` here and each handler declares
     // the shape it reads. A non-object body (or junk) reads as `{}`, exactly as before.
     let payload: Record<string, unknown> = {}

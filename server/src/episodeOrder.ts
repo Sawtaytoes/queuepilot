@@ -83,7 +83,7 @@ export function orderedPlayableEpisodes<
 >(
   episodes: readonly T[],
   selection: SpecialSelection = {},
-  includeSpecialsOnly = true,
+  isSpecialsOnlyIncluded = true,
 ): T[] {
   const candidates = episodes.filter(
     (episode) =>
@@ -100,7 +100,7 @@ export function orderedPlayableEpisodes<
   // A specials-only title treats Season 0 as its real run. This preserves the existing OAD
   // exception and does not require a per-leaf opt-in for a title that has no other episodes.
   if (!regular.length)
-    return includeSpecialsOnly ? specials : []
+    return isSpecialsOnlyIncluded ? specials : []
 
   const included = new Set(
     (selection.included_specials || []).map(String),
@@ -120,10 +120,14 @@ export function orderedPlayableEpisodes<
     }
 
     let insertAt = ordered.length
-    for (let i = 0; i < ordered.length; i += 1) {
-      const itemDate = dateMs(ordered[i]!)
+    for (
+      let orderedIndex = 0;
+      orderedIndex < ordered.length;
+      orderedIndex += 1
+    ) {
+      const itemDate = dateMs(ordered[orderedIndex]!)
       if (itemDate != null && itemDate > specialDate) {
-        insertAt = i
+        insertAt = orderedIndex
         break
       }
     }

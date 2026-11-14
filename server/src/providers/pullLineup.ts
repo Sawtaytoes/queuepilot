@@ -26,8 +26,10 @@ import { resolveSingle } from "./blocks.js"
 
 /** A batch value off the YAML, or null when it is absent/unusable (never 0 — see setBatch). */
 export const toBatch = (raw: unknown): number | null => {
-  const n = parseInt(String(raw ?? ""), 10)
-  return Number.isFinite(n) && n > 0 ? n : null
+  const parsed = parseInt(String(raw ?? ""), 10)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null
 }
 
 /**
@@ -43,7 +45,9 @@ export const toBatch = (raw: unknown): number | null => {
 export async function curatedEntries(
   setId: string,
   only: string | null = null,
-  { stampQueued = false }: { stampQueued?: boolean } = {},
+  {
+    stampQueued: isStampingQueued = false,
+  }: { stampQueued?: boolean } = {},
 ): Promise<CuratedEntryRef[]> {
   let rows: Awaited<ReturnType<typeof queues.listSet>>
   try {
@@ -54,14 +58,14 @@ export async function curatedEntries(
     return []
   }
   const out: CuratedEntryRef[] = []
-  for (const e of rows) {
+  for (const row of rows) {
     // "Read THIS one now" — the ▶ on a single tile. A named entry is taken even when it is
     // marked done, because asking for it by key is an explicit choice; the `done` skip below
     // is for the unfiltered lineup, where re-serving finished reading is the bug.
     if (only) {
-      if (e.key !== only) continue
-    } else if (e.done) continue
-    const { ratingKey, extras } = splitEntry(e.value)
+      if (row.key !== only) continue
+    } else if (row.done) continue
+    const { ratingKey, extras } = splitEntry(row.value)
     // A pull provider's items are addressed by the provider's own id, which an entry stores
     // in `ratingKey`. A title-only entry (no id) cannot be resolved against Kavita at all,
     // so it is skipped rather than guessed at by name.
@@ -84,8 +88,8 @@ export async function curatedEntries(
     const stored = Number(extras.queued_at)
     let queuedAt =
       Number.isFinite(stored) && stored > 0 ? stored : null
-    if (stampQueued && queuedAt == null && e.key) {
-      queuedAt = await queues.stampQueuedAt(setId, e.key)
+    if (isStampingQueued && queuedAt == null && row.key) {
+      queuedAt = await queues.stampQueuedAt(setId, row.key)
     }
     out.push({
       id: String(ratingKey),

@@ -99,9 +99,9 @@ describe("a queue is required people plus optional people", () => {
       db,
     )
     expect(
-      queueMembers("movies", db).map((m) => [
-        m.id,
-        m.position,
+      queueMembers("movies", db).map((queueMember) => [
+        queueMember.id,
+        queueMember.position,
       ]),
     ).toEqual([
       ["ada", 0],
@@ -140,12 +140,12 @@ describe("a queue is required people plus optional people", () => {
       db,
     )
     const all = membersByQueue(db)
-    expect(all.get("movies")?.map((m) => m.id)).toEqual([
-      "ada",
-    ])
-    expect(all.get("reading")?.map((m) => m.id)).toEqual([
-      "grace",
-    ])
+    expect(
+      all.get("movies")?.map((member) => member.id),
+    ).toEqual(["ada"])
+    expect(
+      all.get("reading")?.map((member) => member.id),
+    ).toEqual(["grace"])
   })
 })
 
@@ -162,7 +162,9 @@ describe("the two foreign keys this table deliberately does not have", () => {
     addGroup(db, "kids", { label: "Kids (renamed)" })
 
     expect(
-      queueMembers("movies", db).map((m) => m.id),
+      queueMembers("movies", db).map(
+        (queueMember) => queueMember.id,
+      ),
     ).toEqual(["kids"])
     expect(orphanQueueMembers(db)).toEqual([])
   })
@@ -174,9 +176,11 @@ describe("the two foreign keys this table deliberately does not have", () => {
       [member("group", "ghost")],
       db,
     )
-    expect(orphanQueueMembers(db).map((m) => m.id)).toEqual(
-      ["ghost"],
-    )
+    expect(
+      orphanQueueMembers(db).map(
+        (orphanQueueMember) => orphanQueueMember.id,
+      ),
+    ).toEqual(["ghost"])
     // Reported, not repaired — the rows are still there.
     expect(queueMembers("movies", db)).toHaveLength(1)
   })

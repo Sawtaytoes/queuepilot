@@ -150,8 +150,8 @@ export function memberDescs(cfg: {
   members?: readonly MemberValue[] | null
 }): EntryDescriptor[] {
   const out: EntryDescriptor[] = []
-  for (const m of cfg.members || []) {
-    const desc = describe(m)
+  for (const member of cfg.members || []) {
+    const desc = describe(member)
     if (desc.key != null) out.push(desc)
   }
   return out
@@ -325,7 +325,7 @@ export async function channelBuckets(
   if (!cfg.members || !cfg.members.length) return rule
   const members = await memberBuckets(client, cfg, binding)
   const seen = new Set(
-    members.map((b) => String(b.ratingKey)),
+    members.map((member) => String(member.ratingKey)),
   )
   // A COLLECTION MEMBER COVERS ITS CHILDREN, in both modes.
   //
@@ -345,7 +345,9 @@ export async function channelBuckets(
   for (const rk of await collectionCover(client, cfg, tok))
     seen.add(rk)
   return members.concat(
-    rule.filter((b) => !seen.has(String(b.ratingKey))),
+    rule.filter(
+      (bucket) => !seen.has(String(bucket.ratingKey)),
+    ),
   )
 }
 
@@ -367,12 +369,19 @@ export async function channelBuckets(
 export function rotationLength(
   cfg: { length?: string } | null | undefined,
 ): number {
-  const n = parseInt(String(cfg?.length ?? ""), 10)
-  if (!Number.isFinite(n) || n <= 0) return ROTATION_LENGTH
+  const rotationLength = parseInt(
+    String(cfg?.length ?? ""),
+    10,
+  )
+  if (
+    !Number.isFinite(rotationLength) ||
+    rotationLength <= 0
+  )
+    return ROTATION_LENGTH
   // Clamped HERE as well as in sets.ts's writer, not only there: these files are hand-edited
   // over SMB as often as they are saved through the UI, so the engine cannot assume the
   // writer's ceiling was ever applied.
-  return Math.min(n, ROTATION_LENGTH_MAX)
+  return Math.min(rotationLength, ROTATION_LENGTH_MAX)
 }
 
 // Interleave next-unwatched episodes ACROSS shows (round-robin), TV-style: show A ep1, show B ep1,
@@ -405,7 +414,7 @@ export async function buildRotation(
   // so an unweighted channel is bit-for-bit unchanged. See engine/weight.js.
   return weightedInterleave(
     order,
-    (s) => s.episodes,
+    (bucket) => bucket.episodes,
     length,
   )
 }

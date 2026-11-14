@@ -29,31 +29,31 @@ import { readBody } from "./readBody.js"
 /** Playback + channels, over the MQTT bridge: devices, play, session state, now-playing. */
 export function playbackRoutes(): Hono {
   const app = new Hono()
-  app.get("/chooser/posters", async (c) =>
-    c.json({ posters: await chooserPosterPaths() }),
+  app.get("/chooser/posters", async (context) =>
+    context.json({ posters: await chooserPosterPaths() }),
   )
-  app.get("/chooser/poster/:id", async (c) => {
-    const id = c.req.param("id")
+  app.get("/chooser/poster/:id", async (context) => {
+    const id = context.req.param("id")
     const set = await sets.getSet(id)
     if (!set || !isSetAvailable(set))
-      return c.body(null, 404)
+      return context.body(null, 404)
     const image = await cachedChooserPoster(id)
     return image
       ? binaryResponse({
           ...image,
           cacheControl: "private, max-age=300",
         })
-      : c.body(null, 404)
+      : context.body(null, 404)
   })
 
   // The "Play on ▾" dropdown — the Python service's retained device registry.
-  app.get("/devices", (c) => {
+  app.get("/devices", (context) => {
     if (!mqttc.connected())
-      return c.json(
+      return context.json(
         { error: "MQTT not connected", devices: [] },
         503,
       )
-    return c.json({ devices: mqttc.devices() })
+    return context.json({ devices: mqttc.devices() })
   })
 
   // Start a queue/channel on a device. Body: {set, kind?, target?, behavior?}.
@@ -61,7 +61,7 @@ export function playbackRoutes(): Hono {
   // set='auto' still lets the Shield's signed-in profile pick the tier; which Rules
   // channel (shows vs Movies rewatch) is chosen by `behavior: rewatch` (legacy
   // kind='movie' still accepted for one release).
-  app.post("/play", async (c) => {
+  app.post("/play", async (context) => {
     const {
       set: setId,
       kind: kindReq,
@@ -69,10 +69,10 @@ export function playbackRoutes(): Hono {
       profile,
       only,
       behavior,
-    } = await readBody(c)
+    } = await readBody(context)
     const tgt = target ? String(target) : undefined
     if (tgt && !devices.known(tgt))
-      return c.json(
+      return context.json(
         { error: `unknown device '${tgt}'` },
         400,
       )
@@ -86,7 +86,7 @@ export function playbackRoutes(): Hono {
     try {
       if (setId === "auto") {
         if (entryKey)
-          return c.json(
+          return context.json(
             {
               error:
                 'set "auto" cannot play a single entry',
@@ -100,7 +100,7 @@ export function playbackRoutes(): Hono {
           ? "rewatch"
           : undefined
         // kind is always rules for auto (both targets are rule-built channels).
-        return c.json({
+        return context.json({
           sent: mqttc.play(
             "auto",
             "rules",
@@ -111,27 +111,28 @@ export function playbackRoutes(): Hono {
           ),
         })
       }
-      const s = await sets.getSet(String(setId || ""))
-      if (!s) return c.json({ error: "unknown set" }, 400)
-      if (entryKey && s.source !== "queue") {
-        return c.json(
+      const set = await sets.getSet(String(setId || ""))
+      if (!set)
+        return context.json({ error: "unknown set" }, 400)
+      if (entryKey && set.source !== "queue") {
+        return context.json(
           {
-            error: `'${s.label || s.id}' is a rule-based channel — it has no entries to play one of`,
+            error: `'${set.label || set.id}' is a rule-based channel — it has no entries to play one of`,
           },
           400,
         )
       }
-      return c.json({
+      return context.json({
         sent: mqttc.play(
-          s.id,
-          wireKindForSet(s),
+          set.id,
+          wireKindForSet(set),
           tgt,
           prof,
           entryKey,
         ),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 503)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 503)
     }
   })
 
@@ -152,8 +153,9 @@ export function playbackRoutes(): Hono {
   // `power_off` is the exception, and it is not one: powering a room down is the app asking
   // ANOTHER SERVICE to touch the physical world, which is exactly what the workspace rule
   // puts on MQTT. It stops Plex over HTTP like its neighbours, then publishes.
-  app.post("/control", async (c) => {
-    const { action, offset, target } = await readBody(c)
+  app.post("/control", async (context) => {
+    const { action, offset, target } =
+      await readBody(context)
     const act = String(action || "")
     // Same resolution mqttd.handleStart() does for a start command's `target`: the UI
     // sends the registry ID, playback wants the announced ENTRY (it reads .uri/.mode/.name).
@@ -163,18 +165,24 @@ export function playbackRoutes(): Hono {
       ? (devices.known(String(targetId)) as Device | null)
       : null
     if (targetId && !dev)
-      return c.json(
+      return context.json(
         { error: `unknown device '${String(targetId)}'` },
         400,
       )
     try {
       if (act === "seek") {
-        const r = await playback.seekTo(offset as number, {
-          device: dev,
-        })
-        return r.seeked
-          ? c.json({ ok: true, offset: r.offset })
-          : c.json({ error: r.error }, 503)
+        const seekResult = await playback.seekTo(
+          offset as number,
+          {
+            device: dev,
+          },
+        )
+        return seekResult.seeked
+          ? context.json({
+              ok: true,
+              offset: seekResult.offset,
+            })
+          : context.json({ error: seekResult.error }, 503)
       }
       // END THE ACTIVITY. Two halves, in this order, and the order is the contract: the app
       // stops the player itself so nothing is left running behind a dark TV, THEN asks the
@@ -194,7 +202,7 @@ export function playbackRoutes(): Hono {
             dev,
           )
           if (deviceOperationCancelled())
-            return c.json(
+            return context.json(
               { error: "playback operation was replaced" },
               409,
             )
@@ -202,7 +210,7 @@ export function playbackRoutes(): Hono {
             set: originalSet,
             target: targetId ? String(targetId) : null,
           })
-          return c.json({
+          return context.json({
             ok: true,
             sent,
             stopped: stopped.ok,
@@ -216,23 +224,29 @@ export function playbackRoutes(): Hono {
         act !== "resume" &&
         act !== "next"
       ) {
-        return c.json(
+        return context.json(
           { error: `unknown action '${act}'` },
           400,
         )
       }
-      const r = await playback.transport(act, dev)
-      return r.ok
-        ? c.json({ ok: true })
-        : c.json({ error: r.error }, 503)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 503)
+      const transportResult = await playback.transport(
+        act,
+        dev,
+      )
+      return transportResult.ok
+        ? context.json({ ok: true })
+        : context.json(
+            { error: transportResult.error },
+            503,
+          )
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 503)
     }
   })
 
   // Last session state (retained plex-channels/state) — the play-result toast's source.
-  app.get("/state", (c) =>
-    c.json({
+  app.get("/state", (context) =>
+    context.json({
       state: mqttc.lastState(),
       mqtt: mqttc.connected(),
     }),
@@ -241,12 +255,12 @@ export function playbackRoutes(): Hono {
   // Which queue is live, and what's on screen. `set` comes from the session state (the queue
   // we STARTED) — authoritative for "which queue is active" in a way the Plex-side payload
   // can't be, since Plex has no idea our queues exist.
-  app.get("/now", async (c) => {
+  app.get("/now", async (context) => {
     // Use the lifecycle's ordered, sitting-owned snapshot. A raw retained payload can still
     // describe the previous sitting while the replacement's first observation is pending.
     const now = lastNow()
     const st = mqttc.lastState()
-    return c.json({
+    return context.json({
       now,
       set: st?.set || null,
       kind: st?.kind || null,
@@ -255,11 +269,11 @@ export function playbackRoutes(): Hono {
   })
 
   // Channels view: a rotation set's eligible pool, computed in-process by the engine.
-  app.get("/generic/:id/preview", async (c) => {
+  app.get("/generic/:id/preview", async (context) => {
     try {
-      const s = await sets.getSet(c.req.param("id"))
-      if (!s || s.source !== "rotation")
-        return c.json(
+      const set = await sets.getSet(context.req.param("id"))
+      if (!set || set.source !== "rotation")
+        return context.json(
           { error: "not a rotation channel" },
           400,
         )
@@ -267,28 +281,30 @@ export function playbackRoutes(): Hono {
       // A PULL channel's pool is its provider's, not the Plex engine's. Without this the
       // Channels view renders "Empty" for a reading channel that in fact has a full lineup —
       // previewRotation walks Plex sections, and a Kavita channel has none.
-      if (s.delivery === "pull") {
+      if (set.delivery === "pull") {
         // Spread, not `s`: see the note in providers/launcher.ts — `BlockSourceCfg`'s index
         // signature is satisfied by an anonymous object type but never by an interface.
-        const block = providerBlocks.resolveSingle({ ...s })
-        const p = providerFor(block.provider)
+        const block = providerBlocks.resolveSingle({
+          ...set,
+        })
+        const provider = providerFor(block.provider)
         // `pool()` is optional on the Provider surface. The JS called it unconditionally and a
         // provider without one produced a TypeError that this try/catch turned into a 503; the
         // explicit throw keeps that exact status and body shape with a message that names the
         // provider instead of naming a property.
-        if (typeof p.pool !== "function")
+        if (typeof provider.pool !== "function")
           throw new Error(
-            `${p.label} does not compute a pool`,
+            `${provider.label} does not compute a pool`,
           )
-        const pool = await p.pool({
+        const pool = await provider.pool({
           libraries: block.libraries,
-          members: (s.members || []).map(String),
+          members: (set.members || []).map(String),
         })
         // Returned as `buckets`, the SAME key and shape the Plex preview uses, so the Channels
         // grid renders a reading pool with no second code path. See kavita.js pool().
-        return c.json({
-          id: s.id,
-          label: s.label,
+        return context.json({
+          id: set.id,
+          label: set.label,
           provider: block.provider,
           delivery: "pull",
           // `cover` is the one field the Plex shape has no equivalent of: a Plex bucket's
@@ -296,31 +312,34 @@ export function playbackRoutes(): Hono {
           // has. A provider id needs its provider's proxy instead, so the URL is sent.
           // `unit` goes with it: the shape is Plex's, and Plex's next-up line counts EPISODES.
           // A reading bucket's number is a chapter, so the tile must say "Ch 113", not "E113".
-          buckets: pool.map((b) => ({
-            ...b,
-            cover: coverUrl(block.provider, b.ratingKey),
-            unit: p.unit || "episode",
+          buckets: pool.map((bucket) => ({
+            ...bucket,
+            cover: coverUrl(
+              block.provider,
+              bucket.ratingKey,
+            ),
+            unit: provider.unit || "episode",
           })),
         })
       }
 
-      const profile = c.req.query("profile") ?? ""
+      const profile = context.req.query("profile") ?? ""
       // Widened on purpose: `previewRotation()` has no declared return type yet, so TS infers
       // the narrow shape of its first `return` literal and rejects the `routing` field this
       // route bolts on afterwards. A `RotationPreview` interface exported from
       // engine/preview.ts is the real fix — that file belongs to another agent this round.
       const node: Record<string, unknown> =
-        await enginePreview.previewRotation(s.id, profile)
+        await enginePreview.previewRotation(set.id, profile)
       try {
-        node.routing = engineRouting.forSet(s.id, profile)
-      } catch (e) {
+        node.routing = engineRouting.forSet(set.id, profile)
+      } catch (error) {
         console.log(
-          `[engine] routing preview failed for ${s.id}: ${errMessage(e)}`,
+          `[engine] routing preview failed for ${set.id}: ${errMessage(error)}`,
         )
       }
-      return c.json(node)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 503)
+      return context.json(node)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 503)
     }
   })
 

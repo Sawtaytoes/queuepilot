@@ -136,14 +136,14 @@ export function playbackLength(
   // (decision `2026-08-17-a-lineup-refills-instead-of-ending`, superseded by this one)
   if (cfg?.refill === true) return null
 
-  const n = parseInt(raw, 10)
+  const parsed = parseInt(raw, 10)
 
-  if (!Number.isFinite(n) || n <= 0)
+  if (!Number.isFinite(parsed) || parsed <= 0)
     return fallback === undefined
       ? defaultFor(cfg)
       : fallback
 
-  return Math.min(n, ROTATION_LENGTH_MAX)
+  return Math.min(parsed, ROTATION_LENGTH_MAX)
 }
 
 /**

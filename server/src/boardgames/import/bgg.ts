@@ -409,7 +409,8 @@ export const parsePlayerCountPoll = (
     }
   }
 
-  const ascending = (a: number, b: number) => a - b
+  const ascending = (left: number, right: number) =>
+    left - right
   return {
     bestWith: best.sort(ascending),
     recommendedWith: recommended.sort(ascending),

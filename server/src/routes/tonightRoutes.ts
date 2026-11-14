@@ -66,13 +66,13 @@ import { readBody } from "./readBody.js"
 export function tonightRoutes(): Hono {
   const app = new Hono()
 
-  app.post("/tonight/pick", async (c) => {
+  app.post("/tonight/pick", async (context) => {
     try {
-      const body = await readBody(c)
+      const body = await readBody(context)
       const tile = body.activity
 
       if (!isTonightTile(tile)) {
-        return c.json(
+        return context.json(
           { error: `unknown activity '${String(tile)}'` },
           400,
         )
@@ -81,7 +81,7 @@ export function tonightRoutes(): Hono {
       const route = routeForTile(tile)
 
       if (route.engine === "board-games") {
-        return c.json(
+        return context.json(
           {
             error:
               "board games are drawn from the shelf — POST /api/board-games/pick",
@@ -91,7 +91,7 @@ export function tonightRoutes(): Hono {
       }
 
       if (route.engine === "narrow-first") {
-        return c.json(
+        return context.json(
           {
             error:
               "Surprise Me narrows down first. Choose Media, Games or Reading on its " +
@@ -135,7 +135,7 @@ export function tonightRoutes(): Hono {
       )
 
       if (!backend || ordered.length === 0) {
-        return c.json({
+        return context.json({
           backend: null,
           notes: notesFor(tile),
           pick: null,
@@ -169,7 +169,7 @@ export function tonightRoutes(): Hono {
       }
 
       if (shortlist.length === 0) {
-        return c.json({
+        return context.json({
           backend,
           notes: notesFor(tile),
           pick: null,
@@ -179,14 +179,14 @@ export function tonightRoutes(): Hono {
         })
       }
 
-      return c.json({
+      return context.json({
         backend,
         notes: notesFor(tile),
         pick: shortlist[0] ?? null,
         shortlist,
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -295,7 +295,7 @@ async function withUpNext(
         upNext: playItemLabel(head),
         upNextReason: null,
       }
-    } catch (e) {
+    } catch (error) {
       // Named, and named as a REACH rather than as a crash. A provider that is down or NOT
       // CONFIGURED still leaves a queue you can try to start; a bare `fetch failed` on a card
       // says nothing a person can act on.
@@ -306,7 +306,7 @@ async function withUpNext(
         isExhausted: false,
         launchUrl,
         upNext: null,
-        upNextReason: `Could not ask ${candidate.providerLabel || candidate.providerId} what is next: ${errMessage(e)}`,
+        upNextReason: `Could not ask ${candidate.providerLabel || candidate.providerId} what is next: ${errMessage(error)}`,
       }
     }
   }
@@ -371,13 +371,13 @@ async function withUpNext(
       },
       upNextReason: null,
     }
-  } catch (e) {
+  } catch (error) {
     return {
       ...candidate,
       isExhausted: false,
       launchUrl,
       upNext: null,
-      upNextReason: `Could not read this queue: ${errMessage(e)}`,
+      upNextReason: `Could not read this queue: ${errMessage(error)}`,
     }
   }
 }

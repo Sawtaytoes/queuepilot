@@ -49,11 +49,11 @@ export function buildServer({
   // Express had NO error handler: every route try/catches itself, and anything that escaped
   // fell through to Express's default handler, which answers an HTML 500 to a caller that
   // asked for JSON. This is the deliberate (small) behaviour change — same status, a JSON body.
-  root.onError((err, c) => {
+  root.onError((err, context) => {
     console.log(
-      `[queuepilot-web] unhandled error on ${c.req.method} ${c.req.path}: ${errMessage(err)}`,
+      `[queuepilot-web] unhandled error on ${context.req.method} ${context.req.path}: ${errMessage(err)}`,
     )
-    return c.json({ error: errMessage(err) }, 500)
+    return context.json({ error: errMessage(err) }, 500)
   })
 
   const api = new Hono()

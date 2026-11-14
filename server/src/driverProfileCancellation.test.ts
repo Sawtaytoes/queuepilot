@@ -18,7 +18,8 @@ vi.mock("./playback.js", () => ({
 }))
 vi.mock("./adb.js", () => ({
   usesModernPlayback: () => false,
-  sameProfile: (a: string, b: string) => a === b,
+  sameProfile: (left: string, right: string) =>
+    left === right,
 }))
 vi.mock("./store/db/gatedPush.js", () => ({
   recordPush: vi.fn(),
@@ -41,12 +42,12 @@ const device = {
 }
 for (const boundary of ["preflight", "audit"] as const) {
   test(`discards the superseded ${boundary} account response on the same player`, async () => {
-    let entered = false
+    let hasEntered = false
     let release!: () => void
     const held = async () => {
-      entered = true
-      await new Promise<void>((r) => {
-        release = r
+      hasEntered = true
+      await new Promise<void>((resolve) => {
+        release = resolve
       })
       return {
         accountId: 1,
@@ -70,7 +71,7 @@ for (const boundary of ["preflight", "audit"] as const) {
       accountId: 1,
       device,
     })
-    await vi.waitFor(() => expect(entered).toBe(true))
+    await vi.waitFor(() => expect(hasEntered).toBe(true))
     invalidateDeviceOperations()
     withDevice(device, () =>
       profiles.recordObservedProfile("Replacement"),
@@ -88,8 +89,8 @@ for (const boundary of ["preflight", "audit"] as const) {
 test("prevents all profile writers in a superseded operation from changing new evidence", async () => {
   let release!: () => void
   const pending = withDevice(device, async () => {
-    await new Promise<void>((r) => {
-      release = r
+    await new Promise<void>((resolve) => {
+      release = resolve
     })
     profiles.recordObservedProfile("Old")
     profiles.recordProfileClaim("Old claim")

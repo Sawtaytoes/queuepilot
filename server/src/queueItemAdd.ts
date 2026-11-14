@@ -37,7 +37,7 @@ export async function addQueueItem(
   value: EntryValue,
   position: "top" | "bottom",
   {
-    allowDuplicate = false,
+    allowDuplicate: isDuplicateAllowed = false,
   }: { allowDuplicate?: boolean } = {},
 ): Promise<QueueAddResult> {
   // `added: false` is what `addItem` already answers for an exact key repeat, so the wire
@@ -93,7 +93,7 @@ export async function addQueueItem(
         400,
       )
   }
-  if (cfg && !allowDuplicate) {
+  if (cfg && !isDuplicateAllowed) {
     const dup = await findDuplicateItem(
       liveClient(),
       cfg,
@@ -108,6 +108,6 @@ export async function addQueueItem(
       }
   }
   return queues.addItem(set, value, position, {
-    allowDuplicate,
+    allowDuplicate: isDuplicateAllowed,
   })
 }

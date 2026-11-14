@@ -49,9 +49,9 @@ const rejection = async (
 ): Promise<PhotoRejected> => {
   try {
     await normalizePersonPhoto(input)
-  } catch (e) {
-    if (e instanceof PhotoRejected) return e
-    throw e
+  } catch (error) {
+    if (error instanceof PhotoRejected) return error
+    throw error
   }
   throw new Error("expected a rejection")
 }
@@ -206,8 +206,8 @@ describe("normalizePersonPhoto", () => {
     const { data } = await sharp(photo.bytes)
       .raw()
       .toBuffer({ resolveWithObject: true })
-    const pixel = (x: number, y: number) => {
-      const at = (y * PHOTO_EDGE + x) * 3
+    const pixel = (column: number, row: number) => {
+      const at = (row * PHOTO_EDGE + column) * 3
       return {
         b: data[at + 2] as number,
         r: data[at] as number,
