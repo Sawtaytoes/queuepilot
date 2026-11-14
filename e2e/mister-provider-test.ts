@@ -362,7 +362,7 @@ await ok(
       LIBRETRO_SYSTEM,
     )) {
       assert.ok(
-        folder && folder.includes(" - "),
+        folder?.includes(" - "),
         `${system} -> ${folder} is not a maker-system name`,
       )
     }

@@ -28,6 +28,7 @@
 //   WEB_PORT=18777 server/node_modules/.bin/tsx e2e/drag-stability-test.ts
 import assert from "node:assert/strict"
 import { chromium } from "./playwright.js"
+import { defined } from "../server/src/defined.js"
 
 const PORT = process.env.WEB_PORT || 18777
 const BASE = `http://localhost:${PORT}`
@@ -96,7 +97,7 @@ const start = JSON.parse(
   ),
 ) as number[]
 
-await page.mouse.move(start[0]!, start[1]!)
+await page.mouse.move(defined(start[0]), defined(start[1]))
 await page.mouse.down()
 
 // A slow, deliberate drag down and to the right — what a person does, and the motion that
@@ -104,8 +105,8 @@ await page.mouse.down()
 const seen: number[] = []
 for (let attempt = 1; attempt <= 50; attempt += 1) {
   await page.mouse.move(
-    start[0]! + attempt * 5,
-    start[1]! + attempt * 4,
+    defined(start[0]) + attempt * 5,
+    defined(start[1]) + attempt * 4,
   )
   await page.waitForTimeout(16)
   seen.push(
@@ -130,9 +131,9 @@ const path = seen.filter(
 )
 let reversals = 0
 for (let index = 2; index < path.length; index += 1) {
-  const before = path[index - 2]!
-  const middle = path[index - 1]!
-  const after = path[index]!
+  const before = defined(path[index - 2])
+  const middle = defined(path[index - 1])
+  const after = defined(path[index])
   if (
     (middle > before && after < middle) ||
     (middle < before && after > middle)

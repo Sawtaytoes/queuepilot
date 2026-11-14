@@ -20,6 +20,7 @@ import {
 } from "./stubs/server-process.mjs"
 import { promises as fs } from "node:fs"
 import type { ChildProcess } from "node:child_process"
+import { defined } from "../server/src/defined.js"
 
 const PORT = 18787
 const SETS = "/tmp/sets-playreorder.yaml"
@@ -187,8 +188,8 @@ try {
       `#playgrid li[data-set="${ontoId}"]`,
     )
     await card.hover()
-    const from = (await card.boundingBox())!
-    const to = (await onto.boundingBox())!
+    const from = defined(await card.boundingBox())
+    const to = defined(await onto.boundingBox())
     const target = {
       x: to.x + to.width / 2,
       y: to.y + to.height / 2,

@@ -71,7 +71,7 @@ try {
       })),
     )
     const primary = links[0]
-    assert(primary && primary.href)
+    assert(primary?.href)
     assert(primary.href.startsWith("intent://"))
     assert(primary.href.includes("readingListId=7"))
     assert.equal(primary.rel, "noreferrer noopener")

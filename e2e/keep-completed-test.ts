@@ -29,6 +29,7 @@ import {
 } from "./stubs/session-harness.mjs"
 import type { SessionResult } from "../server/src/session.js"
 import type { RoutingQueueCfg } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 stubSessionDeps()
 
@@ -129,8 +130,9 @@ const parsePath = path.join(parseDir, "sets.yaml")
 writeFileSync(parsePath, PARSE_YAML)
 // `loadSets` is nullable only for a MISSING/unparseable file — this one was just written above,
 // and the very next assertion is that it parsed.
-const reg = routing.loadSets(parsePath)!
-ok("sets.yaml parses", Boolean(reg))
+const parsedReg = routing.loadSets(parsePath)
+ok("sets.yaml parses", Boolean(parsedReg))
+const reg = defined(parsedReg)
 ok(
   "normal queue is NOT keep_completed",
   !queueSet(reg, "normalq").keep_completed,

@@ -12,6 +12,7 @@ import type {
   RoutingRotationCfg,
 } from "../server/src/types.js"
 import { mergeManualMoviesIntoRewatch } from "../server/src/engine/rotation.js"
+import { defined } from "../server/src/defined.js"
 
 const metadata: Record<
   string,
@@ -29,7 +30,7 @@ const client = {
   async container(path: string) {
     const match = /^\/library\/metadata\/(\d+)$/.exec(path)
     if (!match) throw new Error(`unexpected path ${path}`)
-    const item = metadata[match[1]!]
+    const item = metadata[defined(match[1])]
     return {
       Metadata: item
         ? [{ ratingKey: match[1], ...item }]

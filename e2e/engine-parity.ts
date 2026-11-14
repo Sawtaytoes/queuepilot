@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -55,17 +56,17 @@ const pyChannelBuckets = (set: string, profile: string) =>
 
 const client = replayClient(CORPUS)
 // Nullable only for a MISSING/unparseable sets.yaml, and `sets[id]` only for an id the file
-// does not carry; both are the committed corpus fixture, so each `!` fails exactly where the
-// original did rather than adding a branch.
-const reg = routing.loadSets(SETS)!
-const cfg = reg.sets.kids!
+// does not carry; both are the committed corpus fixture, so each `defined()` throws on a broken
+// fixture rather than adding a branch.
+const reg = defined(routing.loadSets(SETS))
+const cfg = defined(reg.sets.kids)
 
 // Node channel_buckets (rule pool + curated members, deduped), normalized to the _buckets shape.
 async function nodeChannelBuckets(
   set: string,
   profile: string,
 ) {
-  const setCfg = reg.sets[set]!
+  const setCfg = defined(reg.sets[set])
   const binding = routing.bindingFor(setCfg, profile)
   return (
     await rotation.channelBuckets(client, setCfg, binding)

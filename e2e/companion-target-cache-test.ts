@@ -19,6 +19,7 @@
 // No Plex and no player: global `fetch` is replaced for the plex.tv calls.
 //
 // Run:  server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts   (from the repo root)
+import { defined } from "../server/src/defined.js"
 
 // env.js reads process.env at module-eval, so these must precede the playback import.
 process.env.PLEX_TOKEN = "test-token"
@@ -69,8 +70,10 @@ globalThis.fetch = (async (): Promise<Response> => {
   return new Response(JSON.stringify(rows), { status: 200 })
 }) as typeof globalThis.fetch
 
-const TARGET_NAME = process.env.SHIELD_CLIENT_NAME!
-const TARGET_ID = process.env.SHIELD_CLIENT_MACHINE_ID!
+const TARGET_NAME = defined(process.env.SHIELD_CLIENT_NAME)
+const TARGET_ID = defined(
+  process.env.SHIELD_CLIENT_MACHINE_ID,
+)
 
 /** A player that IS advertising a direct Companion endpoint. */
 const advertising: FakeRow[] = [

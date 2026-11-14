@@ -15,6 +15,7 @@ import {
   weightedShuffle,
 } from "../server/src/engine/weight.js"
 import type { Rng } from "../server/src/engine/weight.js"
+import { defined } from "../server/src/defined.js"
 
 /** A pool bucket as this harness builds them — `weight` optional, so the "weight absent
  * entirely" compatibility case is the same type as a weighted one. */
@@ -181,11 +182,11 @@ function legacyRoundRobin(
   while (queue.length < length) {
     let hasProgressed = false
     for (const testBucket of order) {
-      // Both `!`s assert what the loop already guarantees — every bucket got a cursor above,
-      // and the read is guarded by the bounds check — so the emitted JS is byte-identical.
-      const cursor = cursors.get(testBucket.name)!
+      // Both `defined()`s assert what the loop already guarantees — every bucket got a cursor
+      // above, and the read is guarded by the bounds check.
+      const cursor = defined(cursors.get(testBucket.name))
       if (cursor < testBucket.episodes.length) {
-        queue.push(testBucket.episodes[cursor]!)
+        queue.push(defined(testBucket.episodes[cursor]))
         cursors.set(testBucket.name, cursor + 1)
         hasProgressed = true
         if (queue.length >= length) break
@@ -245,9 +246,9 @@ const seq = [
   0.9, 0.5, 0.1, 0.7, 0.3, 0.2, 0.8, 0.4, 0.6, 0.05,
 ]
 let cursor = 0
-// `seq[...]` is a modulo read over a non-empty literal, so the `!` is an assertion, not a change.
+// `seq[...]` is a modulo read over a non-empty literal, so `defined()` never throws here.
 const seeded: Rng = {
-  random: () => seq[cursor++ % seq.length]!,
+  random: () => defined(seq[cursor++ % seq.length]),
   shuffle: () => {},
 }
 let heavyFirst = 0
@@ -263,7 +264,7 @@ for (
     { n: "light2", weight: 1 },
   ]
   weightedShuffle(members, seeded)
-  if (members[0]!.n === "heavy") heavyFirst += 1
+  if (defined(members[0]).n === "heavy") heavyFirst += 1
 }
 ok(
   "a 5x member leads far more often than 1/3 of the time",

@@ -23,6 +23,7 @@ import { startFakeMqtt } from "./fake-mqtt.js"
  * registry the server itself wrote (`sets[].members`), so the cast lives here once rather
  * than at each read.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const ROOT = path.resolve(

@@ -273,7 +273,7 @@ try {
     throw new Error(
       "the reset row must be ENABLED: the ledger holds completions",
     )
-  if (!removeRow || !removeRow[1])
+  if (!removeRow?.[1])
     throw new Error(
       "the remove row must be DISABLED: no entry carries `done`",
     )

@@ -142,10 +142,7 @@ check(
 )
 check(
   "card profile gates: names the profile in the error",
-  Boolean(
-    outcome.lastError &&
-      outcome.lastError.includes("Younger"),
-  ),
+  Boolean(outcome.lastError?.includes("Younger")),
   String(outcome.lastError),
 )
 
@@ -216,10 +213,7 @@ outcome = await run({
 })
 check(
   "card/set profile conflict is a clear error",
-  Boolean(
-    outcome.lastError &&
-      outcome.lastError.includes("requires"),
-  ),
+  Boolean(outcome.lastError?.includes("requires")),
   String(outcome.lastError),
 )
 check("conflict does not play", !outcome.played)

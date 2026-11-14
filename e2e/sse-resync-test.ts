@@ -273,8 +273,7 @@ if (startFakeMqtt) {
     ok(
       "the replayed snapshot carries the retained ratingKey (no publish after connect)",
       Boolean(
-        now &&
-          now.now &&
+        now?.now &&
           Number(now.now.ratingKey) === RETAINED.ratingKey,
       ),
     )

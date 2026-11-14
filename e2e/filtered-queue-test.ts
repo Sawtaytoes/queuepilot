@@ -34,6 +34,7 @@ import type {
   KavitaPlayItem,
 } from "../server/src/types.js"
 import type { KavitaHttpClient } from "../server/src/providers/kavita-client.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(
   path.join(tmpdir(), "filtered-queue-"),
@@ -397,7 +398,9 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const cfg = routing.loadSets(SETS_PATH)!.sets.strips!
+    const cfg = defined(
+      defined(routing.loadSets(SETS_PATH)).sets.strips,
+    )
     const play = (await pullLineup(
       "strips",
       cfg,
@@ -417,7 +420,9 @@ await ok("the PARENT still plays everything", async () => {
     def: DEF,
     client: asClient(stubClient()),
   })
-  const cfg = routing.loadSets(SETS_PATH)!.sets.reading!
+  const cfg = defined(
+    defined(routing.loadSets(SETS_PATH)).sets.reading,
+  )
   const play = (await pullLineup(
     "reading",
     cfg,
@@ -441,7 +446,9 @@ await ok(
       def: DEF,
       client: asClient(client),
     })
-    const cfg = routing.loadSets(SETS_PATH)!.sets.strips!
+    const cfg = defined(
+      defined(routing.loadSets(SETS_PATH)).sets.strips,
+    )
     const play = (await pullLineup(
       "strips",
       cfg,
@@ -468,11 +475,11 @@ await ok(
       def: DEF,
       client: asClient(client),
     })
-    const reg = routing.loadSets(SETS_PATH)!
+    const reg = defined(routing.loadSets(SETS_PATH))
 
     const parentPlay = (await pullLineup(
       "reading",
-      reg.sets.reading!,
+      defined(reg.sets.reading),
       provider,
     )) as KavitaPlayItem[]
     const parentList = (await provider.materialize(
@@ -482,7 +489,7 @@ await ok(
 
     const viewPlay = (await pullLineup(
       "strips",
-      reg.sets.strips!,
+      defined(reg.sets.strips),
       provider,
     )) as KavitaPlayItem[]
     const viewList = (await provider.materialize(viewPlay, {

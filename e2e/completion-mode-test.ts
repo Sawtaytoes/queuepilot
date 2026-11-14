@@ -38,6 +38,7 @@ import {
   resetSession,
 } from "./stubs/session-harness.mjs"
 import type { RoutingQueueCfg } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 stubSessionDeps()
 
@@ -137,8 +138,9 @@ const parseDir = mkdtempSync(
 const parsePath = path.join(parseDir, "sets.yaml")
 writeFileSync(parsePath, PARSE_YAML)
 // `loadSets` is nullable only for a MISSING/unparseable file — this one was just written above.
-const reg = routing.loadSets(parsePath)!
-ok("sets.yaml parses", Boolean(reg))
+const parsedReg = routing.loadSets(parsePath)
+ok("sets.yaml parses", Boolean(parsedReg))
+const reg = defined(parsedReg)
 ok(
   "a normal queue does NOT restart",
   !queueSet(reg, "normalq").restart_when_exhausted,

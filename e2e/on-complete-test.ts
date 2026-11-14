@@ -22,6 +22,7 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -125,7 +126,7 @@ const client = {
     )
     if (match) {
       return {
-        Metadata: (EPISODES[match[1]!] || []).map(
+        Metadata: (EPISODES[defined(match[1])] || []).map(
           (episode) => ({
             ...episode,
             type: "episode",

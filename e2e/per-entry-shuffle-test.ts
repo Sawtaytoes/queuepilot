@@ -6,6 +6,7 @@
 import assert from "node:assert/strict"
 
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 process.env.SETS_PATH =
   "/nonexistent-so-loadSets-is-never-consulted.yaml"
@@ -71,20 +72,24 @@ const client: PlexClient = {
       /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(path)
     if (leaves) {
       return {
-        Metadata: episodes(leaves[1]!).map((item) => ({
-          ...item,
-          viewCount:
-            item.ratingKey === providerResume ? 0 : 1,
-          viewOffset:
-            item.ratingKey === providerResume ? 600_000 : 0,
-        })),
+        Metadata: episodes(defined(leaves[1])).map(
+          (item) => ({
+            ...item,
+            viewCount:
+              item.ratingKey === providerResume ? 0 : 1,
+            viewOffset:
+              item.ratingKey === providerResume
+                ? 600_000
+                : 0,
+          }),
+        ),
       }
     }
     const metadata = /^\/library\/metadata\/(\d+)$/.exec(
       path,
     )
     if (metadata) {
-      const ratingKey = metadata[1]!
+      const ratingKey = defined(metadata[1])
       if (ratingKey === SHOW) {
         return {
           Metadata: [
