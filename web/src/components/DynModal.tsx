@@ -8,6 +8,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -264,9 +265,9 @@ export function DynModal() {
     [reg],
   )
 
-  useEffect(() => {
-    if (!dynModal) return
-
+  // Seed the form when the modal is (re-)opened, and only then: `editing` and the lineup
+  // default are read when it opens, and a store refresh while it is open does not re-seed.
+  const seedForm = useEffectEvent(() => {
     let isStale = false
 
     // The TYPED name only. `editing.label` falls back to the id, so seeding from it would
@@ -345,7 +346,12 @@ export function DynModal() {
     return () => {
       isStale = true
     }
-    // Re-seed only when the modal is (re-)opened.
+  })
+
+  useEffect(() => {
+    if (!dynModal) return
+
+    return seedForm()
   }, [dynModal])
 
   /** Load ONE card's ratings from its profile's complete restricted view, preserving

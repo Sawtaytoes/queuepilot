@@ -8,6 +8,7 @@ import {
 } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 import { useLocation } from "react-router"
+import { useEffectOnChange } from "../hooks/useEffectOnChange"
 import { CollapseIcon } from "./CollapseIcon"
 import { Header } from "./Header"
 import { MenuIcon } from "./MenuIcon"
@@ -108,9 +109,8 @@ export function Page({
   const [isNavVisible, setIsNavVisible] = useState(false)
   const activeHref = navigationHref ?? pathname
 
-  useEffect(() => {
-    setIsNavVisible(false)
-  }, [pathname])
+  // A route change closes the navigation menu.
+  useEffectOnChange(pathname, () => setIsNavVisible(false))
 
   const menuNavigation =
     navLayout.layout === "menu" ? (

@@ -1,6 +1,11 @@
 import { Button, Checkbox } from "@charcuterie/ui"
 import { Lock } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
@@ -255,130 +260,141 @@ export function SetModal() {
     }
   }
 
+  // Seed the form when the modal is (re-)opened, and only then: `editing` is read when it
+  // opens, and a store refresh that hands a new `editing` while it is open does not re-seed.
+  const seedForm = useEffectEvent(
+    (opened: NonNullable<typeof setModal>) => {
+      // The TYPED name only. `editing.label` falls back to the id, so seeding from it would
+      // pre-fill a nameless queue's input with `movies_shows` and the next Save would store
+      // that slug as its name.
+      setLabel(
+        editing?.has_explicit_label ? editing.label : "",
+      )
+      const nextAddAs = editing
+        ? normalizeAddAs(editing.add_as, {
+            kind: editing.kind,
+            source: editing.source,
+          })
+        : (opened.presetAddAs ?? "priority")
+      setAddAs(nextAddAs)
+      setRequiresProfile(
+        editing ? editing.requires_profile || "" : "",
+      )
+      setActivity(editing?.activity ?? "watching")
+      setCompletionMode(completionModeOf(editing))
+      setWatchHistory(editing?.watch_history ?? "provider")
+      setBatchStopsAt(
+        editing ? editing.batch_stops_at || "none" : "none",
+      )
+      setEpisodes(editing?.episodes ?? 1)
+      setVolumes(editing?.volumes ?? 1)
+      setPlaybackLength(
+        editing?.length ?? editing?.length_default ?? 1,
+      )
+      setIsPoweringOff(
+        Boolean(editing?.power_off_when_done),
+      )
+      setIsLockedOnTv(Boolean(editing?.is_locked_on_tv))
+      // Prefill: edit uses the stored TTL; a new priority picks queue defaults to 24h
+      // (matches the seeded movie queues in sets.yaml). Random-pool picks stay blank =
+      // keep forever (legacy anime).
+      if (editing) {
+        setRemoveCompletedAfter(
+          editing.remove_completed_after || "",
+        )
+      } else {
+        setRemoveCompletedAfter(
+          nextAddAs === "random" ? "" : "24h",
+        )
+      }
+      // The seasonal reset is OFF on a new queue and on every queue that has never carried the
+      // key — an off queue must behave exactly as it does today. Split back into the two
+      // controls; a stored value is always `MM-DD`, and anything else the server refused to
+      // write, so a bad split is not reachable.
+      const storedReset = (
+        editing?.reset_watched_on || ""
+      ).split("-")
+      setResetMonth(
+        storedReset.length === 2
+          ? String(Number(storedReset[0]))
+          : "",
+      )
+      setResetDay(
+        storedReset.length === 2
+          ? String(Number(storedReset[1]))
+          : "1",
+      )
+      // No create-time default: a blank window IS the 16h product default, and seeding "16h"
+      // here would write the key onto every new queue and make the sparse file lie about
+      // which queues have an opinion.
+      setPromoteWindow(editing?.promote_window || "")
+      // No create-time default either: a queue is available all year until somebody says
+      // otherwise, and seeding a window here would make every new queue seasonal.
+      const startDay = parseSeasonDay(editing?.season_start)
+      const endDay = parseSeasonDay(editing?.season_end)
+      setSeasonStartMonth(
+        startDay ? String(startDay.month) : "",
+      )
+      setSeasonStartDay(
+        startDay ? String(startDay.day) : "",
+      )
+      setSeasonEndMonth(endDay ? String(endDay.month) : "")
+      setSeasonEndDay(endDay ? String(endDay.day) : "")
+      // Seed the blocks. An existing set always reports at least one (the implicit Plex block
+      // for a pre-blocks set); a NEW set starts with one block on the first configured
+      // provider, so creating a queue is exactly as many clicks as it was before.
+      setBlocks(
+        editing?.providers?.length
+          ? editing.providers.map((provider) => ({
+              libraries: [...provider.libraries],
+              profile: provider.profile ?? "",
+              provider: provider.provider,
+              uid: newUid(),
+            }))
+          : [
+              {
+                // A queue created FOR an item starts with that item's library ticked, so the
+                // add that follows has somewhere to land. Empty for every other opener.
+                libraries: opened.presetLibraries ?? [],
+                profile: "",
+                provider: "",
+                uid: newUid(),
+              },
+            ],
+      )
+      setSharedLibraries(editing?.shared_libraries ?? {})
+      void fetchProfiles().then(setProfiles)
+      void api<{ providers: ProviderInfo[] }>(
+        "GET",
+        "/api/providers",
+      )
+        .then((response) => {
+          const list = (response.providers ?? []).filter(
+            (provider) =>
+              provider.supported && provider.configured,
+          )
+          setProviders(list)
+          // A new set has no provider yet; default it to the first configured one rather
+          // than leaving an empty block that cannot fetch libraries.
+          setBlocks((prev) =>
+            prev.map((block) =>
+              block.provider
+                ? block
+                : {
+                    ...block,
+                    provider: list[0]?.id ?? "plex",
+                  },
+            ),
+          )
+        })
+        .catch(() => setProviders([]))
+    },
+  )
+
   useEffect(() => {
     if (!setModal) return
 
-    // The TYPED name only. `editing.label` falls back to the id, so seeding from it would
-    // pre-fill a nameless queue's input with `movies_shows` and the next Save would store
-    // that slug as its name.
-    setLabel(
-      editing?.has_explicit_label ? editing.label : "",
-    )
-    const nextAddAs = editing
-      ? normalizeAddAs(editing.add_as, {
-          kind: editing.kind,
-          source: editing.source,
-        })
-      : (setModal.presetAddAs ?? "priority")
-    setAddAs(nextAddAs)
-    setRequiresProfile(
-      editing ? editing.requires_profile || "" : "",
-    )
-    setActivity(editing?.activity ?? "watching")
-    setCompletionMode(completionModeOf(editing))
-    setWatchHistory(editing?.watch_history ?? "provider")
-    setBatchStopsAt(
-      editing ? editing.batch_stops_at || "none" : "none",
-    )
-    setEpisodes(editing?.episodes ?? 1)
-    setVolumes(editing?.volumes ?? 1)
-    setPlaybackLength(
-      editing?.length ?? editing?.length_default ?? 1,
-    )
-    setIsPoweringOff(Boolean(editing?.power_off_when_done))
-    setIsLockedOnTv(Boolean(editing?.is_locked_on_tv))
-    // Prefill: edit uses the stored TTL; a new priority picks queue defaults to 24h
-    // (matches the seeded movie queues in sets.yaml). Random-pool picks stay blank =
-    // keep forever (legacy anime).
-    if (editing) {
-      setRemoveCompletedAfter(
-        editing.remove_completed_after || "",
-      )
-    } else {
-      setRemoveCompletedAfter(
-        nextAddAs === "random" ? "" : "24h",
-      )
-    }
-    // The seasonal reset is OFF on a new queue and on every queue that has never carried the
-    // key — an off queue must behave exactly as it does today. Split back into the two
-    // controls; a stored value is always `MM-DD`, and anything else the server refused to
-    // write, so a bad split is not reachable.
-    const storedReset = (
-      editing?.reset_watched_on || ""
-    ).split("-")
-    setResetMonth(
-      storedReset.length === 2
-        ? String(Number(storedReset[0]))
-        : "",
-    )
-    setResetDay(
-      storedReset.length === 2
-        ? String(Number(storedReset[1]))
-        : "1",
-    )
-    // No create-time default: a blank window IS the 16h product default, and seeding "16h"
-    // here would write the key onto every new queue and make the sparse file lie about
-    // which queues have an opinion.
-    setPromoteWindow(editing?.promote_window || "")
-    // No create-time default either: a queue is available all year until somebody says
-    // otherwise, and seeding a window here would make every new queue seasonal.
-    const startDay = parseSeasonDay(editing?.season_start)
-    const endDay = parseSeasonDay(editing?.season_end)
-    setSeasonStartMonth(
-      startDay ? String(startDay.month) : "",
-    )
-    setSeasonStartDay(startDay ? String(startDay.day) : "")
-    setSeasonEndMonth(endDay ? String(endDay.month) : "")
-    setSeasonEndDay(endDay ? String(endDay.day) : "")
-    // Seed the blocks. An existing set always reports at least one (the implicit Plex block
-    // for a pre-blocks set); a NEW set starts with one block on the first configured
-    // provider, so creating a queue is exactly as many clicks as it was before.
-    setBlocks(
-      editing?.providers?.length
-        ? editing.providers.map((provider) => ({
-            libraries: [...provider.libraries],
-            profile: provider.profile ?? "",
-            provider: provider.provider,
-            uid: newUid(),
-          }))
-        : [
-            {
-              // A queue created FOR an item starts with that item's library ticked, so the
-              // add that follows has somewhere to land. Empty for every other opener.
-              libraries: setModal.presetLibraries ?? [],
-              profile: "",
-              provider: "",
-              uid: newUid(),
-            },
-          ],
-    )
-    setSharedLibraries(editing?.shared_libraries ?? {})
-    void fetchProfiles().then(setProfiles)
-    void api<{ providers: ProviderInfo[] }>(
-      "GET",
-      "/api/providers",
-    )
-      .then((response) => {
-        const list = (response.providers ?? []).filter(
-          (provider) =>
-            provider.supported && provider.configured,
-        )
-        setProviders(list)
-        // A new set has no provider yet; default it to the first configured one rather
-        // than leaving an empty block that cannot fetch libraries.
-        setBlocks((prev) =>
-          prev.map((block) =>
-            block.provider
-              ? block
-              : {
-                  ...block,
-                  provider: list[0]?.id ?? "plex",
-                },
-          ),
-        )
-      })
-      .catch(() => setProviders([]))
-    // Only re-seed when the modal is (re-)opened.
+    seedForm(setModal)
   }, [setModal])
 
   // The DAY options for the chosen month. February offers 29; a month nobody has chosen offers

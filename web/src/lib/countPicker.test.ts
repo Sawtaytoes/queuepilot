@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest"
 
 import {
   countPickerPresets,
+  countPresetKey,
+  countPresetsFromKey,
   effectiveCount,
   isCountOverride,
   isCountPreset,
@@ -76,5 +78,29 @@ describe("isCountOverride", () => {
     expect(isCountOverride(undefined)).toBe(false)
     expect(isCountOverride(1)).toBe(true)
     expect(isCountOverride(2)).toBe(true)
+  })
+})
+
+describe("countPresetKey", () => {
+  test("round-trips a preset list through its key", () => {
+    for (const presets of [
+      [],
+      [1, 2],
+      [1, 2, 12],
+      [12, 24, 60],
+    ]) {
+      expect(
+        countPresetsFromKey(countPresetKey(presets)),
+      ).toEqual(presets)
+    }
+  })
+
+  test("gives equal lists one key, whatever their identity", () => {
+    expect(countPresetKey([1, 2, 12])).toBe(
+      countPresetKey([1, 2, 12]),
+    )
+    expect(countPresetKey([1, 2])).not.toBe(
+      countPresetKey([1, 2, 12]),
+    )
   })
 })
