@@ -34,7 +34,9 @@ test("announces configured clients without discovery and preserves the default",
   expect(known("shield")?.default).toBe(true)
   expect(known("missing")).toBeNull()
   expect(
-    pub.mock.calls.filter((c) => typeof c[1] === "object"),
+    pub.mock.calls.filter(
+      (call) => typeof call[1] === "object",
+    ),
   ).toHaveLength(2)
 })
 test("deduplicates a discovered configured player by machine identity", async () => {
@@ -48,7 +50,9 @@ test("deduplicates a discovered configured player by machine identity", async ()
   const pub = vi.fn()
   await announceDevices(pub)
   expect(
-    pub.mock.calls.filter((c) => typeof c[1] === "object"),
+    pub.mock.calls.filter(
+      (call) => typeof call[1] === "object",
+    ),
   ).toHaveLength(2)
   expect(known(secondary.machineIdentifier)).toBeNull()
 })

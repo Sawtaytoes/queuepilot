@@ -25,8 +25,8 @@ vi.mock("./providers/index.js", () => ({
   providerFor: () => ({
     profileBinding: () => {
       ctl.entered = true
-      return new Promise<object>((r) => {
-        ctl.resolve = r
+      return new Promise<object>((resolve) => {
+        ctl.resolve = resolve
       })
     },
   }),

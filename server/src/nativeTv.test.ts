@@ -9,7 +9,7 @@ import {
 } from "vitest"
 import { SCHEMA_SQL } from "./store/schema.generated.js"
 
-const f = vi.hoisted(() => ({
+const fixture = vi.hoisted(() => ({
   db: null as unknown as DatabaseSync,
   queues: [
     {
@@ -77,27 +77,27 @@ vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<
     typeof import("./store/db/open.js")
   >("./store/db/open.js")
-  return { ...original, bookOfRecord: () => f.db }
+  return { ...original, bookOfRecord: () => fixture.db }
 })
 vi.mock("./store/db/people.js", () => ({
   listPeople: () => [
     { id: "ada", displayName: "Ada" },
     { id: "grace", displayName: "Grace" },
   ],
-  rosterMembersByGroup: () => f.rosters,
-  minPresentByGroup: () => f.minimums,
+  rosterMembersByGroup: () => fixture.rosters,
+  minPresentByGroup: () => fixture.minimums,
   getPerson: () => null,
 }))
 vi.mock("./store/db/queuePeople.js", () => ({
-  membersByQueue: () => f.members,
+  membersByQueue: () => fixture.members,
 }))
 vi.mock("./sets.js", () => ({
-  getRegistry: async () => ({ sets: f.queues }),
+  getRegistry: async () => ({ sets: fixture.queues }),
   getSet: async (id: string) =>
-    f.queues.find((q) => q.id === id),
+    fixture.queues.find((queue) => queue.id === id),
 }))
 vi.mock("./engine/routing.js", () => ({
-  loadSets: () => ({ sets: f.routing }),
+  loadSets: () => ({ sets: fixture.routing }),
   // A queue gated by `requires_profile` carries no account of its own until `profileBinding`
   // resolves the title; an ungated one is the owner's.
   bindingFor: (cfg?: { requires_profile?: string }) =>
@@ -109,7 +109,7 @@ vi.mock("./groups.js", () => ({
   storedGroups: () => [{ id: "friends", label: "Friends" }],
 }))
 vi.mock("./providers/index.js", () => ({
-  providerFor: () => f.provider,
+  providerFor: () => fixture.provider,
 }))
 vi.mock("./providers/blocks.js", () => ({
   providerIdForSet: () => "plex",
@@ -142,7 +142,7 @@ vi.mock("./engine/plex-live.js", () => ({
       machineIdentifier: "fixture-home-server",
       Metadata: [
         {
-          viewCount: f.viewCount,
+          viewCount: fixture.viewCount,
           duration: 30000,
           viewOffset: 4000,
         },
@@ -151,7 +151,7 @@ vi.mock("./engine/plex-live.js", () => ({
   }),
 }))
 vi.mock("./providers/plex.js", () => ({
-  plexProvider: () => f.provider,
+  plexProvider: () => fixture.provider,
 }))
 vi.mock("./nativePlex.js", () => ({
   nativeHomeUsers: async () => [
@@ -193,7 +193,7 @@ vi.mock("./nativePlex.js", () => ({
         }
   },
   nativeScopeProof: (uuid: string | null) =>
-    f.scopeProof(uuid),
+    fixture.scopeProof(uuid),
   nativeGrant: async () => ({
     id: "fixture-home-server",
     baseUrl: "https://media.example.com",
@@ -201,12 +201,12 @@ vi.mock("./nativePlex.js", () => ({
   }),
   nativeClient: () => ({
     container: async (path: string) => {
-      const listed = f.metadata[path]
+      const listed = fixture.metadata[path]
       if (listed === null) return { Metadata: [] }
       return {
         Metadata: [
           {
-            viewCount: f.viewCount,
+            viewCount: fixture.viewCount,
             duration: 30000,
             viewOffset: 4000,
             ...listed,
@@ -219,16 +219,19 @@ vi.mock("./nativePlex.js", () => ({
     access: { baseUrl: string; token: string },
     query: URLSearchParams,
   ) =>
-    f.timeline(access.baseUrl + "/:/timeline?" + query, {
-      headers: { "X-Plex-Token": access.token },
-    }),
+    fixture.timeline(
+      access.baseUrl + "/:/timeline?" + query,
+      {
+        headers: { "X-Plex-Token": access.token },
+      },
+    ),
   verifiedFetch: (...args: Parameters<typeof fetch>) =>
     fetch(...args),
 }))
 vi.mock("./finished.js", () => ({
   applyQueueWriteSide: async () => {},
-  finalizeQueueProgress: f.finalize,
-  reconcileQueue: f.reconcile,
+  finalizeQueueProgress: fixture.finalize,
+  reconcileQueue: fixture.reconcile,
 }))
 vi.mock("./watchedReset.js", () => ({
   applySeasonalReset: async () => {},
@@ -237,14 +240,14 @@ vi.mock("./promote.js", () => ({
   recordLead: async () => {},
 }))
 vi.mock("./store/db/queueEntryHistory.js", () => ({
-  progressFor: () => f.ledger,
+  progressFor: () => fixture.ledger,
   savePosition: () => {},
-  markCompleted: f.markCompleted,
-  clearItem: f.clearItem,
+  markCompleted: fixture.markCompleted,
+  clearItem: fixture.clearItem,
 }))
 vi.mock("./engine/resolve.js", () => ({
-  loadEntries: () => f.entries,
-  resolveMember: f.resolveMember,
+  loadEntries: () => fixture.entries,
+  resolveMember: fixture.resolveMember,
   sectionOf: () => null,
   inProgress: (viewOffset?: number, viewCount?: number) =>
     Number(viewOffset) > 0 && Number(viewCount) < 1,
@@ -252,12 +255,14 @@ vi.mock("./engine/resolve.js", () => ({
 vi.mock("./engine/select.js", () => ({
   watchedForSet: async () => new Set<string>(),
 }))
-vi.mock("./queues.js", () => ({ clearDone: f.clearDone }))
+vi.mock("./queues.js", () => ({
+  clearDone: fixture.clearDone,
+}))
 vi.mock("./cache.js", () => ({
-  bumpGeneration: f.bumpGeneration,
+  bumpGeneration: fixture.bumpGeneration,
 }))
 vi.mock("./queueItemAdd.js", () => ({
-  addQueueItem: f.addQueueItem,
+  addQueueItem: fixture.addQueueItem,
   QueueAddError: class QueueAddError extends Error {
     constructor(
       message: string,
@@ -297,18 +302,18 @@ const event = (sequence = 1): NativeEvent => ({
   durationMs: 30000,
 })
 beforeEach(() => {
-  f.viewCount = 1
-  f.db = new DatabaseSync(":memory:")
-  f.db.exec(SCHEMA_SQL)
-  f.members.clear()
-  f.rosters.clear()
-  f.minimums.clear()
-  f.finalize.mockClear()
-  f.reconcile.mockClear()
-  f.provider.buckets.mockReset()
-  f.provider.profileBinding.mockReset()
-  f.provider.profileToken.mockReset()
-  f.provider.profileBinding.mockImplementation(
+  fixture.viewCount = 1
+  fixture.db = new DatabaseSync(":memory:")
+  fixture.db.exec(SCHEMA_SQL)
+  fixture.members.clear()
+  fixture.rosters.clear()
+  fixture.minimums.clear()
+  fixture.finalize.mockClear()
+  fixture.reconcile.mockClear()
+  fixture.provider.buckets.mockReset()
+  fixture.provider.profileBinding.mockReset()
+  fixture.provider.profileToken.mockReset()
+  fixture.provider.profileBinding.mockImplementation(
     async (binding, title) =>
       title === "Grace"
         ? {
@@ -319,12 +324,12 @@ beforeEach(() => {
           }
         : binding,
   )
-  f.scopeProof.mockClear()
+  fixture.scopeProof.mockClear()
   resetLockState()
-  f.provider.profileToken.mockResolvedValue(
+  fixture.provider.profileToken.mockResolvedValue(
     "fixture-server-token",
   )
-  f.provider.buckets.mockResolvedValue({
+  fixture.provider.buckets.mockResolvedValue({
     play: [{ ratingKey: "102", title: "The signal" }],
     led: [],
   })
@@ -342,17 +347,17 @@ beforeEach(() => {
         )
       }
       if (url.includes("/:/timeline?")) {
-        f.timeline(url, options)
+        fixture.timeline(url, options)
         return new Response("", { status: 200 })
       }
       throw new Error("Unexpected request")
     }),
   )
-  f.timeline.mockClear()
+  fixture.timeline.mockClear()
 })
 describe("native TV sessions", () => {
   test("filters by Plex and reuses required/optional/group people rules", async () => {
-    f.members.set("watch", [
+    fixture.members.set("watch", [
       {
         kind: "person",
         id: "ada",
@@ -384,7 +389,7 @@ describe("native TV sessions", () => {
         }
       ).queues,
     ).toHaveLength(1)
-    f.members.set("watch", [
+    fixture.members.set("watch", [
       {
         kind: "group",
         id: "friends",
@@ -392,11 +397,11 @@ describe("native TV sessions", () => {
         position: 0,
       },
     ])
-    f.rosters.set("friends", [
+    fixture.rosters.set("friends", [
       { personId: "ada", role: "required" },
       { personId: "grace", role: "required" },
     ])
-    f.minimums.set("friends", 1)
+    fixture.minimums.set("friends", 1)
     expect(
       (
         (await nativeQueues(["grace"])) as {
@@ -411,7 +416,7 @@ describe("native TV sessions", () => {
       "fixture-profile",
     )
     expect(plan.items[0]?.resumeMs).toBe(4000)
-    expect(f.provider.buckets).toHaveBeenCalledOnce()
+    expect(fixture.provider.buckets).toHaveBeenCalledOnce()
     // The playback grant rides on the response only, so the TV streams as the queue's profile.
     expect(plan.grants).toEqual([
       {
@@ -429,7 +434,7 @@ describe("native TV sessions", () => {
     )
     expect(
       JSON.stringify(
-        f.db
+        fixture.db
           .prepare("SELECT data FROM native_tv_sessions")
           .all(),
       ),
@@ -446,7 +451,7 @@ describe("native TV sessions", () => {
       readNativePlan(plan.id, plan.sessionKey).setId,
     ).toBe("watch")
     // The database holds only the capability hash, so reopening does not need raw secrets.
-    const row = f.db
+    const row = fixture.db
       .prepare(
         "SELECT key_hash,data FROM native_tv_sessions",
       )
@@ -463,21 +468,21 @@ describe("native TV sessions", () => {
       "fixture-child",
     )
     expect(plan.profileUuid).toBeNull()
-    expect(f.scopeProof).toHaveBeenCalledWith(null)
-    expect(f.scopeProof).not.toHaveBeenCalledWith(
+    expect(fixture.scopeProof).toHaveBeenCalledWith(null)
+    expect(fixture.scopeProof).not.toHaveBeenCalledWith(
       "grace-uuid",
     )
-    f.provider.buckets.mockClear()
+    fixture.provider.buckets.mockClear()
     // An account outside the Plex Home is refused before anything is selected or written.
     await expect(
       createNativePlan("watch", "fixture-stranger"),
     ).rejects.toThrow("not enrolled")
-    expect(f.provider.buckets).not.toHaveBeenCalled()
-    expect(f.timeline).not.toHaveBeenCalled()
+    expect(fixture.provider.buckets).not.toHaveBeenCalled()
+    expect(fixture.timeline).not.toHaveBeenCalled()
   })
   test("plays a gated queue as the profile it names, whoever is signed in", async () => {
-    f.queues = [
-      ...f.queues,
+    fixture.queues = [
+      ...fixture.queues,
       {
         id: "kids",
         provider_kind: "plex",
@@ -486,8 +491,8 @@ describe("native TV sessions", () => {
         requires_profile: "Grace",
       },
     ]
-    f.routing = {
-      ...f.routing,
+    fixture.routing = {
+      ...fixture.routing,
       kids: {
         source: "queue",
         enabled: true,
@@ -503,15 +508,15 @@ describe("native TV sessions", () => {
         profileUuid: "grace-uuid",
         profileName: "Grace",
       })
-      expect(f.scopeProof).toHaveBeenCalledWith(
+      expect(fixture.scopeProof).toHaveBeenCalledWith(
         "grace-uuid",
       )
       // Progress scrobbles through the queue profile's grant, never the device's.
       await nativeEvent(plan.id, plan.sessionKey, event())
-      expect(f.timeline).toHaveBeenCalledOnce()
+      expect(fixture.timeline).toHaveBeenCalledOnce()
       // A profile the Plex Home no longer has is a stated refusal, never the owner's history.
-      f.routing = {
-        ...f.routing,
+      fixture.routing = {
+        ...fixture.routing,
         kids: {
           source: "queue",
           enabled: true,
@@ -522,8 +527,10 @@ describe("native TV sessions", () => {
         createNativePlan("kids", "fixture-profile"),
       ).rejects.toThrow("not in this Plex Home")
     } finally {
-      f.queues = f.queues.filter((q) => q.id !== "kids")
-      delete f.routing.kids
+      fixture.queues = fixture.queues.filter(
+        (queue) => queue.id !== "kids",
+      )
+      delete fixture.routing.kids
     }
   })
   test("persists idempotent progress and never controls an external player", async () => {
@@ -542,8 +549,8 @@ describe("native TV sessions", () => {
       duplicate: true,
       cursor: 0,
     })
-    expect(f.timeline).toHaveBeenCalledOnce()
-    const [url, options] = f.timeline.mock.calls[0]!
+    expect(fixture.timeline).toHaveBeenCalledOnce()
+    const [url, options] = fixture.timeline.mock.calls[0]!
     expect(url).toContain("state=playing")
     expect(options.headers["X-Plex-Token"]).toBe(
       "fixture-server-token",
@@ -557,7 +564,7 @@ describe("native TV sessions", () => {
     expect(
       readNativePlan(plan.id, plan.sessionKey).cursor,
     ).toBe(1)
-    expect(f.finalize).toHaveBeenCalledOnce()
+    expect(fixture.finalize).toHaveBeenCalledOnce()
     await expect(
       nativeEvent(plan.id, plan.sessionKey, event(3)),
     ).rejects.toThrow("out-of-order")
@@ -618,18 +625,18 @@ describe("native TV sessions", () => {
       expect(safeAvatarUrl(target)).toBe(false)
   })
   test("preserves every leaf in an engine-selected episode batch", async () => {
-    f.provider.buckets.mockResolvedValueOnce({
+    fixture.provider.buckets.mockResolvedValueOnce({
       play: [{ ratingKey: "102" }, { ratingKey: "103" }],
       led: [],
     })
     expect(
       (
         await createNativePlan("watch", "fixture-profile")
-      ).items.map((i) => i.ratingKey),
+      ).items.map((item) => item.ratingKey),
     ).toEqual(["102", "103"])
   })
   test("captures a fresh baseline when the same file starts again in another entry", async () => {
-    f.provider.buckets.mockResolvedValueOnce({
+    fixture.provider.buckets.mockResolvedValueOnce({
       play: [
         { ratingKey: "102", queueEntryKey: "entry-a" },
         { ratingKey: "102", queueEntryKey: "entry-b" },
@@ -646,7 +653,7 @@ describe("native TV sessions", () => {
       state: "ended",
       positionMs: 30000,
     })
-    f.viewCount = 2
+    fixture.viewCount = 2
     await nativeEvent(plan.id, plan.sessionKey, {
       ...event(3),
       index: 1,
@@ -734,7 +741,7 @@ describe("native TV queue titles", () => {
       ...named("Old Tier"),
     }),
   ]
-  const original = f.queues
+  const original = fixture.queues
   const titles = async () =>
     Object.fromEntries(
       (
@@ -744,7 +751,7 @@ describe("native TV queue titles", () => {
       ).queues.map((queue) => [queue.id, queue.title]),
     )
   beforeEach(() => {
-    f.queues = registry
+    fixture.queues = registry
     const ada = [
       {
         kind: "person",
@@ -759,10 +766,10 @@ describe("native TV queue titles", () => {
       "ada_reading",
       "ada_second",
     ])
-      f.members.set(id, ada)
+      fixture.members.set(id, ada)
   })
   afterEach(() => {
-    f.queues = original
+    fixture.queues = original
   })
 
   test("prints the title the web Queues page prints, for every Plex queue", async () => {
@@ -790,7 +797,7 @@ describe("native TV queue titles", () => {
   test("keeps a queue's number when the people filter hides its siblings", async () => {
     // Numbered over the whole registry before the filter, like the web page: hiding Ada's
     // queues must not turn the second Rules queue into the first.
-    f.members.set("rules_two", [
+    fixture.members.set("rules_two", [
       {
         kind: "person",
         id: "grace",
@@ -798,7 +805,7 @@ describe("native TV queue titles", () => {
         position: 0,
       },
     ])
-    f.members.set("rules_one", [
+    fixture.members.set("rules_one", [
       {
         kind: "person",
         id: "grace",
@@ -832,10 +839,10 @@ describe("native TV full queue, item start, and watched marks", () => {
     type: "episode",
     viewCount: 0,
   })
-  const originalQueues = f.queues
-  const originalRouting = f.routing
+  const originalQueues = fixture.queues
+  const originalRouting = fixture.routing
   beforeEach(() => {
-    f.queues = [
+    fixture.queues = [
       ...originalQueues,
       {
         id: "rules",
@@ -844,7 +851,7 @@ describe("native TV full queue, item start, and watched marks", () => {
         source: "rotation",
       },
     ]
-    f.routing = {
+    fixture.routing = {
       ...originalRouting,
       rules: {
         source: "rotation",
@@ -852,7 +859,7 @@ describe("native TV full queue, item start, and watched marks", () => {
         enabled: true,
       },
     }
-    f.entries = [
+    fixture.entries = [
       {
         key: "signal-garden",
         title: "Signal Garden",
@@ -864,7 +871,7 @@ describe("native TV full queue, item start, and watched marks", () => {
         watchHistory: "provider",
       },
     ]
-    f.ledger = new Map([
+    fixture.ledger = new Map([
       [
         "201",
         { isCompleted: true, positionMs: 0, durationMs: 0 },
@@ -878,8 +885,8 @@ describe("native TV full queue, item start, and watched marks", () => {
         },
       ],
     ])
-    f.resolveMember.mockReset()
-    f.resolveMember.mockImplementation(
+    fixture.resolveMember.mockReset()
+    fixture.resolveMember.mockImplementation(
       async (_client: unknown, desc: { key: string }) =>
         desc.key === "signal-garden"
           ? {
@@ -905,7 +912,7 @@ describe("native TV full queue, item start, and watched marks", () => {
               ],
             },
     )
-    f.provider.buckets.mockResolvedValue({
+    fixture.provider.buckets.mockResolvedValue({
       play: [
         {
           ratingKey: "202",
@@ -924,16 +931,16 @@ describe("native TV full queue, item start, and watched marks", () => {
       ],
       led: [],
     })
-    f.markCompleted.mockClear()
-    f.clearItem.mockClear()
-    f.clearDone.mockClear()
-    f.bumpGeneration.mockClear()
+    fixture.markCompleted.mockClear()
+    fixture.clearItem.mockClear()
+    fixture.clearDone.mockClear()
+    fixture.bumpGeneration.mockClear()
   })
   afterEach(() => {
-    f.queues = originalQueues
-    f.routing = originalRouting
-    f.entries = []
-    f.ledger = new Map()
+    fixture.queues = originalQueues
+    fixture.routing = originalRouting
+    fixture.entries = []
+    fixture.ledger = new Map()
   })
 
   test("lists every item with its state, the next item, and where the lineup ends", async () => {
@@ -1055,7 +1062,7 @@ describe("native TV full queue, item start, and watched marks", () => {
   })
 
   test("answers a Rules queue with its lineup only", async () => {
-    f.provider.buckets.mockResolvedValue({
+    fixture.provider.buckets.mockResolvedValue({
       play: [
         {
           ratingKey: "301",
@@ -1082,9 +1089,12 @@ describe("native TV full queue, item start, and watched marks", () => {
   })
 
   test("starts at a picked item and leaves the earlier unwatched item in the queue", async () => {
-    f.routing = {
-      ...f.routing,
-      watch: { ...f.routing.watch, length: "infinite" },
+    fixture.routing = {
+      ...fixture.routing,
+      watch: {
+        ...fixture.routing.watch,
+        length: "infinite",
+      },
     }
     const plan = await createNativePlan(
       "watch",
@@ -1105,7 +1115,7 @@ describe("native TV full queue, item start, and watched marks", () => {
     expect(plan.items[0]?.queueOwnHistory).toBe(true)
     expect(plan.refill).toBe(true)
     // Nothing was marked: 202 is still half-watched and comes up again.
-    expect(f.markCompleted).not.toHaveBeenCalled()
+    expect(fixture.markCompleted).not.toHaveBeenCalled()
     const full = await nativeFullQueue(
       "watch",
       "fixture-profile",
@@ -1118,9 +1128,12 @@ describe("native TV full queue, item start, and watched marks", () => {
 
   test("plays only the picked item and does not refill", async () => {
     // An endless queue would refill; "play only this" still stops after the one item.
-    f.routing = {
-      ...f.routing,
-      watch: { ...f.routing.watch, length: "infinite" },
+    fixture.routing = {
+      ...fixture.routing,
+      watch: {
+        ...fixture.routing.watch,
+        length: "infinite",
+      },
     }
     const plan = await createNativePlan(
       "watch",
@@ -1200,26 +1213,27 @@ describe("native TV full queue, item start, and watched marks", () => {
       ratingKey: "203",
       state: "watched",
     })
-    expect(f.markCompleted).toHaveBeenCalledWith(
+    expect(fixture.markCompleted).toHaveBeenCalledWith(
       "watch",
       "signal-garden",
       "203",
     )
-    expect(f.reconcile).toHaveBeenCalledOnce()
-    expect(f.bumpGeneration).toHaveBeenCalledOnce()
+    expect(fixture.reconcile).toHaveBeenCalledOnce()
+    expect(fixture.bumpGeneration).toHaveBeenCalledOnce()
     await nativeMarkWatched("watch", "fixture-profile", {
       entryKey: "signal-garden",
       ratingKey: "201",
       isWatched: false,
     })
-    expect(f.clearItem).toHaveBeenCalledWith(
+    expect(fixture.clearItem).toHaveBeenCalledWith(
       "watch",
       "signal-garden",
       "201",
     )
-    expect(f.clearDone).toHaveBeenCalledWith("watch", [
-      "signal-garden",
-    ])
+    expect(fixture.clearDone).toHaveBeenCalledWith(
+      "watch",
+      ["signal-garden"],
+    )
   })
 
   test("refuses a watched mark it cannot keep", async () => {
@@ -1276,13 +1290,13 @@ describe("native TV full queue, item start, and watched marks", () => {
         )
       ).status,
     ).toBe(403)
-    expect(f.markCompleted).not.toHaveBeenCalled()
+    expect(fixture.markCompleted).not.toHaveBeenCalled()
   })
 })
 
 describe("native TV add to queue", () => {
-  const originalQueues = f.queues
-  const originalRouting = f.routing
+  const originalQueues = fixture.queues
+  const originalRouting = fixture.routing
   const add = (
     setId: string,
     body: unknown,
@@ -1300,7 +1314,7 @@ describe("native TV add to queue", () => {
       },
     )
   beforeEach(() => {
-    f.queues = [
+    fixture.queues = [
       ...originalQueues,
       {
         id: "rules",
@@ -1309,7 +1323,7 @@ describe("native TV add to queue", () => {
         source: "rotation",
       },
     ]
-    f.routing = {
+    fixture.routing = {
       ...originalRouting,
       rules: {
         source: "rotation",
@@ -1317,7 +1331,7 @@ describe("native TV add to queue", () => {
         enabled: true,
       },
     }
-    f.metadata = {
+    fixture.metadata = {
       "/library/metadata/401": {
         type: "movie",
         title: "Glass City",
@@ -1332,16 +1346,16 @@ describe("native TV add to queue", () => {
       },
       "/library/metadata/404": null,
     }
-    f.addQueueItem.mockReset()
-    f.addQueueItem.mockResolvedValue({
+    fixture.addQueueItem.mockReset()
+    fixture.addQueueItem.mockResolvedValue({
       added: true,
       key: "rk:401",
     })
   })
   afterEach(() => {
-    f.queues = originalQueues
-    f.routing = originalRouting
-    f.metadata = {}
+    fixture.queues = originalQueues
+    fixture.routing = originalRouting
+    fixture.metadata = {}
   })
 
   test("adds a home-server movie at the top with the title the profile's grant reads", async () => {
@@ -1354,7 +1368,7 @@ describe("native TV add to queue", () => {
       key: "rk:401",
       title: "Glass City",
     })
-    expect(f.addQueueItem).toHaveBeenCalledWith(
+    expect(fixture.addQueueItem).toHaveBeenCalledWith(
       "watch",
       { ratingKey: "401", title: "Glass City" },
       "top",
@@ -1366,7 +1380,7 @@ describe("native TV add to queue", () => {
       ratingKey: "402",
       plexServer: "fixture-home-server",
     })
-    expect(f.addQueueItem).toHaveBeenLastCalledWith(
+    expect(fixture.addQueueItem).toHaveBeenLastCalledWith(
       "watch",
       { ratingKey: "402", title: "Orbit Nine" },
       "top",
@@ -1375,7 +1389,7 @@ describe("native TV add to queue", () => {
       ratingKey: "402",
       plexServer: "fixture-shared-server",
     })
-    expect(f.addQueueItem).toHaveBeenLastCalledWith(
+    expect(fixture.addQueueItem).toHaveBeenLastCalledWith(
       "watch",
       {
         ratingKey: "402",
@@ -1387,7 +1401,7 @@ describe("native TV add to queue", () => {
   })
 
   test("answers a duplicate the way the web route does", async () => {
-    f.addQueueItem.mockResolvedValue({
+    fixture.addQueueItem.mockResolvedValue({
       added: false,
       key: "rk:401",
       duplicateOf: "rk:401",
@@ -1435,15 +1449,15 @@ describe("native TV add to queue", () => {
     expect(
       (await add("missing", { ratingKey: "401" })).status,
     ).toBe(403)
-    expect(f.addQueueItem).not.toHaveBeenCalled()
+    expect(fixture.addQueueItem).not.toHaveBeenCalled()
   })
 })
 
 describe("native TV catalog: every queue, its audience, whom it plays as, and its lock", () => {
-  const originalQueues = f.queues
-  const originalRouting = f.routing
+  const originalQueues = fixture.queues
+  const originalRouting = fixture.routing
   beforeEach(() => {
-    f.queues = [
+    fixture.queues = [
       ...originalQueues,
       {
         id: "kids",
@@ -1454,7 +1468,7 @@ describe("native TV catalog: every queue, its audience, whom it plays as, and it
         is_locked_on_tv: true,
       },
     ]
-    f.routing = {
+    fixture.routing = {
       ...originalRouting,
       kids: {
         source: "queue",
@@ -1462,7 +1476,7 @@ describe("native TV catalog: every queue, its audience, whom it plays as, and it
         requires_profile: "Grace",
       },
     }
-    f.members.set("watch", [
+    fixture.members.set("watch", [
       {
         kind: "person",
         id: "ada",
@@ -1484,8 +1498,8 @@ describe("native TV catalog: every queue, its audience, whom it plays as, and it
     ])
   })
   afterEach(() => {
-    f.queues = originalQueues
-    f.routing = originalRouting
+    fixture.queues = originalQueues
+    fixture.routing = originalRouting
   })
   const catalog = async () =>
     (
@@ -1501,7 +1515,7 @@ describe("native TV catalog: every queue, its audience, whom it plays as, and it
 
   test("lists every queue with its audience text and play-as profile, and no profile gate", async () => {
     const queues = await catalog()
-    expect(queues.map((q) => q.id)).toEqual([
+    expect(queues.map((queue) => queue.id)).toEqual([
       "watch",
       "kids",
     ])
@@ -1531,7 +1545,7 @@ describe("native TV catalog: every queue, its audience, whom it plays as, and it
 })
 
 describe("native TV PIN lock", () => {
-  const originalQueues = f.queues
+  const originalQueues = fixture.queues
   const device = "fixture-device-0001"
   const headers = (extra: Record<string, string> = {}) => ({
     "Content-Type": "application/json",
@@ -1556,20 +1570,20 @@ describe("native TV PIN lock", () => {
       body: JSON.stringify({ pin }),
     })
   beforeEach(async () => {
-    f.queues = originalQueues.map((q) =>
-      q.id === "watch"
-        ? { ...q, is_locked_on_tv: true }
-        : q,
+    fixture.queues = originalQueues.map((originalQueue) =>
+      originalQueue.id === "watch"
+        ? { ...originalQueue, is_locked_on_tv: true }
+        : originalQueue,
     )
     expect((await setPinTo("2468")).status).toBe(200)
   })
   afterEach(() => {
-    f.queues = originalQueues
+    fixture.queues = originalQueues
     vi.useRealTimers()
   })
 
   test("stores only a salted scrypt hash, and validates the PIN's shape", async () => {
-    const row = f.db
+    const row = fixture.db
       .prepare("SELECT hash FROM native_tv_pin")
       .get() as { hash: string }
     expect(row.hash).toMatch(/^scrypt\$16384\$8\$1\$/)
@@ -1626,7 +1640,7 @@ describe("native TV PIN lock", () => {
       },
     )
     expect(added.status).toBe(423)
-    expect(f.provider.buckets).not.toHaveBeenCalled()
+    expect(fixture.provider.buckets).not.toHaveBeenCalled()
 
     const unlocked = await unlockWith("2468")
     expect(unlocked.status).toBe(200)

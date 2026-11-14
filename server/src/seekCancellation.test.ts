@@ -26,8 +26,8 @@ vi.mock("undici", async (original) => ({
           if (url.includes("/playQueues/")) {
             if (ctl.hold) {
               ctl.hold = false
-              return new Promise<string>((r) => {
-                ctl.release = r
+              return new Promise<string>((resolve) => {
+                ctl.release = resolve
               })
             }
             return JSON.stringify(queue)

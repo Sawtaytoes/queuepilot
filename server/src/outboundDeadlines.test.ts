@@ -117,11 +117,12 @@ describe("TLS", () => {
     expect(poster?.contentType).toBe("image/png")
     expect(poster?.buffer).toEqual(Buffer.from([1, 2, 3]))
     const posterCalls = undiciCalls.filter(
-      (c) => !c.url.endsWith("/library/metadata/7"),
+      (undiciCall) =>
+        !undiciCall.url.endsWith("/library/metadata/7"),
     )
     expect(
-      posterCalls.map((c) =>
-        c.url.includes("/photo/:/transcode"),
+      posterCalls.map((posterCall) =>
+        posterCall.url.includes("/photo/:/transcode"),
       ),
     ).toEqual([true, false])
     const plexAgent = undiciCalls[0]!.opts.dispatcher
@@ -159,8 +160,8 @@ describe("TLS", () => {
       buffer: Buffer.from([9]),
     })
     expect(
-      undiciCalls.some((c) =>
-        c.url.includes("cdn.example.net"),
+      undiciCalls.some((undiciCall) =>
+        undiciCall.url.includes("cdn.example.net"),
       ),
     ).toBe(false)
     const [url, init] = fetchMock.mock.calls[0]!

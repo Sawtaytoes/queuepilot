@@ -48,75 +48,75 @@ const harness = () => {
 }
 afterEach(() => vi.useRealTimers())
 test("scans accumulate only within a reader, never play, and duplicate delivery does not add or reopen", async () => {
-  const h = harness()
-  await h.scan("ada", "one")
-  await h.scan("grace", "two")
-  expect(h.state().people.map((p) => p.id)).toEqual([
-    "ada",
-    "grace",
-  ])
-  expect(h.publish.mock.calls.map((c) => c[2])).toEqual([
-    "show",
-    "show",
-  ])
-  await h.action("dismiss")
-  await h.scan("ada", "one")
-  expect(h.state().isActive).toBe(false)
-  await h.scan("grace", "three", "other")
-  expect(h.state().people.map((p) => p.id)).toEqual([
-    "grace",
-  ])
-  h.chooser.clear()
+  const fixture = harness()
+  await fixture.scan("ada", "one")
+  await fixture.scan("grace", "two")
+  expect(
+    fixture.state().people.map((person) => person.id),
+  ).toEqual(["ada", "grace"])
+  expect(
+    fixture.publish.mock.calls.map((call) => call[2]),
+  ).toEqual(["show", "show"])
+  await fixture.action("dismiss")
+  await fixture.scan("ada", "one")
+  expect(fixture.state().isActive).toBe(false)
+  await fixture.scan("grace", "three", "other")
+  expect(
+    fixture.state().people.map((person) => person.id),
+  ).toEqual(["grace"])
+  fixture.chooser.clear()
 })
 test("inactivity ends at sixty seconds after the last interaction and the next scan starts empty", async () => {
-  const h = harness()
-  await h.scan("ada")
+  const fixture = harness()
+  await fixture.scan("ada")
   await vi.advanceTimersByTimeAsync(59_000)
-  await h.action("touch")
+  await fixture.action("touch")
   await vi.advanceTimersByTimeAsync(59_000)
-  expect(h.state().isActive).toBe(true)
+  expect(fixture.state().isActive).toBe(true)
   await vi.advanceTimersByTimeAsync(1000)
-  expect(h.state().isActive).toBe(false)
-  await h.scan("grace")
-  expect(h.state().people.map((p) => p.id)).toEqual([
-    "grace",
-  ])
-  h.chooser.clear()
+  expect(fixture.state().isActive).toBe(false)
+  await fixture.scan("grace")
+  expect(
+    fixture.state().people.map((person) => person.id),
+  ).toEqual(["grace"])
+  fixture.chooser.clear()
 })
 test("stale frames, unknown people, old scans and ineligible queues never request playback", async () => {
-  const h = harness()
-  await h.scan("stranger")
-  expect(h.publish).not.toHaveBeenCalled()
-  await h.chooser.handle("desk", {
+  const fixture = harness()
+  await fixture.scan("stranger")
+  expect(fixture.publish).not.toHaveBeenCalled()
+  await fixture.chooser.handle("desk", {
     action: "scan",
     personId: "ada",
     atMs: 1,
     eventId: "old",
   })
-  expect(h.publish).not.toHaveBeenCalled()
-  await h.scan("ada")
-  const old = h.state()
-  await h.scan("grace")
-  await h.chooser.handle("desk", {
+  expect(fixture.publish).not.toHaveBeenCalled()
+  await fixture.scan("ada")
+  const old = fixture.state()
+  await fixture.scan("grace")
+  await fixture.chooser.handle("desk", {
     action: "choose",
     sessionId: old.sessionId,
     revision: old.revision,
     queueId: "films",
   })
-  await h.action("choose", { queueId: "missing" })
+  await fixture.action("choose", { queueId: "missing" })
   expect(
-    h.publish.mock.calls.some((c) => c[2] === "play"),
+    fixture.publish.mock.calls.some(
+      (call) => call[2] === "play",
+    ),
   ).toBe(false)
-  await h.action("remove", { personId: "ada" })
-  expect(h.state().queues).toEqual([])
-  await h.action("remove", { personId: "grace" })
-  expect(h.state().isActive).toBe(false)
-  h.chooser.clear()
+  await fixture.action("remove", { personId: "ada" })
+  expect(fixture.state().queues).toEqual([])
+  await fixture.action("remove", { personId: "grace" })
+  expect(fixture.state().isActive).toBe(false)
+  fixture.chooser.clear()
 })
 test("tap revalidates eligibility and dispatches exactly once before dismissing", async () => {
-  const h = harness()
-  await h.scan("ada")
-  const current = h.state()
+  const fixture = harness()
+  await fixture.scan("ada")
+  const current = fixture.state()
   const input = {
     action: "choose",
     sessionId: current.sessionId,
@@ -124,35 +124,41 @@ test("tap revalidates eligibility and dispatches exactly once before dismissing"
     queueId: "series",
   }
   await Promise.all([
-    h.chooser.handle("desk", input),
-    h.chooser.handle("desk", input),
+    fixture.chooser.handle("desk", input),
+    fixture.chooser.handle("desk", input),
   ])
   expect(
-    h.publish.mock.calls.filter((c) => c[2] === "play"),
+    fixture.publish.mock.calls.filter(
+      (call) => call[2] === "play",
+    ),
   ).toHaveLength(1)
-  expect(h.publish.mock.lastCall?.[3]).toEqual({
+  expect(fixture.publish.mock.lastCall?.[3]).toEqual({
     id: "series",
     title: "Shows",
     kind: "rules",
   })
-  expect(h.state().isActive).toBe(false)
-  h.chooser.clear()
+  expect(fixture.state().isActive).toBe(false)
+  fixture.chooser.clear()
 })
 test("a delayed catalog cannot play after the selection expires", async () => {
-  const h = harness()
-  await h.scan("ada")
-  const original = h.catalog.getMockImplementation()!
-  h.catalog.mockImplementation(async (people) => {
+  const fixture = harness()
+  await fixture.scan("ada")
+  const original = fixture.catalog.getMockImplementation()!
+  fixture.catalog.mockImplementation(async (people) => {
     await new Promise((resolve) =>
       setTimeout(resolve, 61_000),
     )
     return original(people)
   })
-  const pending = h.action("choose", { queueId: "films" })
+  const pending = fixture.action("choose", {
+    queueId: "films",
+  })
   await vi.advanceTimersByTimeAsync(61_000)
   await pending
   expect(
-    h.publish.mock.calls.some((c) => c[2] === "play"),
+    fixture.publish.mock.calls.some(
+      (call) => call[2] === "play",
+    ),
   ).toBe(false)
-  h.chooser.clear()
+  fixture.chooser.clear()
 })
