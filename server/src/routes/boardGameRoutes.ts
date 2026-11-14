@@ -72,7 +72,7 @@ export function boardGameRoutes(): Hono {
    * detail screen's data and multiply the payload by roughly four for a list that paints a
    * name, a player count and a poster.
    */
-  app.get("/board-games", (c) => {
+  app.get("/board-games", (context) => {
     try {
       const plays = listBoardGamePlays()
       const playedBy = new Map<string, Set<string>>()
@@ -90,7 +90,7 @@ export function boardGameRoutes(): Hono {
         playedBy.set(play.gameId, people)
       }
 
-      return c.json({
+      return context.json({
         games: listBoardGames().map((game) => ({
           bestWith: game.bestWith,
           id: game.id,
@@ -117,19 +117,19 @@ export function boardGameRoutes(): Hono {
           personId: claim.playerId,
         })),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
   /** The owner's category vocabulary for the Tonight multi-select. */
-  app.get("/board-games/categories", (c) => {
+  app.get("/board-games/categories", (context) => {
     try {
-      return c.json({
+      return context.json({
         categories: listBoardGameCategories(),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -150,15 +150,15 @@ export function boardGameRoutes(): Hono {
    * One path segment, and a name that is a bare file name or nothing. A game's `imagePath` is
    * data out of an absorbed database, so it is user input as far as this handler is concerned.
    */
-  app.get("/board-games/images/:file", async (c) => {
-    const file = c.req.param("file")
+  app.get("/board-games/images/:file", async (context) => {
+    const file = context.req.param("file")
     if (!/^[\w.-]+$/.test(file) || file.startsWith(".")) {
-      return c.json({ error: "bad image name" }, 400)
+      return context.json({ error: "bad image name" }, 400)
     }
 
     const type = IMAGE_TYPES[extname(file).toLowerCase()]
     if (!type)
-      return c.json({ error: "bad image name" }, 400)
+      return context.json({ error: "bad image name" }, 400)
 
     try {
       return binaryResponse({
@@ -171,22 +171,22 @@ export function boardGameRoutes(): Hono {
         contentType: type,
       })
     } catch {
-      return c.json({ error: "no such image" }, 404)
+      return context.json({ error: "no such image" }, 404)
     }
   })
 
   /** One title, whole — the card a queue hands you when the queue already chose. */
-  app.get("/board-games/:id", (c) => {
+  app.get("/board-games/:id", (context) => {
     try {
-      const game = getBoardGame(c.req.param("id"))
+      const game = getBoardGame(context.req.param("id"))
       if (!game)
-        return c.json({ error: "no such game" }, 404)
-      return c.json({
+        return context.json({ error: "no such game" }, 404)
+      return context.json({
         game,
         knownHow: knownHowClaims(game.id),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -199,11 +199,13 @@ export function boardGameRoutes(): Hono {
    * of them. The shortlist is the same weighted draw run again with the previous winners
    * excluded — the ported engine, three times, and no second drawing rule.
    */
-  app.post("/board-games/pick", async (c) => {
+  app.post("/board-games/pick", async (context) => {
     try {
-      const parsed = parsePickCriteria(await readBody(c))
+      const parsed = parsePickCriteria(
+        await readBody(context),
+      )
       if ("error" in parsed)
-        return c.json({ error: parsed.error }, 400)
+        return context.json({ error: parsed.error }, 400)
 
       const games = listBoardGames()
       const plays = listBoardGamePlays()
@@ -248,9 +250,9 @@ export function boardGameRoutes(): Hono {
         excluded.push(next.candidate.game.id)
       }
 
-      return c.json({ result, shortlist: drawn })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+      return context.json({ result, shortlist: drawn })
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -261,18 +263,21 @@ export function boardGameRoutes(): Hono {
    * this closes was a caller that never mentioned the people, and a field with a default is a
    * field a caller can keep forgetting.
    */
-  app.post("/board-games/plays", async (c) => {
+  app.post("/board-games/plays", async (context) => {
     try {
-      const body = await readBody(c)
+      const body = await readBody(context)
       const gameId =
         typeof body.gameId === "string" ? body.gameId : ""
       if (gameId === "")
-        return c.json({ error: "gameId required" }, 400)
+        return context.json(
+          { error: "gameId required" },
+          400,
+        )
       if (!getBoardGame(gameId))
-        return c.json({ error: "no such game" }, 404)
+        return context.json({ error: "no such game" }, 404)
 
       if (!Array.isArray(body.personIds)) {
-        return c.json(
+        return context.json(
           {
             error:
               "personIds[] required — say [] for a table nobody named",
@@ -291,7 +296,7 @@ export function boardGameRoutes(): Hono {
         (id) => !roster.has(id),
       )
       if (unknown.length > 0) {
-        return c.json(
+        return context.json(
           {
             error: `not on the roster: ${unknown.join(", ")}`,
           },
@@ -311,12 +316,12 @@ export function boardGameRoutes(): Hono {
           : {}),
       })
 
-      return c.json({
+      return context.json({
         knownHow: knownHowClaims(gameId),
         play: { ...play, personIds: play.playerIds },
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -326,25 +331,28 @@ export function boardGameRoutes(): Hono {
    * `isKnown: false` is what the finish screen's undo runs, and it is also "I have forgotten
    * this one" on a stale claim. Same call either way — the screen knows which it meant.
    */
-  app.post("/board-games/:id/known", async (c) => {
+  app.post("/board-games/:id/known", async (context) => {
     try {
-      const gameId = c.req.param("id")
+      const gameId = context.req.param("id")
       if (!getBoardGame(gameId))
-        return c.json({ error: "no such game" }, 404)
+        return context.json({ error: "no such game" }, 404)
 
-      const body = await readBody(c)
+      const body = await readBody(context)
       const personId =
         typeof body.personId === "string"
           ? body.personId
           : ""
       if (personId === "")
-        return c.json({ error: "personId required" }, 400)
+        return context.json(
+          { error: "personId required" },
+          400,
+        )
       if (
         !listPeople().some(
           (person) => person.id === personId,
         )
       ) {
-        return c.json(
+        return context.json(
           { error: `not on the roster: ${personId}` },
           400,
         )
@@ -355,9 +363,11 @@ export function boardGameRoutes(): Hono {
         isKnown: body.isKnown === true,
         personId,
       })
-      return c.json({ knownHow: knownHowClaims(gameId) })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+      return context.json({
+        knownHow: knownHowClaims(gameId),
+      })
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 

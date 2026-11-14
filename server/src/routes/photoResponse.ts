@@ -5,7 +5,7 @@ import type { Context } from "hono"
  * the TV's `GET /api/native/people/:id/avatar`, so the two can never disagree about headers.
  */
 export function photoResponse(
-  c: Context,
+  context: Context,
   photo: {
     bytes: Uint8Array
     mime: string
@@ -14,7 +14,7 @@ export function photoResponse(
 ): Response {
   const etag = `"${photo.version}"`
   const cacheControl =
-    c.req.query("v") === photo.version
+    context.req.query("v") === photo.version
       ? "private, max-age=31536000, immutable"
       : "private, no-cache"
   const headers = {
@@ -24,7 +24,8 @@ export function photoResponse(
     // second-guessing the declared type.
     "X-Content-Type-Options": "nosniff",
   }
-  const ifNoneMatch = c.req.header("if-none-match") ?? ""
+  const ifNoneMatch =
+    context.req.header("if-none-match") ?? ""
   if (
     ifNoneMatch
       .split(",")

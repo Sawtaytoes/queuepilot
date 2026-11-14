@@ -9,13 +9,15 @@ import * as history from "../history.js"
 export function historyRoutes(): Hono {
   const app = new Hono()
 
-  app.post("/undo", async (c) =>
-    c.json(await history.undo()),
+  app.post("/undo", async (context) =>
+    context.json(await history.undo()),
   )
-  app.post("/redo", async (c) =>
-    c.json(await history.redo()),
+  app.post("/redo", async (context) =>
+    context.json(await history.redo()),
   )
-  app.get("/history", (c) => c.json(history.counts()))
+  app.get("/history", (context) =>
+    context.json(history.counts()),
+  )
 
   return app
 }

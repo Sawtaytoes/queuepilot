@@ -95,12 +95,12 @@ import { readBody } from "./readBody.js"
 export function peopleRoutes(): Hono {
   const app = new Hono()
 
-  app.get("/people", (c) => {
+  app.get("/people", (context) => {
     try {
       const rosters = rosterMembersByGroup()
       const minimums = minPresentByGroup()
       const photos = photoVersionsByPerson()
-      return c.json({
+      return context.json({
         // A GROUP is a saved set of people, so it rides along here rather than in a second
         // call: the trays show people and groups side by side, as one pool of cards.
         groups: storedGroups().map((group) => ({
@@ -122,13 +122,13 @@ export function peopleRoutes(): Hono {
         // foreign key on purpose and this is the report that stands in for it.
         orphans: orphanQueueMembers(),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
   /** Every queue's trays at once, so the shelf list paints faces without one call per shelf. */
-  app.get("/queue-people", async (c) => {
+  app.get("/queue-people", async (context) => {
     try {
       const byQueue = membersByQueue()
       // A FILTERED queue is a view of its parent, so it is for the SAME people. It has no rows
@@ -136,24 +136,26 @@ export function peopleRoutes(): Hono {
       // not of the window onto it — so the parent's are aliased onto its id here. Without this
       // a filtered queue reads as "Anybody" and drops out of the people filter on the Queues
       // page while the queue it views stays. (`filteredQueues.ts`)
-      for (const s of (await sets.getRegistry()).sets) {
-        if (!s.filtered_from) continue
-        const parent = byQueue.get(s.filtered_from)
-        if (parent) byQueue.set(s.id, parent)
+      for (const set of (await sets.getRegistry()).sets) {
+        if (!set.filtered_from) continue
+        const parent = byQueue.get(set.filtered_from)
+        if (parent) byQueue.set(set.id, parent)
       }
-      return c.json({ queues: Object.fromEntries(byQueue) })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+      return context.json({
+        queues: Object.fromEntries(byQueue),
+      })
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
-  app.get("/sets/:id/people", (c) => {
+  app.get("/sets/:id/people", (context) => {
     try {
-      return c.json({
-        members: queueMembers(c.req.param("id")),
+      return context.json({
+        members: queueMembers(context.req.param("id")),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -164,19 +166,22 @@ export function peopleRoutes(): Hono {
    * That is the only way the editor can express an empty audience, so it must not be confused
    * with a missing field — a body with no `members` key is a 400.
    */
-  app.put("/sets/:id/people", async (c) => {
-    const setId = c.req.param("id")
+  app.put("/sets/:id/people", async (context) => {
+    const setId = context.req.param("id")
     try {
-      const body = await readBody(c)
+      const body = await readBody(context)
       if (!Array.isArray(body.members))
-        return c.json({ error: "members[] required" }, 400)
+        return context.json(
+          { error: "members[] required" },
+          400,
+        )
 
       const members = body.members.map((raw, index) =>
         toMember(raw, index),
       )
       const problems = await memberProblems(members)
       if (problems.length)
-        return c.json(
+        return context.json(
           { error: problems.join("; "), problems },
           400,
         )
@@ -186,12 +191,12 @@ export function peopleRoutes(): Hono {
         setQueueMembers(setId, members, db)
         bumpQueuePeopleVersion(db)
       })
-      return c.json({
+      return context.json({
         members: queueMembers(setId),
         ok: true,
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -213,20 +218,20 @@ export function peopleRoutes(): Hono {
    * what keeps their colour: `PersonFace` hashes the ID into a hue exactly so a rename does
    * not repaint them.
    */
-  app.post("/people", async (c) => {
+  app.post("/people", async (context) => {
     try {
       const displayName = String(
-        (await readBody(c)).displayName ?? "",
+        (await readBody(context)).displayName ?? "",
       ).trim()
       if (!displayName)
-        return c.json(
+        return context.json(
           { error: "a person needs a name" },
           400,
         )
 
       const base = slugify(displayName)
       if (!base)
-        return c.json(
+        return context.json(
           {
             error: `'${displayName}' has no letters or digits to make an id from`,
           },
@@ -240,8 +245,8 @@ export function peopleRoutes(): Hono {
       // Two people may legitimately share a name, so the ID de-duplicates rather than the save
       // failing — the same answer `createGroup` gives, and for the same reason.
       let id = base
-      for (let n = 2; taken.has(id); n++)
-        id = `${base}-${n}`
+      for (let iteration = 2; taken.has(id); iteration++)
+        id = `${base}-${iteration}`
 
       const db = bookOfRecord()
       db.withTransaction(() => {
@@ -265,12 +270,12 @@ export function peopleRoutes(): Hono {
         bumpPeopleVersion(db)
       })
 
-      return c.json(
+      return context.json(
         { ok: true, person: projected(id) },
         201,
       )
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -283,18 +288,18 @@ export function peopleRoutes(): Hono {
    * this surface has deliberately never shown. Those belong to the mapping file and to the
    * board-game picker, which is where they are read.
    */
-  app.patch("/people/:id", async (c) => {
-    const id = c.req.param("id")
+  app.patch("/people/:id", async (context) => {
+    const id = context.req.param("id")
     try {
       if (!getPerson(id))
-        return c.json(
+        return context.json(
           { error: `no such person '${id}'` },
           404,
         )
 
-      const body = await readBody(c)
+      const body = await readBody(context)
       if (!("displayName" in body))
-        return c.json(
+        return context.json(
           { error: "displayName required" },
           400,
         )
@@ -306,7 +311,7 @@ export function peopleRoutes(): Hono {
       // nameless card with a "?" for a face — so it is refused here rather than allowed to
       // become a row nobody can identify on any screen.
       if (!displayName)
-        return c.json(
+        return context.json(
           { error: "a person needs a name" },
           400,
         )
@@ -317,9 +322,12 @@ export function peopleRoutes(): Hono {
         bumpPeopleVersion(db)
       })
 
-      return c.json({ ok: true, person: projected(id) })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json({
+        ok: true,
+        person: projected(id),
+      })
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -335,11 +343,11 @@ export function peopleRoutes(): Hono {
    * The un-filing is counted BEFORE the delete. Afterwards the rows are gone and the same
    * scan would answer "nothing", which is true and useless.
    */
-  app.delete("/people/:id", (c) => {
-    const id = c.req.param("id")
+  app.delete("/people/:id", (context) => {
+    const id = context.req.param("id")
     try {
       if (!getPerson(id))
-        return c.json(
+        return context.json(
           { error: `no such person '${id}'` },
           404,
         )
@@ -367,12 +375,12 @@ export function peopleRoutes(): Hono {
         bumpQueuePeopleVersion(db)
       })
 
-      return c.json({
+      return context.json({
         ok: true,
         unfiled: { groups, queues },
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -392,13 +400,14 @@ export function peopleRoutes(): Hono {
    * version and therefore a new URL. Anything else (the TV, a bare curl) gets `no-cache` and
    * revalidates every time, so a replaced photo is never shown stale.
    */
-  app.get("/people/:id/photo", (c) => {
+  app.get("/people/:id/photo", (context) => {
     try {
-      const photo = readPersonPhoto(c.req.param("id"))
-      if (!photo) return c.json({ error: "no photo" }, 404)
-      return photoResponse(c, photo)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+      const photo = readPersonPhoto(context.req.param("id"))
+      if (!photo)
+        return context.json({ error: "no photo" }, 404)
+      return photoResponse(context, photo)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
@@ -419,26 +428,26 @@ export function peopleRoutes(): Hono {
       // Headroom over the image cap for multipart framing; `normalizePersonPhoto` enforces the
       // exact cap on the FILE. This limit is what stops a stream from being read without end.
       maxSize: MAX_PHOTO_UPLOAD_BYTES + 256 * 1024,
-      onError: (c) =>
-        c.json(
+      onError: (context) =>
+        context.json(
           {
             error: `a photo may be at most ${MAX_PHOTO_UPLOAD_BYTES / 1024 / 1024} MB`,
           },
           413,
         ),
     }),
-    async (c) => {
-      const id = c.req.param("id")
+    async (context) => {
+      const id = context.req.param("id")
       try {
         if (!getPerson(id))
-          return c.json(
+          return context.json(
             { error: `no such person '${id}'` },
             404,
           )
 
-        const upload = await uploadedBytes(c)
+        const upload = await uploadedBytes(context)
         if (!upload)
-          return c.json(
+          return context.json(
             {
               error:
                 'a multipart upload needs the image in a "photo" field',
@@ -465,7 +474,7 @@ export function peopleRoutes(): Hono {
           bumpPeopleVersion(db)
         })
 
-        return c.json({
+        return context.json({
           ok: true,
           photo: {
             bytes: photo.bytes.byteLength,
@@ -476,33 +485,39 @@ export function peopleRoutes(): Hono {
             width: photo.width,
           },
         })
-      } catch (e) {
-        if (e instanceof PhotoRejected)
-          return c.json({ error: e.message }, e.status)
-        return c.json({ error: errMessage(e) }, 400)
+      } catch (error) {
+        if (error instanceof PhotoRejected)
+          return context.json(
+            { error: error.message },
+            error.status,
+          )
+        return context.json(
+          { error: errMessage(error) },
+          400,
+        )
       }
     },
   )
 
   /** Remove a person's photo; their face goes back to initials. Idempotent — removing a photo
    *  that is not there answers `removed: false`, not an error. */
-  app.delete("/people/:id/photo", (c) => {
-    const id = c.req.param("id")
+  app.delete("/people/:id/photo", (context) => {
+    const id = context.req.param("id")
     try {
       if (!getPerson(id))
-        return c.json(
+        return context.json(
           { error: `no such person '${id}'` },
           404,
         )
       const db = bookOfRecord()
-      let removed = false
+      let isRemoved = false
       db.withTransaction(() => {
-        removed = deletePersonPhoto(id, db)
-        if (removed) bumpPeopleVersion(db)
+        isRemoved = deletePersonPhoto(id, db)
+        if (isRemoved) bumpPeopleVersion(db)
       })
-      return c.json({ ok: true, removed })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json({ ok: true, removed: isRemoved })
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -512,15 +527,15 @@ export function peopleRoutes(): Hono {
    * `minPresent: null` clears it back to "all of them"; omitting the key leaves it alone. The
    * two are different answers and this route keeps them different.
    */
-  app.put("/groups/:id/membership", async (c) => {
-    const groupId = c.req.param("id")
+  app.put("/groups/:id/membership", async (context) => {
+    const groupId = context.req.param("id")
     try {
-      const body = await readBody(c)
+      const body = await readBody(context)
       const known = new Set(
         storedGroups().map((group) => group.id),
       )
       if (!known.has(groupId))
-        return c.json(
+        return context.json(
           { error: `no such group '${groupId}'` },
           404,
         )
@@ -550,7 +565,7 @@ export function peopleRoutes(): Hono {
 
       const problems = membershipProblems(next)
       if (problems.length)
-        return c.json(
+        return context.json(
           { error: problems.join("; "), problems },
           400,
         )
@@ -566,12 +581,12 @@ export function peopleRoutes(): Hono {
         bumpPeopleVersion(db)
       })
 
-      return c.json({
+      return context.json({
         membership: groupMembership(groupId),
         ok: true,
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
@@ -602,13 +617,13 @@ function projected(id: string): {
  * a multipart form with no file in it.
  */
 async function uploadedBytes(
-  c: Context,
+  context: Context,
 ): Promise<Uint8Array | null> {
   const type = (
-    c.req.header("content-type") ?? ""
+    context.req.header("content-type") ?? ""
   ).toLowerCase()
   if (type.startsWith("multipart/form-data")) {
-    const form = await c.req.parseBody({ all: true })
+    const form = await context.req.parseBody({ all: true })
     const field = form.photo
     const file = (
       Array.isArray(field) ? field[0] : field
@@ -616,7 +631,7 @@ async function uploadedBytes(
     if (!(file instanceof File)) return null
     return new Uint8Array(await file.arrayBuffer())
   }
-  return new Uint8Array(await c.req.arrayBuffer())
+  return new Uint8Array(await context.req.arrayBuffer())
 }
 
 const roleOf = (raw: unknown): MemberRole => {

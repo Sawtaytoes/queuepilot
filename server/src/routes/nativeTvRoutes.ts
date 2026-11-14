@@ -40,24 +40,27 @@ interface RefusalBody {
 
 /** A stated refusal keeps its status; anything else is the 403 these routes always answered. */
 const refusal = (
-  e: unknown,
+  error: unknown,
   fallback: string,
 ): { body: RefusalBody; status: RefusalStatus } => {
   const body: RefusalBody = {
-    error: e instanceof Error ? e.message : fallback,
+    error:
+      error instanceof Error ? error.message : fallback,
   }
-  if (e instanceof NativeLockError) {
-    if (e.status === 423) body.isLocked = true
-    if (e.retryAfterSeconds != null)
-      body.retryAfterSeconds = e.retryAfterSeconds
-    if (e.attemptsLeft != null)
-      body.attemptsLeft = e.attemptsLeft
-    return { body, status: e.status }
+  if (error instanceof NativeLockError) {
+    if (error.status === 423) body.isLocked = true
+    if (error.retryAfterSeconds != null)
+      body.retryAfterSeconds = error.retryAfterSeconds
+    if (error.attemptsLeft != null)
+      body.attemptsLeft = error.attemptsLeft
+    return { body, status: error.status }
   }
   return {
     body,
     status:
-      e instanceof NativeRequestError ? e.status : 403,
+      error instanceof NativeRequestError
+        ? error.status
+        : 403,
   }
 }
 
@@ -65,12 +68,13 @@ const refusal = (
  * The three headers a native request authorizes with. The Plex token names the household
  * DEVICE (never the profile a queue plays as); the device id and the unlock are the TV PIN's.
  */
-const callerOf = (c: {
+const callerOf = (context: {
   req: { header: (name: string) => string | undefined }
 }): NativeCaller => ({
-  proof: c.req.header("X-Plex-Profile-Token") || "",
-  deviceId: c.req.header("X-QueuePilot-Device") || "",
-  unlockToken: c.req.header("X-QueuePilot-Unlock") || "",
+  proof: context.req.header("X-Plex-Profile-Token") || "",
+  deviceId: context.req.header("X-QueuePilot-Device") || "",
+  unlockToken:
+    context.req.header("X-QueuePilot-Unlock") || "",
 })
 
 /** The optional "start from this item" of a new session, or null when absent or malformed. */
@@ -108,17 +112,17 @@ function startFrom(
 }
 export function nativeTvRoutes(): Hono {
   const app = new Hono()
-  app.get("/native/queues", async (c) => {
+  app.get("/native/queues", async (context) => {
     try {
-      return c.json(
+      return context.json(
         await nativeQueues(
-          (c.req.query("people") || "")
+          (context.req.query("people") || "")
             .split(",")
             .filter(Boolean),
         ),
       )
     } catch {
-      return c.json(
+      return context.json(
         {
           error: "QueuePilot could not load the TV queues",
         },
@@ -126,260 +130,283 @@ export function nativeTvRoutes(): Hono {
       )
     }
   })
-  app.get("/native/people/:id/avatar", async (c) => {
+  app.get("/native/people/:id/avatar", async (context) => {
     try {
       // QueuePilot's own photo first; the Plex Home thumb is the fallback
       // (decision 2026-10-22-a-person-photo-is-a-row-in-the-book-of-record).
-      const owned = readPersonPhoto(c.req.param("id"))
-      if (owned) return photoResponse(c, owned)
-      const url = await nativeAvatar(c.req.param("id"))
-      if (!url) return c.body(null, 404)
+      const owned = readPersonPhoto(context.req.param("id"))
+      if (owned) return photoResponse(context, owned)
+      const url = await nativeAvatar(
+        context.req.param("id"),
+      )
+      if (!url) return context.body(null, 404)
       const image = await avatarBytes(url)
-      if (!image) return c.body(null, 404)
-      c.header("Content-Type", image.type)
-      c.header("Cache-Control", "private,max-age=600")
-      return c.body(image.bytes)
+      if (!image) return context.body(null, 404)
+      context.header("Content-Type", image.type)
+      context.header("Cache-Control", "private,max-age=600")
+      return context.body(image.bytes)
     } catch {
-      return c.body(null, 404)
+      return context.body(null, 404)
     }
   })
-  app.post("/native/sessions", async (c) => {
+  app.post("/native/sessions", async (context) => {
     try {
-      const body = await readBody(c),
-        proof = c.req.header("X-Plex-Profile-Token") || ""
-      c.header("Cache-Control", "no-store")
+      const body = await readBody(context),
+        proof =
+          context.req.header("X-Plex-Profile-Token") || ""
+      context.header("Cache-Control", "no-store")
       const start = startFrom(body.start)
       if (start === "invalid")
-        return c.json(
+        return context.json(
           {
             error:
               "start needs an entryKey, a ratingKey, and a mode of continue or only",
           },
           400,
         )
-      return c.json(
+      return context.json(
         await createNativePlan(
           String(body.setId || ""),
-          { ...callerOf(c), proof },
+          { ...callerOf(context), proof },
           start,
         ),
       )
-    } catch (e) {
+    } catch (error) {
       const { body, status } = refusal(
-        e,
+        error,
         "Native playback could not start",
       )
-      return c.json(body, status)
+      return context.json(body, status)
     }
   })
-  app.get("/native/queues/:setId/full", async (c) => {
+  app.get("/native/queues/:setId/full", async (context) => {
     try {
-      c.header("Cache-Control", "no-store")
-      return c.json(
+      context.header("Cache-Control", "no-store")
+      return context.json(
         await nativeFullQueue(
-          c.req.param("setId"),
-          callerOf(c),
+          context.req.param("setId"),
+          callerOf(context),
         ),
       )
-    } catch (e) {
+    } catch (error) {
       const { body, status } = refusal(
-        e,
+        error,
         "The queue could not be read",
       )
-      return c.json(body, status)
+      return context.json(body, status)
     }
   })
-  app.post("/native/queues/:setId/watched", async (c) => {
-    try {
-      const body = await readBody(c)
-      if (
-        typeof body.entryKey !== "string" ||
-        !(
-          typeof body.ratingKey === "string" ||
-          typeof body.ratingKey === "number"
-        ) ||
-        typeof body.isWatched !== "boolean"
-      )
-        return c.json(
-          {
-            error:
-              "Send entryKey, ratingKey, and a boolean isWatched",
-          },
-          400,
+  app.post(
+    "/native/queues/:setId/watched",
+    async (context) => {
+      try {
+        const body = await readBody(context)
+        if (
+          typeof body.entryKey !== "string" ||
+          !(
+            typeof body.ratingKey === "string" ||
+            typeof body.ratingKey === "number"
+          ) ||
+          typeof body.isWatched !== "boolean"
         )
-      c.header("Cache-Control", "no-store")
-      return c.json(
-        await nativeMarkWatched(
-          c.req.param("setId"),
-          callerOf(c),
-          {
-            entryKey: body.entryKey,
-            ratingKey: String(body.ratingKey),
-            plexServer:
-              typeof body.plexServer === "string"
-                ? body.plexServer
-                : null,
-            isWatched: body.isWatched,
-          },
-        ),
-      )
-    } catch (e) {
-      const { body, status } = refusal(
-        e,
-        "The watched state could not be saved",
-      )
-      return c.json(body, status)
-    }
-  })
-  app.post("/native/queues/:setId/items", async (c) => {
-    try {
-      const body = await readBody(c)
-      if (
-        !(
-          typeof body.ratingKey === "string" ||
-          typeof body.ratingKey === "number"
+          return context.json(
+            {
+              error:
+                "Send entryKey, ratingKey, and a boolean isWatched",
+            },
+            400,
+          )
+        context.header("Cache-Control", "no-store")
+        return context.json(
+          await nativeMarkWatched(
+            context.req.param("setId"),
+            callerOf(context),
+            {
+              entryKey: body.entryKey,
+              ratingKey: String(body.ratingKey),
+              plexServer:
+                typeof body.plexServer === "string"
+                  ? body.plexServer
+                  : null,
+              isWatched: body.isWatched,
+            },
+          ),
         )
-      )
-        return c.json(
-          {
-            error:
-              "Send the ratingKey of a movie or a show",
-          },
-          400,
+      } catch (error) {
+        const { body, status } = refusal(
+          error,
+          "The watched state could not be saved",
         )
-      c.header("Cache-Control", "no-store")
-      return c.json(
-        await nativeAddToQueue(
-          c.req.param("setId"),
-          callerOf(c),
-          {
-            ratingKey: String(body.ratingKey),
-            plexServer:
-              typeof body.plexServer === "string"
-                ? body.plexServer
-                : null,
-          },
-        ),
-      )
-    } catch (e) {
-      const { body, status } = refusal(
-        e,
-        "The title could not be added",
-      )
-      return c.json(body, status)
-    }
-  })
+        return context.json(body, status)
+      }
+    },
+  )
+  app.post(
+    "/native/queues/:setId/items",
+    async (context) => {
+      try {
+        const body = await readBody(context)
+        if (
+          !(
+            typeof body.ratingKey === "string" ||
+            typeof body.ratingKey === "number"
+          )
+        )
+          return context.json(
+            {
+              error:
+                "Send the ratingKey of a movie or a show",
+            },
+            400,
+          )
+        context.header("Cache-Control", "no-store")
+        return context.json(
+          await nativeAddToQueue(
+            context.req.param("setId"),
+            callerOf(context),
+            {
+              ratingKey: String(body.ratingKey),
+              plexServer:
+                typeof body.plexServer === "string"
+                  ? body.plexServer
+                  : null,
+            },
+          ),
+        )
+      } catch (error) {
+        const { body, status } = refusal(
+          error,
+          "The title could not be added",
+        )
+        return context.json(body, status)
+      }
+    },
+  )
   /**
    * Trade the household TV PIN for an unlock on this device: `{pin}` → `{unlockToken,
    * expiresAt}`. 403 + `attemptsLeft` for a wrong PIN, 429 + `retryAfterSeconds` after five in a
    * row, 409 when no PIN is set (nothing is locked), 400 without `X-QueuePilot-Device`.
    */
-  app.post("/native/unlock", async (c) => {
-    c.header("Cache-Control", "no-store")
+  app.post("/native/unlock", async (context) => {
+    context.header("Cache-Control", "no-store")
     try {
-      const body = await readBody(c)
-      return c.json(
-        await nativeUnlock(callerOf(c), body.pin),
+      const body = await readBody(context)
+      return context.json(
+        await nativeUnlock(callerOf(context), body.pin),
       )
-    } catch (e) {
+    } catch (error) {
       const { body, status } = refusal(
-        e,
+        error,
         "The TV could not be unlocked",
       )
       if (body.retryAfterSeconds != null)
-        c.header(
+        context.header(
           "Retry-After",
           String(body.retryAfterSeconds),
         )
-      return c.json(body, status)
+      return context.json(body, status)
     }
   })
-  app.get("/native/history", async (c) => {
+  app.get("/native/history", async (context) => {
     try {
-      c.header("Cache-Control", "no-store")
-      return c.json(
+      context.header("Cache-Control", "no-store")
+      return context.json(
         await nativeWatchHistory(
-          callerOf(c),
-          Number(c.req.query("days") || 30),
+          callerOf(context),
+          Number(context.req.query("days") || 30),
         ),
       )
-    } catch (e) {
+    } catch (error) {
       const { body, status } = refusal(
-        e,
+        error,
         "The watch history could not be read",
       )
-      return c.json(body, status)
+      return context.json(body, status)
     }
   })
-  app.get("/native/sessions/:id", (c) => {
+  app.get("/native/sessions/:id", (context) => {
     try {
-      c.header("Cache-Control", "no-store")
-      return c.json(
+      context.header("Cache-Control", "no-store")
+      return context.json(
         readNativePlan(
-          c.req.param("id"),
-          c.req.header("X-Native-Session-Key") || "",
+          context.req.param("id"),
+          context.req.header("X-Native-Session-Key") || "",
         ),
       )
     } catch {
-      return c.json(
+      return context.json(
         { error: "Native session authorization failed" },
         403,
       )
     }
   })
-  app.post("/native/sessions/:id/events", async (c) => {
-    try {
-      return c.json(
-        await nativeEvent(
-          c.req.param("id"),
-          c.req.header("X-Native-Session-Key") || "",
-          (await readBody(c)) as unknown as NativeEvent,
-        ),
-      )
-    } catch (e) {
-      return c.json(
-        {
-          error:
-            e instanceof Error
-              ? e.message
-              : "Progress could not be saved",
-        },
-        /authorization|expired/.test(
-          e instanceof Error ? e.message : "",
+  app.post(
+    "/native/sessions/:id/events",
+    async (context) => {
+      try {
+        return context.json(
+          await nativeEvent(
+            context.req.param("id"),
+            context.req.header("X-Native-Session-Key") ||
+              "",
+            (await readBody(
+              context,
+            )) as unknown as NativeEvent,
+          ),
         )
-          ? 403
-          : /Stale|order/.test(
-                e instanceof Error ? e.message : "",
-              )
-            ? 409
-            : /Invalid|outside|Unknown|boundary/.test(
-                  e instanceof Error ? e.message : "",
+      } catch (error) {
+        return context.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Progress could not be saved",
+          },
+          /authorization|expired/.test(
+            error instanceof Error ? error.message : "",
+          )
+            ? 403
+            : /Stale|order/.test(
+                  error instanceof Error
+                    ? error.message
+                    : "",
                 )
-              ? 400
-              : 503,
-      )
-    }
-  })
-  app.post("/native/sessions/:id/continue", async (c) => {
-    try {
-      return c.json(
-        await continueNativePlan(
-          c.req.param("id"),
-          c.req.header("X-Native-Session-Key") || "",
-        ),
-      )
-    } catch (e) {
-      return c.json(
-        {
-          error:
-            e instanceof Error
-              ? e.message
-              : "The queue could not continue",
-        },
-        409,
-      )
-    }
-  })
+              ? 409
+              : /Invalid|outside|Unknown|boundary/.test(
+                    error instanceof Error
+                      ? error.message
+                      : "",
+                  )
+                ? 400
+                : 503,
+        )
+      }
+    },
+  )
+  app.post(
+    "/native/sessions/:id/continue",
+    async (context) => {
+      try {
+        return context.json(
+          await continueNativePlan(
+            context.req.param("id"),
+            context.req.header("X-Native-Session-Key") ||
+              "",
+          ),
+        )
+      } catch (error) {
+        return context.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "The queue could not continue",
+          },
+          409,
+        )
+      }
+    },
+  )
   return app
 }
 
@@ -391,27 +418,30 @@ export function nativeTvRoutes(): Hono {
  */
 export function tvLockRoutes(): Hono {
   const app = new Hono()
-  app.get("/tv-lock", (c) => {
-    c.header("Cache-Control", "no-store")
-    return c.json({ hasPin: hasPin() })
+  app.get("/tv-lock", (context) => {
+    context.header("Cache-Control", "no-store")
+    return context.json({ hasPin: hasPin() })
   })
-  app.put("/tv-lock/pin", async (c) => {
+  app.put("/tv-lock/pin", async (context) => {
     try {
-      const body = await readBody(c)
+      const body = await readBody(context)
       await setPin(body.pin)
-      return c.json({ hasPin: true })
-    } catch (e) {
-      if (e instanceof NativeLockError)
-        return c.json({ error: e.message }, e.status)
-      return c.json(
+      return context.json({ hasPin: true })
+    } catch (error) {
+      if (error instanceof NativeLockError)
+        return context.json(
+          { error: error.message },
+          error.status,
+        )
+      return context.json(
         { error: "The TV PIN could not be saved" },
         500,
       )
     }
   })
-  app.delete("/tv-lock/pin", (c) => {
+  app.delete("/tv-lock/pin", (context) => {
     clearPin()
-    return c.json({ hasPin: false })
+    return context.json({ hasPin: false })
   })
   return app
 }
