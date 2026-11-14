@@ -14,6 +14,7 @@ import {
 } from "react"
 import { Link } from "react-router"
 import { TypeBadge } from "../components/badges"
+import { DragIcon } from "../components/DragIcon"
 import { EditionChip } from "../components/EditionChip"
 import { isPullSet } from "../components/OpenQueueButton"
 import { PeopleRow } from "../components/PeopleRow"
@@ -51,7 +52,6 @@ import {
 } from "../state/queueEntry"
 import { splitLanes } from "../state/queueView"
 import { ChevronDownIcon } from "./ChevronDownIcon"
-import { DragIcon } from "./DragIcon"
 import { PlayIcon } from "./PlayIcon"
 import { SettingsIcon } from "./SettingsIcon"
 
