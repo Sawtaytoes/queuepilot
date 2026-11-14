@@ -59,10 +59,10 @@ interface LibraryRow {
 
 // Plex omits viewCount at 0, so a missing/non-numeric value reads as 0 = unwatched (never as
 // watched — the resume-in-queue bug). Port of plex.py _int0.
-export function int0(v: unknown): number {
+export function int0(value: unknown): number {
   // `String(v)` only spells out the ToString `parseInt` already does to its argument.
-  const n = parseInt(String(v), 10)
-  return Number.isFinite(n) ? n : 0
+  const parsed = parseInt(String(value), 10)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 // allowed=null => no content-rating cap. Port of plex.py _rating_ok.
@@ -80,14 +80,17 @@ export function atOrAfterStart(
   start: Start | null | undefined,
 ): boolean {
   if (!start || start.episode == null) return true
-  const i = (v: unknown, d = 0): number => {
-    const n = parseInt(String(v), 10)
-    return Number.isFinite(n) ? n : d
+  const toIntOr = (
+    value: unknown,
+    fallback = 0,
+  ): number => {
+    const parsed = parseInt(String(value), 10)
+    return Number.isFinite(parsed) ? parsed : fallback
   }
-  const es = i(ep.season)
-  const ee = i(ep.episode)
-  const ss = i(start.season, 1)
-  const se = i(start.episode, 1)
+  const es = toIntOr(ep.season)
+  const ee = toIntOr(ep.episode)
+  const ss = toIntOr(start.season, 1)
+  const se = toIntOr(start.episode, 1)
   return es > ss || (es === ss && ee >= se) // tuple >= (ss, se)
 }
 
@@ -96,9 +99,10 @@ export function multiSeason(
   allEps: readonly { season?: unknown }[],
 ): boolean {
   const seasons = new Set()
-  for (const e of allEps) {
-    const s = String(e.season)
-    if (s !== "None" && s !== "0") seasons.add(s)
+  for (const allEpisode of allEps) {
+    const season = String(allEpisode.season)
+    if (season !== "None" && season !== "0")
+      seasons.add(season)
   }
   return seasons.size > 1
 }
@@ -117,12 +121,13 @@ async function episodicShows(
       `/library/sections/${sec}/all?type=2&X-Plex-Container-Size=5000`,
       token,
     )
-    for (const s of mc.Metadata || []) {
-      const rk = String(s.ratingKey)
-      if (blocked.has(rk) || !ratingOk(s, allowed)) continue
+    for (const show of mc.Metadata || []) {
+      const rk = String(show.ratingKey)
+      if (blocked.has(rk) || !ratingOk(show, allowed))
+        continue
       shows.push({
         ratingKey: rk,
-        title: s.title,
+        title: show.title,
         section: sec,
       })
     }
@@ -144,12 +149,13 @@ async function sectionItems(
       `/library/sections/${sec}/all?type=1&X-Plex-Container-Size=10000`,
       token,
     )
-    for (const m of mc.Metadata || []) {
-      const rk = String(m.ratingKey)
-      if (blocked.has(rk) || !ratingOk(m, allowed)) continue
+    for (const movie of mc.Metadata || []) {
+      const rk = String(movie.ratingKey)
+      if (blocked.has(rk) || !ratingOk(movie, allowed))
+        continue
       items.push({
         ratingKey: rk,
-        title: m.title,
+        title: movie.title,
         section: sec,
       })
     }
@@ -167,20 +173,20 @@ export async function showEpisodes(
     `/library/metadata/${showRatingKey}/allLeaves`,
     token,
   )
-  return (mc.Metadata || []).map((e) => ({
-    ratingKey: String(e.ratingKey),
-    title: e.title,
-    show: e.grandparentTitle,
-    season: e.parentIndex,
-    episode: e.index,
-    duration: e.duration,
-    type: e.type,
-    extraType: e.extraType,
-    viewCount: int0(e.viewCount),
-    viewOffset: int0(e.viewOffset),
+  return (mc.Metadata || []).map((episode) => ({
+    ratingKey: String(episode.ratingKey),
+    title: episode.title,
+    show: episode.grandparentTitle,
+    season: episode.parentIndex,
+    episode: episode.index,
+    duration: episode.duration,
+    type: episode.type,
+    extraType: episode.extraType,
+    viewCount: int0(episode.viewCount),
+    viewOffset: int0(episode.viewOffset),
     originallyAvailableAt:
-      typeof e.originallyAvailableAt === "string"
-        ? e.originallyAvailableAt
+      typeof episode.originallyAvailableAt === "string"
+        ? episode.originallyAvailableAt
         : null,
   }))
 }
@@ -203,11 +209,14 @@ export async function* iterHistory(
     if (sectionId != null)
       pairs.push(["librarySectionID", sectionId])
     // urlencode mirrors Python's exactly (the sha1 corpus key is over this literal string).
-    const q = pairs
-      .map(([k, v]) => `${encQ(k)}=${encQ(v)}`)
+    const query = pairs
+      .map(
+        ([pair, paramValue]) =>
+          `${encQ(pair)}=${encQ(paramValue)}`,
+      )
       .join("&")
     const mc = await client.container(
-      "/status/sessions/history/all?" + q,
+      "/status/sessions/history/all?" + query,
       null,
     )
     const rows = mc.Metadata || []
@@ -223,13 +232,14 @@ export async function* iterHistory(
   }
 }
 // quote_plus: ':' -> '%3A', space -> '+'. Keys here have no chars that encode differently.
-function encQ(s: unknown): string {
-  return encodeURIComponent(String(s))
+function encQ(value: unknown): string {
+  return encodeURIComponent(String(value))
     .replace(/%20/g, "+")
     .replace(
       /[!'()*~]/g,
-      (c) =>
-        "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+      (match) =>
+        "%" +
+        match.charCodeAt(0).toString(16).toUpperCase(),
     )
 }
 
@@ -268,8 +278,9 @@ async function sectionKind(
     "/library/sections",
     null,
   )
-  for (const d of mc.Directory || [])
-    if (String(d.key) === String(section)) return d.type
+  for (const directory of mc.Directory || [])
+    if (String(directory.key) === String(section))
+      return directory.type
   return undefined
 }
 
@@ -285,9 +296,9 @@ async function movieFilms(
     token,
   )
   const out = new Map<string, string | undefined>()
-  for (const m of mc.Metadata || [])
-    if (ratingOk(m, allowed))
-      out.set(String(m.ratingKey), m.title)
+  for (const movie of mc.Metadata || [])
+    if (ratingOk(movie, allowed))
+      out.set(String(movie.ratingKey), movie.title)
   return out
 }
 
@@ -303,9 +314,9 @@ async function showFilms(
     token,
   )
   const out = new Map<string, string | undefined>()
-  for (const s of mc.Metadata || [])
-    if (s.leafCount === 1 && ratingOk(s, allowed))
-      out.set(String(s.ratingKey), s.title)
+  for (const show of mc.Metadata || [])
+    if (show.leafCount === 1 && ratingOk(show, allowed))
+      out.set(String(show.ratingKey), show.title)
   return out
 }
 
@@ -376,13 +387,13 @@ export async function findCollection(
     return null // network/query hiccup (or corpus miss): unresolved this scan, never crash
   }
   const want = name.trim().toLowerCase()
-  for (const c of mc.Metadata || []) {
+  for (const collection of mc.Metadata || []) {
     if (
-      String(c.title || "")
+      String(collection.title || "")
         .trim()
         .toLowerCase() === want
     )
-      return String(c.ratingKey)
+      return String(collection.ratingKey)
   }
   return null
 }
@@ -418,12 +429,16 @@ async function expandedBlocklist(
   const out = new Set<string>()
   let sections: number[] | null = null
   for (const entry of cfg.blocklist || []) {
-    const s = String(entry).trim()
-    if (!/^collection:/i.test(s)) {
-      out.add(s)
+    const trimmed = String(entry).trim()
+    if (!/^collection:/i.test(trimmed)) {
+      out.add(trimmed)
       continue
     }
-    const name = s.split(":").slice(1).join(":").trim()
+    const name = trimmed
+      .split(":")
+      .slice(1)
+      .join(":")
+      .trim()
     if (!name) continue
     if (sections === null) sections = setSections(cfg) || []
     for (const sec of sections) {
@@ -479,11 +494,11 @@ async function scopedCfg(
       "/library/sections",
       null,
     )
-    for (const d of mc.Directory || []) {
-      const key = parseInt(String(d.key), 10)
+    for (const directory of mc.Directory || []) {
+      const key = parseInt(String(directory.key), 10)
       if (!Number.isFinite(key)) continue
-      if (d.type === "show") episodic.push(key)
-      else if (d.type === "movie") items.push(key)
+      if (directory.type === "show") episodic.push(key)
+      else if (directory.type === "movie") items.push(key)
     }
   } catch {
     // Plex unreachable: fall through with the cfg as given. An empty pool is what the
@@ -521,7 +536,7 @@ export async function unwatchedBuckets(
   const weights = cfg.weights || {}
   // The POOL's answer for a finished show. `restart` is the only value that does anything;
   // absent/anything else means drop, which is what every channel already did.
-  const poolRestarts =
+  const isPoolRestarting =
     String(cfg.on_complete || "").toLowerCase() ===
     "restart"
   // …and the per-show overrides on top of it, keyed the same way `starts` and `weights` are.
@@ -538,7 +553,7 @@ export async function unwatchedBuckets(
     if (own === "restart") return true
     if (own === "drop") return false
 
-    return poolRestarts
+    return isPoolRestarting
   }
 
   const buckets: Bucket[] = []
@@ -558,9 +573,9 @@ export async function unwatchedBuckets(
     )
     const start = starts[String(show.ratingKey)]
     const unwatched = allEps.filter(
-      (e) =>
-        !watched.has(e.ratingKey) &&
-        atOrAfterStart(e, start),
+      (allEpisode) =>
+        !watched.has(allEpisode.ratingKey) &&
+        atOrAfterStart(allEpisode, start),
     )
     // A show with nothing unwatched left is FINISHED. Historically it just vanished from the
     // pool (drop), which is still the default. `on_complete: restart` puts it back at its
@@ -573,7 +588,9 @@ export async function unwatchedBuckets(
     const eps =
       unwatched.length || !restartsFor(show.ratingKey)
         ? unwatched
-        : allEps.filter((e) => atOrAfterStart(e, start))
+        : allEps.filter((allEpisode) =>
+            atOrAfterStart(allEpisode, start),
+          )
     if (eps.length) {
       buckets.push({
         // `Bucket.show` is `string`; a library row without a title is a Plex fault, and the

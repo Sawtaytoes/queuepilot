@@ -43,9 +43,9 @@ export interface Rng {
 export function toWeight(value: unknown): number {
   // `parseInt` ToStrings its argument, so `String(value)` is the same coercion spelled out for
   // the type checker — `{}`, null, undefined and `-3` all still land on 1.
-  const n = parseInt(String(value), 10)
-  if (!Number.isFinite(n) || n < 1) return 1
-  return Math.min(n, MAX_WEIGHT)
+  const parsed = parseInt(String(value), 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return 1
+  return Math.min(parsed, MAX_WEIGHT)
 }
 
 export const weightOf = (
@@ -58,7 +58,8 @@ export const weightOf = (
 // and a seeded test proves it by comparing against the old code path directly.
 export const isUnweighted = (
   buckets: readonly Weighted[],
-): boolean => buckets.every((b) => weightOf(b) === 1)
+): boolean =>
+  buckets.every((bucket) => weightOf(bucket) === 1)
 
 /**
  * SMOOTH weighted round-robin (the nginx algorithm): pick the bucket with the highest running
@@ -94,16 +95,21 @@ export function weightedInterleave<
     // Liveness is re-read every slot: a bucket empties mid-session (a show runs out of unwatched
     // episodes) and must stop taking slots without disturbing the others' credits.
     const live = state.filter(
-      (e) => e.cursor < e.items.length,
+      (bucketState) =>
+        bucketState.cursor < bucketState.items.length,
     )
     if (!live.length) break // every bucket exhausted
     let total = 0
-    for (const e of live) total += e.weight
+    for (const bucketState of live)
+      total += bucketState.weight
     let best: (typeof live)[number] | null = null
-    for (const e of live) {
-      e.current += e.weight
-      if (best === null || e.current > best.current)
-        best = e // ties keep the earlier bucket
+    for (const bucketState of live) {
+      bucketState.current += bucketState.weight
+      if (
+        best === null ||
+        bucketState.current > best.current
+      )
+        best = bucketState // ties keep the earlier bucket
     }
     // `live` is non-empty here, so the loop above always elected one — the assertions keep the
     // control flow byte-identical rather than inventing a branch the JS never had.
@@ -135,14 +141,21 @@ export function weightedShuffle<T extends Weighted>(
     source && typeof source.random === "function"
       ? () => source.random!()
       : Math.random
-  const keyed = arr.map((item, i) => {
-    const u = random()
+  const keyed = arr.map((item, index) => {
+    const draw = random()
     // u === 0 would make every key 0 and collapse the sort to input order; nudge it off zero.
-    const r = u > 0 ? u : Number.MIN_VALUE
-    return { item, i, key: r ** (1 / weightOf(item)) }
+    const nonZeroDraw = draw > 0 ? draw : Number.MIN_VALUE
+    return {
+      item,
+      i: index,
+      key: nonZeroDraw ** (1 / weightOf(item)),
+    }
   })
-  keyed.sort((a, b) => b.key - a.key || a.i - b.i)
+  keyed.sort(
+    (left, right) =>
+      right.key - left.key || left.i - right.i,
+  )
   arr.length = 0
-  for (const k of keyed) arr.push(k.item)
+  for (const keyedItem of keyed) arr.push(keyedItem.item)
   return arr
 }

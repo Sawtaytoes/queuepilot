@@ -120,9 +120,11 @@ type SetCfgDraft =
 // non-uniformity is Python parity and must stay. It is DECLARED `number` because every consumer
 // (section ids, watch-count accounts) treats it as one; the declaration is the same assumption
 // the untyped original made silently, and the cast is where it is now written down.
-const toInt = (v: unknown): number => {
-  const n = parseInt(String(v), 10)
-  return Number.isFinite(n) ? n : (v as number)
+const toInt = (value: unknown): number => {
+  const parsed = parseInt(String(value), 10)
+  return Number.isFinite(parsed)
+    ? parsed
+    : (value as number)
 }
 
 // Port of config._binding_from: normalize one profile binding out of a dict (a legacy
@@ -133,8 +135,10 @@ function bindingFrom(
 ): EngineBinding {
   // `v as unknown[]` and not `Array.isArray(v)`: a scalar where the YAML wanted a list still
   // throws on `.map`, as it always did. A guard here would silently read it as "no cap".
-  const ratingSet = (v: unknown): Set<string> | null => {
-    const list = v as unknown[] | null | undefined
+  const ratingSet = (
+    value: unknown,
+  ): Set<string> | null => {
+    const list = value as unknown[] | null | undefined
     return list && list.length
       ? new Set(list.map(String))
       : null
@@ -144,7 +148,7 @@ function bindingFrom(
       | unknown[]
       | null
       | undefined) || []
-  ).map((a) => toInt(a))
+  ).map((account) => toInt(account))
   return {
     plex_user: (src.plex_user ?? null) as string | null,
     account_id: (src.account_id ?? null) as number | null,
@@ -176,10 +180,11 @@ export function loadSets(
       (store.sets.readSync(path) as {
         sets?: unknown
       } | null) || {}
-  } catch (e) {
-    if (isNodeError(e) && e.code === "ENOENT") return null // FileNotFoundError → defaults
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT")
+      return null // FileNotFoundError → defaults
     console.log(
-      `[routing] ${path} unreadable (${errMessage(e)}); keeping current sets`,
+      `[routing] ${path} unreadable (${errMessage(error)}); keeping current sets`,
     )
     return null
   }
@@ -189,10 +194,10 @@ export function loadSets(
   // (`filteredQueues.ts`).
   const entries: unknown[] = inheritFilteredQueues(
     (Array.isArray(data.sets) ? data.sets : []).filter(
-      (e): e is FilterableEntry =>
-        Boolean(e) &&
-        typeof e === "object" &&
-        !Array.isArray(e),
+      (entry): entry is FilterableEntry =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        !Array.isArray(entry),
     ),
   )
   const sets: Record<string, RoutingSetCfg> = {}
@@ -216,16 +221,18 @@ export function loadSets(
       // set) → synthesize ONE binding from the top-level fields. A "real" profiles[] array
       // (≥1 dict) is what has_explicit_profiles gates channel_for on.
       const raw = ent.profiles
-      const isBinding = (p: unknown): boolean =>
-        Boolean(p) &&
-        typeof p === "object" &&
-        !Array.isArray(p)
+      const isBinding = (profile: unknown): boolean =>
+        Boolean(profile) &&
+        typeof profile === "object" &&
+        !Array.isArray(profile)
       const hasExplicitProfiles =
         Array.isArray(raw) && raw.some(isBinding)
       const profiles = hasExplicitProfiles
         ? (raw as unknown[])
             .filter(isBinding)
-            .map((p) => bindingFrom(p as BindingSource))
+            .map((profile) =>
+              bindingFrom(profile as BindingSource),
+            )
         : [bindingFrom(ent)]
       // Non-null: `hasExplicitProfiles` is true only when at least one item passed isBinding,
       // and the else-branch synthesizes exactly one. Never empty.
@@ -515,8 +522,8 @@ export function bindingFor(
   if (!profiles || !profiles.length)
     return bindingFrom(cfg || {})
   if (profileTitle) {
-    for (const b of profiles)
-      if (b.plex_user === profileTitle) return b
+    for (const profile of profiles)
+      if (profile.plex_user === profileTitle) return profile
   }
   return profiles[0]! // non-empty per the guard above
 }
@@ -533,11 +540,11 @@ export function channelFor(
   kind: string | null | undefined,
   profileTitle: string | null | undefined,
   reg: RoutingRegistry,
-  wantRewatch?: boolean,
+  isRewatchWanted?: boolean,
 ): string | null {
   const isMovieKind =
-    wantRewatch !== undefined
-      ? wantRewatch
+    isRewatchWanted !== undefined
+      ? isRewatchWanted
       : kind === "movie" // legacy wire kind, one-release fallback
   for (const sid of reg.order) {
     // `!cfg` replaces the original `|| {}`: an id in `order` with no entry in `sets` failed the
@@ -550,8 +557,8 @@ export function channelFor(
     const isRewatch =
       (cfg.behavior || cfg.mode) === "rewatch"
     if (isRewatch !== isMovieKind) continue
-    for (const b of cfg.profiles || [])
-      if (b.plex_user === profileTitle) return sid
+    for (const binding of cfg.profiles || [])
+      if (binding.plex_user === profileTitle) return sid
   }
   return null
 }
@@ -627,13 +634,13 @@ export function forSet(
 ): ForSetResult | null {
   const cfg = reg && reg.sets[sid]
   if (!cfg || cfg.source !== "rotation") return null
-  const b = bindingFor(cfg, profileTitle || null)
+  const binding = bindingFor(cfg, profileTitle || null)
   return {
     via: "engine-node",
     sid,
     binding: {
-      plex_user: b.plex_user ?? null,
-      account_id: b.account_id ?? null,
+      plex_user: binding.plex_user ?? null,
+      account_id: binding.account_id ?? null,
     },
     set_sections: setSections(cfg),
     rewatch_sections: rewatchSections(cfg),
