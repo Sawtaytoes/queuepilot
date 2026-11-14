@@ -69,6 +69,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import type { AedesBroker } from "./fake-mqtt.js"
 
 // Same resolution the fake broker uses: aedes belongs to the `e2e/broker` workspace and the
 // mqtt client to `server/`, and neither is resolvable from `e2e/` itself.
@@ -81,7 +82,9 @@ const requireClient = createRequire(
     .pathname,
 )
 
-const Aedes = requireBroker("aedes") as new () => any
+const Aedes = requireBroker(
+  "aedes",
+) as new () => AedesBroker
 const mqtt = requireClient("mqtt") as {
   connect(opts: unknown): MqttHandle
 }
@@ -382,16 +385,18 @@ async function main(): Promise<void> {
     const chooserEvents: Record<string, unknown>[] = []
     const discovery: Record<string, unknown>[] = []
 
-    client = mqtt.connect({
+    const probe = mqtt.connect({
       clientId: "wire-contract-probe",
       host: "127.0.0.1",
       port: BROKER_PORT,
       protocol: "mqtt",
     })
 
+    client = probe
+
     await new Promise<void>((resolve) => {
-      client!.on("connect", () => {
-        client!.subscribe(
+      probe.on("connect", () => {
+        probe.subscribe(
           [
             T_STATE,
             T_RESP_TOPUP,
@@ -553,11 +558,9 @@ async function main(): Promise<void> {
       payload: Record<string, unknown>,
     ): Promise<StateMessage[]> => {
       const before = states.length
-      client!.publish(
-        T_CMD_START,
-        JSON.stringify(payload),
-        { qos: 1 },
-      )
+      probe.publish(T_CMD_START, JSON.stringify(payload), {
+        qos: 1,
+      })
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await sleep(100)
         if (states.length > before) break

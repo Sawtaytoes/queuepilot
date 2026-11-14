@@ -14,10 +14,11 @@ const cancellation = new AsyncLocalStorage<() => boolean>()
 export const invalidateDeviceOperations = (): void => {
   generation += 1
 }
-export const deviceOperationCancelled = (): boolean =>
-  Boolean(cancellation.getStore()?.()) ||
-  (scope.getStore() != null &&
-    scope.getStore()!.generation !== generation)
+export const deviceOperationCancelled = (): boolean => {
+  if (cancellation.getStore()?.()) return true
+  const store = scope.getStore()
+  return store != null && store.generation !== generation
+}
 export function withCancellation<T>(
   cancelled: () => boolean,
   work: () => T,

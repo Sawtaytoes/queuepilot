@@ -1,4 +1,5 @@
 import { expect, describe as suite, test } from "vitest"
+import { defined } from "../defined.js"
 import { describe, nextQueue } from "../engine/resolve.js"
 import type {
   PlexClient,
@@ -145,7 +146,11 @@ suite("fresh lineup metadata batches", () => {
                 movie("9"),
               ],
             }
-          : { Metadata: [movie(path.split("/").at(-1)!)] }
+          : {
+              Metadata: [
+                movie(defined(path.split("/").at(-1))),
+              ],
+            }
       },
       accountToken: () => null,
     }
@@ -252,7 +257,9 @@ suite("fresh lineup metadata batches", () => {
             .slice("/library/metadata/".length)
             .split(",")
             .flatMap((key) =>
-              direct.has(key) ? [direct.get(key)!] : [],
+              direct.has(key)
+                ? [defined(direct.get(key))]
+                : [],
             )
             .reverse(),
         }
@@ -334,7 +341,7 @@ suite("fresh lineup metadata batches", () => {
     ).toBe(false)
     expect(leafReads).toBe(2)
     leaves.push({
-      ...leaves[0]!,
+      ...defined(leaves[0]),
       ratingKey: "41",
       title: "New Episode",
       index: 2,

@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -45,10 +46,25 @@ const GOLDEN = JSON.parse(
     "utf8",
   ),
 )
-// The golden is free-form recorded JSON whose shape differs per key, and every use below
-// compares it through `canon()` rather than by field — so the return is deliberately `any`
-// (the caller then reshapes `.last` / `.play` in place, as the oracle's own script did).
-const pyCli = (...args: string[]): any => {
+/**
+ * A `play` row as the oracle recorded it: a bare ratingKey for `next-queue-json`, and an
+ * object for `reel-json`.
+ */
+type GoldenPlay =
+  | string
+  | number
+  | { ratingKey: unknown; title?: unknown }
+/**
+ * A recorded oracle answer. Every use below compares it through `canon()` rather than by
+ * field, so only `.last` and `.play`, which the caller reshapes in place (as the oracle's own
+ * script did), are named.
+ */
+interface GoldenAnswer {
+  [field: string]: unknown
+  last?: RecordedLast | null
+  play: GoldenPlay[]
+}
+const pyCli = (...args: string[]): GoldenAnswer => {
   const key = args.join("|")
   if (!(key in GOLDEN))
     throw new Error(`no golden for ${key}`)
@@ -79,15 +95,14 @@ interface LastItem {
   type: string
   ratingKey: string
 }
+/** The `last` field as either oracle recorded it, before `normLast`. */
+interface RecordedLast {
+  title?: unknown
+  type?: unknown
+  ratingKey?: unknown
+}
 const normLast = (
-  lastItem:
-    | {
-        title?: unknown
-        type?: unknown
-        ratingKey?: unknown
-      }
-    | null
-    | undefined,
+  lastItem: RecordedLast | null | undefined,
 ): LastItem | null =>
   lastItem
     ? {
@@ -99,12 +114,12 @@ const normLast = (
 
 const client = replayClient(CORPUS)
 // Nullable only for a MISSING/unparseable sets.yaml, and `sets[id]` only for an id the file
-// does not carry; both are committed fixtures, so each `!` fails exactly where the original did.
-const reg = routing.loadSets(SETS)!
+// does not carry; both are committed fixtures, so each `defined()` throws on a broken fixture.
+const reg = defined(routing.loadSets(SETS))
 
 // Node next_queue (deterministic queue), projected to the oracle's shape.
 async function nodeNextQueue(setName: string) {
-  const cfg = reg.sets[setName]!
+  const cfg = defined(reg.sets[setName])
   const binding = routing.bindingFor(cfg)
   const watched = await select.watchedForSet(
     client,
@@ -133,7 +148,7 @@ async function nodeNextQueue(setName: string) {
 
 // Node build_reel (deterministic file order), projected to the oracle's shape.
 async function nodeReel(setName: string) {
-  const cfg = reg.sets[setName]!
+  const cfg = defined(reg.sets[setName])
   const token = await client.accountToken(cfg.user_uuid)
   const res = await resolve.buildReel(
     client,
@@ -191,12 +206,14 @@ console.log(
 )
 const wantR = pyCli("reel-json", "demo")
 wantR.last = normLast(wantR.last)
-wantR.play = wantR.play.map(
-  (item: { ratingKey: unknown; title?: unknown }) => ({
+wantR.play = wantR.play.map((item) => {
+  if (typeof item !== "object")
+    throw new Error("a reel-json play row is an object")
+  return {
     ratingKey: String(item.ratingKey),
     title: item.title ?? null,
-  }),
-)
+  }
+})
 check(
   "demo",
   wantR,

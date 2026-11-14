@@ -5,6 +5,7 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -56,10 +57,10 @@ function ok(
 
 const client = asyncReplayClient(CORPUS)
 // `loadSets` is nullable for a MISSING/unparseable sets.yaml, and `sets[id]` for an id the
-// file does not carry. Both are committed fixtures here, so each `!` fails exactly where the
-// original did — on the very next property read — rather than adding a branch.
-const reg = routing.loadSets(SETS)!
-const cfg = reg.sets.kidsplus!
+// file does not carry. Both are committed fixtures here, so each `defined()` throws on a broken
+// fixture rather than adding a branch.
+const reg = defined(routing.loadSets(SETS))
+const cfg = defined(reg.sets.kidsplus)
 const binding = routing.bindingFor(cfg, "Younger")
 
 console.log(

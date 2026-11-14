@@ -13,6 +13,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs"
+import { defined } from "../defined.js"
 
 const SETS_PATH =
   process.env.SETS_PATH || "/config/sets.yaml"
@@ -48,17 +49,12 @@ for (const block of blocks) {
   let kind: string | null = null
   let kindI = -1
   let hasAddAs = false
-  for (
-    let blockIndex = 0;
-    blockIndex < block.length;
-    blockIndex++
-  ) {
-    const line = block[blockIndex]!
+  for (const [blockIndex, line] of block.entries()) {
     const sm = /^ {2}source:\s*(\S+)/.exec(line)
-    if (sm) source = sm[1]!
+    if (sm) source = defined(sm[1])
     const km = /^ {2}kind:\s*(\S+)/.exec(line)
     if (km) {
-      kind = km[1]!
+      kind = defined(km[1])
       kindI = blockIndex
     }
     if (/^ {2}add_as:/.test(line)) hasAddAs = true

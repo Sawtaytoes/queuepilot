@@ -37,6 +37,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -405,7 +406,9 @@ for (const file of webFiles) {
 check(
   "exactly one place in the web app calls the reset route",
   resetCallers.length === 1 &&
-    resetCallers[0]!.endsWith("QueueActionsMenu.tsx"),
+    defined(resetCallers[0]).endsWith(
+      "QueueActionsMenu.tsx",
+    ),
   `callers: ${JSON.stringify(resetCallers.map((resetCaller) => path.relative(ROOT, resetCaller)))}`,
 )
 

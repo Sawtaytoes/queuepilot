@@ -34,6 +34,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 /**
  * A JSON body off the API — same call as api-v2-test.ts makes, for the same reason:
@@ -42,6 +43,7 @@ import {
  * response shape here would be a second copy of server/src/routes that rots on its own, so the
  * cast lives HERE, once, and the reads are deliberately unchecked.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const PORT = 18781
@@ -220,8 +222,8 @@ const kavita = createServer(
       /^\/api\/Series\/(\d+)$/,
     )
     if (match) {
-      // The capture group is inside the `if (m)`, so `m[1]` is present here.
-      const series = SERIES[match[1]!]
+      // The capture group is inside the `if (match)`, so `match[1]` is present here.
+      const series = SERIES[defined(match[1])]
       if (!series) {
         res.statusCode = 404
         return res.end()

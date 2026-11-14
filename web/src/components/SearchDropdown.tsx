@@ -7,6 +7,7 @@ import {
   useState,
 } from "react"
 
+import { useEffectOnChange } from "../hooks/useEffectOnChange"
 import { setStatus } from "../state/store"
 import { ClearIcon } from "./ClearIcon"
 
@@ -169,10 +170,11 @@ export function SearchDropdown<T>({
 
   handlerRef.current = onInput
 
-  useEffect(() => {
+  // A new `searchKey` reruns the text already in the box.
+  useEffectOnChange(searchKey, () => {
     if (inputRef.current?.value.trim())
       handlerRef.current(inputRef.current.value)
-  }, [searchKey])
+  })
 
   useEffect(() => {
     const el = inputRef.current

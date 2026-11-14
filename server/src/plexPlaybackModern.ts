@@ -1,8 +1,10 @@
 // New Android TV Plex accepts playback deep links instead of Companion HTTP.
 // Keep the server-created playQueue intact; never substitute a single media item.
+// `queueId` may be null: a playQueue that Plex built without an id reaches here, and the
+// identity check below refuses it.
 export function modernQueueLink(
   serverId: string,
-  queueId: string | number,
+  queueId: string | number | null,
   offsetMs = 0,
   ratingKey: string,
 ): string {

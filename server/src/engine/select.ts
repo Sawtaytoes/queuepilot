@@ -250,8 +250,7 @@ export async function watchedForSet(
   binding: EngineBinding | null | undefined,
 ): Promise<Set<string>> {
   const accts =
-    (binding && binding.watch_count_accounts) ||
-    WATCH_COUNT_ACCOUNTS
+    binding?.watch_count_accounts || WATCH_COUNT_ACCOUNTS
   const watched = new Set<string>()
   for (const acct of accts) {
     for (const sec of setSections(cfg)) {

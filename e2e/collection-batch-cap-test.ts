@@ -15,6 +15,7 @@
 import assert from "node:assert/strict"
 import type { EntryDescriptor } from "../server/src/engine/resolve.js"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 process.env.SETS_PATH =
   "/nonexistent-so-loadSets-is-never-consulted.yaml"
@@ -119,17 +120,17 @@ const check = (
 const queued = await resolveWith(desc, 1)
 check(
   "queue path: collection contributes ONE episode",
-  queued!.items.length,
+  defined(queued).items.length,
   1,
 )
 check(
   "…and it is the FIRST unwatched, so order/resume is preserved",
-  queued!.items[0]!.episode,
+  defined(defined(queued).items[0]).episode,
   1,
 )
 check(
   "type is still collection",
-  queued!.type,
+  defined(queued).type,
   "collection",
 )
 
@@ -137,12 +138,12 @@ check(
 const three = await resolveWith({ ...desc, episodes: 3 }, 1)
 check(
   "episodes: 3 override yields three",
-  three!.items.length,
+  defined(three).items.length,
   3,
 )
 check(
   "override keeps collection order",
-  three!.items.map((item) => item.episode),
+  defined(three).items.map((item) => item.episode),
   [1, 2, 3],
 )
 
@@ -151,7 +152,7 @@ check(
 const uncapped = await resolveWith(desc, null)
 check(
   "rotation path (no default batch) stays uncapped",
-  uncapped!.items.length,
+  defined(uncapped).items.length,
   5,
 )
 

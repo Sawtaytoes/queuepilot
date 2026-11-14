@@ -4,8 +4,9 @@ import {
   SearchInput,
   Spinner,
 } from "@charcuterie/ui"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { ClearIcon } from "../components/ClearIcon"
+import { useEffectOnChange } from "../hooks/useEffectOnChange"
 import { api } from "../lib/api"
 import { filterCollection } from "../lib/boardGames"
 import { rosterOrder } from "../lib/tonight"
@@ -63,8 +64,9 @@ export function CollectionView() {
   const [reloadCount, setReloadCount] = useState(0)
 
   // Loaded on mount, which is when this page is opened: the route table mounts a view only
-  // on its own route, so no other page pays for the whole shelf.
-  useEffect(() => {
+  // on its own route, so no other page pays for the whole shelf. A bump of `reloadCount`
+  // (a game card logged a play) loads it again.
+  useEffectOnChange(reloadCount, () => {
     let isCancelled = false
 
     void Promise.all([
@@ -91,7 +93,7 @@ export function CollectionView() {
     return () => {
       isCancelled = true
     }
-  }, [reloadCount])
+  })
 
   const shelf = filterCollection(games ?? [], {
     isExcludedShown,

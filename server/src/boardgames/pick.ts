@@ -1,3 +1,4 @@
+import { defined } from "../defined.js"
 import {
   COOLDOWN,
   FAMILIARITY,
@@ -459,10 +460,10 @@ export const pick = (input: PickInput): PickResult => {
   // Floating-point drift only — the last candidate is as correct
   // an answer as any.
   //
-  // The `!` is this repo's `noUncheckedIndexedAccess` and nothing else: the length check above
-  // already proved the array is non-empty, and the compiler cannot see it. Same shape as
-  // `engine/preview.ts`'s weighted draw.
-  const last = candidates[candidates.length - 1]!
+  // `defined` is for this repo's `noUncheckedIndexedAccess` and nothing else: the length
+  // check above already proved the array is non-empty, and the compiler cannot see it. Same
+  // shape as `engine/preview.ts`'s weighted draw.
+  const last = defined(candidates[candidates.length - 1])
   return {
     outcome: "picked",
     candidate: last,

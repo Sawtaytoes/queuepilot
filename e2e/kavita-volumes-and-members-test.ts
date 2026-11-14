@@ -23,9 +23,11 @@ import { errMessage } from "../server/src/errors.js"
 import type {
   BucketsResult,
   KavitaPlayItem,
+  Provider,
   RoutingQueueCfg,
 } from "../server/src/types.js"
 import type { KavitaHttpClient } from "../server/src/providers/kavita-client.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(
   path.join(tmpdir(), "kavita-vol-"),
@@ -370,6 +372,25 @@ const { kavitaProvider } = await import(
 const { pullLineup } = await import(
   "../server/src/providers/pullLineup.js"
 )
+
+// `tiles` and `listUnits` are optional on `Provider`, and the Kavita provider implements both.
+// Each call stays a method call on the provider, so `this` is the provider as before.
+const kavitaTiles = (
+  provider: Provider,
+  ids: Iterable<string>,
+) => {
+  if (!provider.tiles)
+    throw new Error("the Kavita provider has no tiles")
+  return provider.tiles(ids)
+}
+const kavitaUnits = (
+  provider: Provider,
+  itemId: string,
+) => {
+  if (!provider.listUnits)
+    throw new Error("the Kavita provider has no listUnits")
+  return provider.listUnits(itemId)
+}
 const DEF = {
   id: "kavita",
   kind: "kavita",
@@ -388,7 +409,7 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const [tile] = await provider.tiles!(["4672"])
+    const [tile] = await kavitaTiles(provider, ["4672"])
     assert.ok(
       tile,
       "Alice in Borderland resolved to no tile at all",
@@ -409,10 +430,12 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const [tile] = await provider.tiles!(["4672"])
+    const [tile] = await kavitaTiles(provider, ["4672"])
     // `ProviderTileRow.next` is a union since board games joined the seam (a play carries no
     // chapter id). This is the Kavita gate, so it asserts the Kavita shape by name.
-    const next = tile!.next! as KavitaPlayItem
+    const next = defined(
+      defined(tile).next,
+    ) as KavitaPlayItem
     assert.equal(
       next.unit,
       "volume",
@@ -471,8 +494,8 @@ await ok(
     // Chapter 1 is fully read; 2/3/4 are not. The read one must not come back.
     assert.deepEqual(ids, [67095, 67096, 67097])
     // A loose chapter keeps chapter wording — the volume path must not relabel a webtoon.
-    assert.equal(play[0]!.unit, "chapter")
-    assert.equal(play[0]!.number, "2")
+    assert.equal(defined(play[0]).unit, "chapter")
+    assert.equal(defined(play[0]).number, "2")
   },
 )
 
@@ -603,7 +626,7 @@ await ok(
       "the entry override did not widen its own slice",
     )
     assert.equal(
-      String(play[3]!.seriesId),
+      String(defined(play[3]).seriesId),
       "4577",
       "the next series did not get its turn after the batch",
     )
@@ -644,7 +667,7 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const out = await provider.listUnits!("4577")
+    const out = await kavitaUnits(provider, "4577")
     assert.ok(out, "Swordmaster listed no chapters")
     assert.equal(
       out.multiSeason,
@@ -652,7 +675,7 @@ await ok(
       "a webtoon must not grow a season row",
     )
     assert.equal(out.seasons.length, 1)
-    const eps = out.seasons[0]!.episodes
+    const eps = defined(out.seasons[0]).episodes
     assert.equal(
       eps.length,
       4,
@@ -663,12 +686,12 @@ await ok(
       [1, 2, 3, 4],
     )
     assert.equal(
-      eps[0]!.watched,
+      defined(eps[0]).watched,
       true,
       "chapter 1 is fully read",
     )
-    assert.equal(eps[1]!.watched, false)
-    assert.equal(eps[0]!.title, "Chapter 1")
+    assert.equal(defined(eps[1]).watched, false)
+    assert.equal(defined(eps[0]).title, "Chapter 1")
   },
 )
 
@@ -679,9 +702,9 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const out = await provider.listUnits!("4672")
+    const out = await kavitaUnits(provider, "4672")
     assert.ok(out, "Alice listed no units")
-    const eps = out.seasons[0]!.episodes
+    const eps = defined(out.seasons[0]).episodes
     assert.equal(eps.length, 9)
     assert.deepEqual(
       eps.map((episode) => episode.episode),
@@ -778,7 +801,7 @@ await ok(
       play.map((playItem) => playItem.number),
       [1],
     )
-    assert.equal(play[0]!.unit, "volume")
+    assert.equal(defined(play[0]).unit, "volume")
   },
 )
 
@@ -820,7 +843,7 @@ await ok(
       play.map((playItem) => playItem.number),
       ["2", "3"],
     )
-    assert.equal(play[0]!.unit, "chapter")
+    assert.equal(defined(play[0]).unit, "chapter")
   },
 )
 
@@ -854,12 +877,14 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const [tile] = await provider.tiles!(["5100"])
+    const [tile] = await kavitaTiles(provider, ["5100"])
     assert.ok(
       tile?.next,
       "Solo Chapter Volumes resolved to nothing next",
     )
-    const next = tile!.next! as KavitaPlayItem
+    const next = defined(
+      defined(tile).next,
+    ) as KavitaPlayItem
     // Volume 1 is fully read; next unread is Volume 2 — NEVER "Chapter 1" / "Chapter 134".
     assert.equal(next.unit, "volume")
     assert.equal(next.number, 2)
@@ -874,9 +899,9 @@ await ok(
       def: DEF,
       client: asClient(stubClient()),
     })
-    const out = await provider.listUnits!("5100")
+    const out = await kavitaUnits(provider, "5100")
     assert.ok(out)
-    const eps = out.seasons[0]!.episodes
+    const eps = defined(out.seasons[0]).episodes
     // 3 volumes + 2 loose weekly chapters. Volumes lead; the "Chapter 1" title never surfaces.
     assert.deepEqual(
       eps.map((episode) => episode.title),

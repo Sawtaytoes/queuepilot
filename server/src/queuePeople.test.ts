@@ -4,7 +4,7 @@
 // repo, so "at least one of the kids" is exercised as "at least one of Ada or Grace, and Linus
 // may join" — the same rule with invented people.
 import { describe, expect, test } from "vitest"
-
+import { defined } from "./defined.js"
 import type { Person } from "./people.js"
 import {
   describeMembership,
@@ -326,7 +326,7 @@ describe("choosing people is a FILTER, not a claim about who is in the room", ()
     // …and a group that means ALL of them still needs all of them.
     expect(
       queueMatchesSelection(
-        [{ ...withKids[0]!, minPresent: 2 }],
+        [{ ...defined(withKids[0]), minPresent: 2 }],
         ["ada"],
       ),
     ).toBe(false)

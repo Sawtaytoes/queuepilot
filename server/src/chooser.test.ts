@@ -3,6 +3,7 @@ import {
   type ChooserState,
   createChooser,
 } from "./chooser.js"
+import { defined } from "./defined.js"
 
 const harness = () => {
   vi.useFakeTimers()
@@ -143,7 +144,9 @@ test("tap revalidates eligibility and dispatches exactly once before dismissing"
 test("a delayed catalog cannot play after the selection expires", async () => {
   const fixture = harness()
   await fixture.scan("ada")
-  const original = fixture.catalog.getMockImplementation()!
+  const original = defined(
+    fixture.catalog.getMockImplementation(),
+  )
   fixture.catalog.mockImplementation(async (people) => {
     await new Promise((resolve) =>
       setTimeout(resolve, 61_000),

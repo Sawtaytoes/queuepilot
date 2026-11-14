@@ -18,10 +18,8 @@ import net from "node:net"
 // aedes and mqtt are require()'d out of node_modules this repo owns but `e2e/` does not: the
 // broker fixture installs its own (`e2e/broker/`) and the mqtt client comes from `server/`,
 // because there is no root manifest to hoist either into. So there is no package for tsc to
-// read types from. `createRequire()(...)` is `any` by declaration, and these two stay that way
-// deliberately: hand-writing an aedes surface to type a fake broker would be more machinery
-// than the fake itself. Everything this module EXPORTS is typed below, which is the part
-// other suites read.
+// read types from. `createRequire()(...)` is `any` by declaration, so each one is cast to the
+// small surface these harnesses drive: `AedesBroker` and `FakeMqttClient` below.
 //
 // Resolved from `import.meta.url`, NOT from an absolute path. These used to name
 // `/srv/repos/plex-channels/...` — this repo's own checkout, written out in full
@@ -36,9 +34,24 @@ const requireClient = createRequire(
   new URL("../server/node_modules/", import.meta.url)
     .pathname,
 )
-const Aedes = requireBroker("aedes") as new () => any
+const Aedes = requireBroker(
+  "aedes",
+) as new () => AedesBroker
 const mqtt = requireClient("mqtt") as {
   connect(opts: unknown): FakeMqttClient
+}
+
+/**
+ * The aedes broker surface these harnesses actually drive: it serves each socket, reports
+ * subscriptions, and closes. Hand-written because aedes is not resolvable from `e2e/`.
+ */
+export interface AedesBroker {
+  handle: (socket: net.Socket) => void
+  on(
+    event: "subscribe",
+    handler: (subscriptions: { topic: string }[]) => void,
+  ): void
+  close(callback?: () => void): void
 }
 
 /**
@@ -70,12 +83,13 @@ export interface FakeMqttClient {
  * command schema here would just be a second copy to drift.
  */
 export interface CmdPayload {
+  // biome-ignore lint/suspicious/noExplicitAny: the MQTT command JSON the app publishes; read loosely as the wire, as documented above
   [field: string]: any
 }
 
 /** What `startFakeMqtt()` resolves with — the handle every caller shuts down in its finally. */
 export interface FakeMqtt {
-  aedes: any
+  aedes: AedesBroker
   server: net.Server
   client: FakeMqttClient
   port: number

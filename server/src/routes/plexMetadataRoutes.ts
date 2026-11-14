@@ -571,7 +571,7 @@ export function plexMetadataRoutes(): Hono {
             400,
           )
         const set = await sets.getSet(setId)
-        if (!set || set.delivery !== "push")
+        if (set?.delivery !== "push")
           return context.json(
             { error: "unknown Plex queue" },
             400,

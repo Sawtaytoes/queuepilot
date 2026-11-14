@@ -1,5 +1,10 @@
 import { Button } from "@charcuterie/ui"
-import { useEffect, useMemo, useState } from "react"
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
 import { EditionBadge } from "../components/EditionBadge"
@@ -79,26 +84,37 @@ export function ChannelFilters({
     number[]
   >([])
 
-  useEffect(() => {
-    setKnown(cachedRatings(profileKey))
-    setRatings(stored)
-    setAudio(channel.audio_language || "")
+  // Re-seed when the channel row or the profile key changes. `binding` and `stored` are read
+  // when it does, and a change to either alone does not re-seed.
+  const seedFilters = useEffectEvent(
+    (seedChannel: RegistrySet, seedProfileKey: string) => {
+      setKnown(cachedRatings(seedProfileKey))
+      setRatings(stored)
+      setAudio(seedChannel.audio_language || "")
 
-    const checked = libSelection(channel)
+      const checked = libSelection(seedChannel)
 
-    setShowSections(checked.show)
-    setItemSections(checked.item)
+      setShowSections(checked.show)
+      setItemSections(checked.item)
 
-    let isStale = false
+      let isStale = false
 
-    void fetchRatings(channel, binding).then((found) => {
-      if (!isStale) setKnown(found)
-    })
+      void fetchRatings(seedChannel, binding).then(
+        (found) => {
+          if (!isStale) setKnown(found)
+        },
+      )
 
-    return () => {
-      isStale = true
-    }
-  }, [channel, profileKey])
+      return () => {
+        isStale = true
+      }
+    },
+  )
+
+  useEffect(
+    () => seedFilters(channel, profileKey),
+    [channel, profileKey],
+  )
 
   const ratingOptions = [
     ...new Set([...known, ...stored]),

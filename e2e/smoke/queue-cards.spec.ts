@@ -7,6 +7,7 @@ import { expect, test } from "@playwright/test"
 import { startFixtureServer } from "../fixture-server.js"
 import { killServer } from "../stubs/server-process.mjs"
 import { SMOKE_BASE_PORT } from "./ports.js"
+import { defined } from "../../server/src/defined.js"
 
 // Each project writes to its own fixture server. No household data or shared smoke state.
 test("queue cards keep previews, filtering, navigation, and grid reorder", async ({
@@ -154,13 +155,13 @@ test("queue cards keep previews, filtering, navigation, and grid reorder", async
     expect(response.ok()).toBe(true)
     const ids = response.request().postDataJSON()
       .ids as string[]
-    expect(ids.indexOf(secondId!)).toBeLessThan(
-      ids.indexOf(firstId!),
+    expect(ids.indexOf(defined(secondId))).toBeLessThan(
+      ids.indexOf(defined(firstId)),
     )
     await page.reload()
     await expect(
       families.first().locator(".shelf").first(),
-    ).toHaveAttribute("data-set", secondId!)
+    ).toHaveAttribute("data-set", defined(secondId))
     const destination = await families
       .first()
       .locator("a.open")

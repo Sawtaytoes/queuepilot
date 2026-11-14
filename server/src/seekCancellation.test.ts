@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 
 const ctl = vi.hoisted(() => ({
   hold: false,
@@ -81,7 +82,7 @@ test("issues no stop or launch when a replacement sitting arrives during a seek 
   })
   await vi.waitFor(() => expect(ctl.release).not.toBeNull())
   invalidateDeviceOperations()
-  ctl.release!(JSON.stringify(queue))
+  defined(ctl.release)(JSON.stringify(queue))
   expect((await pending).seeked).toBe(false)
   expect(adb.modernPlayerCommand).not.toHaveBeenCalled()
   expect(adb.playModernQueue).not.toHaveBeenCalled()

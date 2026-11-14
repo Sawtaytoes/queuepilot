@@ -17,6 +17,7 @@
 // dict next_queue returns — the persistence lands with D4. The anime-channel branch shuffles with
 // an injected rng (like build_rotation), so parity covers the deterministic non-anime queue only.
 
+import { defined } from "../defined.js"
 import {
   duplicateEntryMessage,
   entryIdOf,
@@ -366,7 +367,7 @@ export function parseTitleString(text: unknown): {
   let guid: string | null = null
   let match = GUID_RE.exec(remainder)
   if (match) {
-    guid = match[1]!.trim()
+    guid = defined(match[1]).trim()
     remainder = remainder
       .slice(0, match.index)
       .replace(/\s+$/, "")
@@ -374,7 +375,7 @@ export function parseTitleString(text: unknown): {
   let year: number | null = null
   match = YEAR_RE.exec(remainder)
   if (match) {
-    year = parseInt(match[1]!, 10)
+    year = parseInt(defined(match[1]), 10)
     remainder = remainder
       .slice(0, match.index)
       .replace(/\s+$/, "")
@@ -445,7 +446,7 @@ export function describe(entry: unknown): EntryDescriptor {
       ))
     if (coll == null && title) {
       const cm = COLLECTION_RE.exec(title)
-      if (cm) coll = cm[1]!.trim()
+      if (cm) coll = defined(cm[1]).trim()
     }
     return {
       key: entryKey(entry),
@@ -529,7 +530,7 @@ export function describe(entry: unknown): EntryDescriptor {
   }
   const { title, year, guid } = parseTitleString(entry)
   const cm = COLLECTION_RE.exec(title)
-  const coll = cm ? cm[1]!.trim() : null
+  const coll = cm ? defined(cm[1]).trim() : null
   return {
     key: entryKey(entry),
     ratingKey: null,
@@ -615,7 +616,7 @@ export function loadEntries(
       return []
     throw error
   }
-  const seq = ((data && data[setName]) || []) as unknown[]
+  const seq = (data?.[setName] || []) as unknown[]
   const out: EntryDescriptor[] = []
   const seen = new Set<string>()
   seq.forEach((entry, index) => {
@@ -794,14 +795,15 @@ export async function itemType(
   }
   const md = mc.Metadata || []
   if (!md.length) return [null, null, 0, 0]
-  const mediaType = md[0]!.type
+  const first = defined(md[0])
+  const mediaType = first.type
   if (mediaType !== "movie" && mediaType !== "show")
     return [null, null, 0, 0]
   return [
     mediaType,
-    md[0]!.title,
-    int0(md[0]!.viewOffset),
-    int0(md[0]!.viewCount),
+    first.title,
+    int0(first.viewOffset),
+    int0(first.viewCount),
   ]
 }
 
@@ -823,7 +825,8 @@ async function itemViewState(
   }
   const md = mc.Metadata || []
   if (!md.length) return [0, 0]
-  return [int0(md[0]!.viewOffset), int0(md[0]!.viewCount)]
+  const first = defined(md[0])
+  return [int0(first.viewOffset), int0(first.viewCount)]
 }
 
 // Milliseconds to resume `ratingKey` at — its viewOffset when IN-PROGRESS, else 0. Port of
@@ -941,8 +944,7 @@ export async function resolveTitle(
 export function resolveSections(
   cfg: ResolveCfg,
 ): readonly (number | undefined)[] {
-  if (cfg.queue_sections && cfg.queue_sections.length)
-    return cfg.queue_sections
+  if (cfg.queue_sections?.length) return cfg.queue_sections
   const ss = setSections(cfg)
   if (ss.length) return ss
   // `queue_section` is `secs[0]` in routing.ts, so it MAY be undefined — the last-resort list
@@ -1004,8 +1006,7 @@ function startMemberIndex(
   if (!start || start.series == null || start.series === "")
     return -1
   const want = String(start.series).trim().toLowerCase()
-  for (let index = 0; index < children.length; index += 1) {
-    const ch = children[index]!
+  for (const [index, ch] of children.entries()) {
     if (String(ch.ratingKey).trim().toLowerCase() === want)
       return index
     if (
@@ -1053,9 +1054,8 @@ export async function collectionItems(
   const floorAt = startMemberIndex(children, start)
   const skipped = skippedKeys(cfg)
   const items: ResolvedItem[] = []
-  for (let index = 0; index < children.length; index += 1) {
+  for (const [index, ch] of children.entries()) {
     if (floorAt >= 0 && index < floorAt) continue
-    const ch = children[index]!
     const rk = String(ch.ratingKey)
     // A skipped CHILD goes whole — the film, or the whole child show. The collection is the
     // member here; its children are the items inside it, which is exactly what `skipped`
@@ -1242,11 +1242,11 @@ function applyBatch(
   )
   let out = items.slice(0, batchSize)
   if (BATCH_STOPS.includes(stop) && out.length > 1) {
-    const head = segmentKey(out[0]!, stop)
+    const head = segmentKey(defined(out[0]), stop)
     let cut = 1
     while (
       cut < out.length &&
-      segmentKey(out[cut]!, stop) === head
+      segmentKey(defined(out[cut]), stop) === head
     )
       cut += 1
     out = out.slice(0, cut)
@@ -1274,7 +1274,8 @@ function shuffleEntryItems(
     if (own) return !own.isCompleted && own.positionMs > 0
     return inProgress(item.viewOffset, item.viewCount)
   })
-  const head = resumeIndex >= 0 ? items[resumeIndex]! : null
+  const head =
+    resumeIndex >= 0 ? defined(items[resumeIndex]) : null
   const rest = items.filter(
     (_, index) => index !== resumeIndex,
   )
@@ -1563,7 +1564,7 @@ export async function buildReel(
         false,
         desc.collectionOrder,
       )
-      if (!items || !items.length) {
+      if (!items?.length) {
         unresolved.push(`Collection: ${desc.collection}`)
         continue
       }
@@ -1640,9 +1641,9 @@ export async function buildReel(
   }
   const last = play.length
     ? {
-        title: play[0]!.title as string,
+        title: defined(play[0]).title as string,
         type: "movie",
-        ratingKey: play[0]!.ratingKey,
+        ratingKey: defined(play[0]).ratingKey,
       }
     : null
   return {
@@ -1711,10 +1712,10 @@ function logLineup(
   },
 ): void {
   const head = lineup.playItems.length
-    ? lineup.playItems[0]!
+    ? defined(lineup.playItems[0])
     : null
   const headBatch = lineup.ordered.length
-    ? lineup.ordered[0]!
+    ? defined(lineup.ordered[0])
     : null
   const lane = headBatch
     ? lineup.resuming.includes(headBatch)
@@ -1868,10 +1869,7 @@ export async function nextQueue(
       // A HAND-marked `done: true` (no `done_at`, so the owner wrote it, not markDone) is a
       // deliberate skip and is only ever revived by the in-progress case: actually watching
       // something outranks the skip, merely having an unwatched episode does not.
-      const head =
-        res && res.items && res.items.length
-          ? res.items[0]
-          : null
+      const head = res?.items?.length ? res.items[0] : null
       // `head != null` rather than upstream's `Boolean(head)`: identical at runtime (a
       // resolved item is always an object), and it is what NARROWS `head` for the
       // `headResumeOffset` call in the same `&&` chain, which `Boolean()` does not.
@@ -1886,12 +1884,13 @@ export async function nextQueue(
       if (isRevived) {
         revived.push(desc.key as string)
         remaining += 1
-        // `head` is non-null only when `res` was, so the assertions add no branch.
+        // `head` is non-null only when `res` was, so `defined` adds no branch.
+        const revivedRes = defined(res)
         batches.push({
-          title: res!.title,
-          type: res!.type,
-          items: res!.items,
-          weight: res!.weight,
+          title: revivedRes.title,
+          type: revivedRes.type,
+          items: revivedRes.items,
+          weight: revivedRes.weight,
           desc,
         })
       } else {
@@ -2082,7 +2081,7 @@ export async function nextQueue(
     }
   }
   const leadBatch: Batch | null = ordered.length
-    ? ordered[0]!
+    ? defined(ordered[0])
     : null
   // `led` means that Priority actually led the sitting. Since Priority now takes the head from
   // an in-progress pool item, a non-empty Priority lane always supplies `leadBatch`; the guard
@@ -2116,13 +2115,17 @@ export async function nextQueue(
   // A non-empty `playItems` implies a `leadBatch`, as it always did.
   const last = playItems.length
     ? {
-        title: leadBatch!.title,
-        type: leadBatch!.type,
-        ratingKey: playItems[0]!.ratingKey,
+        title: defined(leadBatch).title,
+        type: defined(leadBatch).type,
+        ratingKey: defined(playItems[0]).ratingKey,
       }
     : null
   const offset = playItems.length
-    ? await headResumeOffset(client, playItems[0]!, token)
+    ? await headResumeOffset(
+        client,
+        defined(playItems[0]),
+        token,
+      )
     : 0
   return {
     set: setName,

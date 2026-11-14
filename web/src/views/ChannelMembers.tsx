@@ -1,6 +1,11 @@
 import { mergeRefs, useFlipList } from "@charcuterie/logic"
 import { BadgeButton } from "@charcuterie/ui"
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react"
 
 import { TypeBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
@@ -112,7 +117,10 @@ export function ChannelMembers({
       (set) => set.id === channel.id,
     )?.members ?? []) as unknown[]
 
-  const reload = async (chId: string) => {
+  const reload = async (
+    chId: string,
+    uuid: string | null = accountUuid,
+  ) => {
     const req = ++reqRef.current
 
     try {
@@ -121,9 +129,7 @@ export function ChannelMembers({
       }>(
         "GET",
         `/api/sets/${chId}/members${
-          accountUuid
-            ? `?uuid=${encodeURIComponent(accountUuid)}`
-            : ""
+          uuid ? `?uuid=${encodeURIComponent(uuid)}` : ""
         }`,
       )
 
@@ -144,6 +150,8 @@ export function ChannelMembers({
   }
 
   const memberCount = (channel.members || []).length
+  // The load reads the current closure, and only the three keys below start it.
+  const loadMembers = useEffectEvent(reload)
 
   useEffect(() => {
     if (!memberCount) {
@@ -154,7 +162,7 @@ export function ChannelMembers({
       return
     }
 
-    void reload(channel.id)
+    void loadMembers(channel.id, accountUuid)
   }, [channel.id, memberCount, accountUuid])
 
   /**

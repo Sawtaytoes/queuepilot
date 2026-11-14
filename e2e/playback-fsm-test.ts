@@ -33,6 +33,7 @@ import type {
   Device,
   PublishedStateExtra,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 stubDriverDeps()
 const {
@@ -391,11 +392,12 @@ ok(
 // The offset the caller passes must reach playRatingKeys unchanged (resume-in-queue's tail).
 reset()
 await drive({ offset: 90_000 })
-// The preceding `drive()` always records a play, so the `!` asserts the line above it.
+// The preceding `drive()` always records a play, so `defined()` asserts the line above it.
 ok(
   "offset is threaded to playRatingKeys",
-  CTL.calls.find((call) => call[0] === "play")![2] ===
-    90_000,
+  defined(
+    CTL.calls.find((call) => call[0] === "play"),
+  )[2] === 90_000,
 )
 
 console.log(

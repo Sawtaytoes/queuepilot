@@ -1,3 +1,4 @@
+import { defined } from "./defined.js"
 import { withCancellation } from "./deviceScope.js"
 // Resume-on-advance: make EVERY queued episode start at its own resume point, not just the
 // first one.
@@ -479,16 +480,17 @@ export function startWatch({
                 `${Math.round(Number(session?.viewOffset || 0) / 1000)}s -> ${sec.reason}`,
             )
           }
-          if (sec.action === "seek" && sec.ms != null) {
+          const seekMs = sec.ms
+          if (sec.action === "seek" && seekMs != null) {
             try {
               const seekResult = await withCancellation(
                 () => isStopped || !isCurrent(),
-                () => seek(sec.ms!),
+                () => seek(seekMs),
               )
               log(
                 seekResult && seekResult.seeked === false
-                  ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${seekResult.error}`
-                  : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`,
+                  ? `[section] the start seek to ${Math.round(seekMs / 1000)}s failed: ${seekResult.error}`
+                  : `[section] rk=${sec.rk} starts at ${Math.round(seekMs / 1000)}s`,
               )
             } catch (error) {
               log(
@@ -501,11 +503,12 @@ export function startWatch({
                 "[section] the end mark is due but no advance was wired — the item plays on",
               )
             } else {
+              const advanceToNext = advance
               try {
                 const advanceResult =
                   await withCancellation(
                     () => isStopped || !isCurrent(),
-                    () => advance!(),
+                    () => advanceToNext(),
                   )
                 log(
                   advanceResult &&
@@ -572,11 +575,11 @@ export function startWatch({
       ) {
         if (decision.isRetryNeeded)
           LOGGED.add(decision.rk ?? "")
-        // `session!`: every non-quiet reason is produced from a non-null session (a null one
-        // yields 'nothing playing', which IS quiet), so this is the original's exact reach —
-        // including its throw, if that invariant ever breaks.
+        // `defined(session)`: every non-quiet reason is produced from a non-null session (a
+        // null one yields 'nothing playing', which IS quiet), so this is the original's exact
+        // reach — including its throw, if that invariant ever breaks.
         log(
-          `[resume] via ${via}: rk=${decision.rk} at ${Math.round(Number(session!.viewOffset || 0) / 1000)}s -> ${decision.reason}`,
+          `[resume] via ${via}: rk=${decision.rk} at ${Math.round(Number(defined(session).viewOffset || 0) / 1000)}s -> ${decision.reason}`,
         )
       }
       const ms = decision.ms

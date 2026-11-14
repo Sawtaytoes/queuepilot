@@ -150,14 +150,14 @@ export function run(
   args: string[],
   timeoutSec: number | null = null,
 ): string | null {
-  if (!adbTarget() || deviceOperationCancelled())
-    return null
+  const target = adbTarget()
+  if (!target || deviceOperationCancelled()) return null
   const timeoutMs =
     (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000
   try {
     const spawnResult = spawnSync(
       ADB_BIN,
-      ["-s", adbTarget()!, ...args],
+      ["-s", target, ...args],
       {
         encoding: "utf8",
         env: envForAdb(),
@@ -201,12 +201,12 @@ export function run(
  * Returns null only when adb could not be run at all.
  */
 function deviceState(): string | null {
-  if (!adbTarget() || deviceOperationCancelled())
-    return null
+  const target = adbTarget()
+  if (!target || deviceOperationCancelled()) return null
   try {
     const spawnResult = spawnSync(
       ADB_BIN,
-      ["-s", adbTarget()!, "get-state"],
+      ["-s", target, "get-state"],
       {
         encoding: "utf8",
         env: envForAdb(),
@@ -227,10 +227,14 @@ function deviceState(): string | null {
   }
 }
 
-/** `adb connect` then `get-state`. Null when adb itself could not run. */
-function connectOnce(): string | null {
+/**
+ * `adb connect` then `get-state`. Null when adb itself could not run.
+ *
+ * `target` is `adbTarget()`, which `connect()` has already checked.
+ */
+function connectOnce(target: string): string | null {
   try {
-    spawnSync(ADB_BIN, ["connect", adbTarget()!], {
+    spawnSync(ADB_BIN, ["connect", target], {
       encoding: "utf8",
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
@@ -246,9 +250,9 @@ function connectOnce(): string | null {
 
 /** Idempotent — 'already connected' is success. Returns true if the device is up. */
 export function connect(): boolean {
-  if (!adbTarget() || deviceOperationCancelled())
-    return false
-  let state = connectOnce()
+  const target = adbTarget()
+  if (!target || deviceOperationCancelled()) return false
+  let state = connectOnce(target)
   if (state === "device") return true
 
   // A WEDGED connection record, and the reason this retry exists. When the Shield reboots
@@ -263,7 +267,7 @@ export function connect(): boolean {
       `[adb] ${adbTarget()} is ${state}; dropping the stale record and re-handshaking`,
     )
     disconnect()
-    state = connectOnce()
+    state = connectOnce(target)
   }
 
   if (state !== "device")
@@ -281,9 +285,10 @@ export function connect(): boolean {
  * would strand it.
  */
 function disconnect(): void {
-  if (!adbTarget() || deviceOperationCancelled()) return
+  const target = adbTarget()
+  if (!target || deviceOperationCancelled()) return
   try {
-    spawnSync(ADB_BIN, ["disconnect", adbTarget()!], {
+    spawnSync(ADB_BIN, ["disconnect", target], {
       encoding: "utf8",
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
@@ -483,8 +488,7 @@ export function pickerReady(
 ): [boolean, string | null] {
   const act = foregroundActivity()
   if (
-    !act ||
-    !act.includes(PLEX_PKG) ||
+    !act?.includes(PLEX_PKG) ||
     !act.includes(PICKER_ACTIVITY)
   ) {
     return [false, null]
@@ -669,7 +673,7 @@ async function fetchHomeUserNames(): Promise<AliasGroup[]> {
 export async function profileOrder(): Promise<
   AliasGroup[]
 > {
-  if (ADB_PROFILE_ORDER && ADB_PROFILE_ORDER.length) {
+  if (ADB_PROFILE_ORDER?.length) {
     return asGroups(ADB_PROFILE_ORDER)
   }
   const now = Date.now() / 1000
@@ -688,7 +692,7 @@ export async function profileOrder(): Promise<
     )
     names = []
   }
-  if (names && names.length) {
+  if (names?.length) {
     ORDER.titles = names
     ORDER.at = now
     try {

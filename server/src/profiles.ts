@@ -242,8 +242,7 @@ export async function waitForProfile({
     let carry = "" // a partial trailing line held until its newline arrives
 
     while (Date.now() < deadline) {
-      if (cancel && cancel.isSet && cancel.isSet())
-        return null
+      if (cancel?.isSet?.()) return null
 
       const cur = await fh.stat()
       if (cur.size > pos) {

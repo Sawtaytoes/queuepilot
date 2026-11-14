@@ -50,6 +50,21 @@ export function countPickerPresets(
   return [...nums].sort((left, right) => left - right)
 }
 
+/**
+ * A preset list as one string, so a hook can depend on the list's CONTENTS rather than on its
+ * identity: a caller passing an inline `[12, 24, 60]` hands a fresh array every render.
+ */
+export function countPresetKey(
+  presets: readonly number[],
+): string {
+  return presets.join()
+}
+
+/** The preset list that `countPresetKey` was made from. */
+export function countPresetsFromKey(key: string): number[] {
+  return key === "" ? [] : key.split(",").map(Number)
+}
+
 export function isCountPreset(
   value: number,
   defaultValue?: number,

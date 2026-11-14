@@ -15,6 +15,7 @@ import {
   expect,
   test,
 } from "vitest"
+import { defined } from "../defined.js"
 
 const directory = mkdtempSync(
   join(tmpdir(), "qp-person-photo-"),
@@ -377,7 +378,7 @@ describe("person-card chooser photos", () => {
       artworkPath: `/api/people/grace/photo?v=${photos.readPersonPhoto("grace")?.version}`,
     })
     const response = await api.request(
-      selected!.artworkPath!,
+      defined(defined(selected).artworkPath),
     )
     expect(response.status).toBe(200)
     expect(response.headers.get("cache-control")).toContain(
@@ -386,7 +387,9 @@ describe("person-card chooser photos", () => {
     expect(
       Buffer.from(await response.arrayBuffer()),
     ).toEqual(
-      Buffer.from(photos.readPersonPhoto("grace")!.bytes),
+      Buffer.from(
+        defined(photos.readPersonPhoto("grace")).bytes,
+      ),
     )
     const replacement = await sharp({
       create: {

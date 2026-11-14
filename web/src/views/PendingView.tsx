@@ -169,10 +169,11 @@ export function PendingView() {
    */
   const selectedNow = useRef<number[]>([])
 
-  const applySelected = (next: number[]) => {
+  // Stable (a ref and a state setter), so `load` below keeps one identity.
+  const applySelected = useCallback((next: number[]) => {
     selectedNow.current = next
     setSelected(next)
-  }
+  }, [])
 
   /**
    * Which read is the newest.
@@ -210,7 +211,7 @@ export function PendingView() {
         "err",
       )
     }
-  }, [])
+  }, [applySelected])
 
   /**
    * Write a new library selection, then re-read the screen.

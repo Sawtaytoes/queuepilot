@@ -19,6 +19,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -358,9 +359,9 @@ try {
     const { context, page } = await openPage("dark", WIDE)
     await openModal(page, plainKey)
 
-    const bar = (await page
-      .locator("#section-dragbox")
-      .boundingBox())!
+    const bar = defined(
+      await page.locator("#section-dragbox").boundingBox(),
+    )
     const thumbs = page.locator(
       '#section-dragbox [role="slider"]',
     )
@@ -368,7 +369,9 @@ try {
       index: number,
       fraction: number,
     ) => {
-      const thumb = (await thumbs.nth(index).boundingBox())!
+      const thumb = defined(
+        await thumbs.nth(index).boundingBox(),
+      )
       await page.mouse.move(
         thumb.x + thumb.width / 2,
         thumb.y + thumb.height / 2,

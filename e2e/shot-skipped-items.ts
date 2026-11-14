@@ -26,6 +26,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 const PORT = 18852
 const tagArg = process.argv.find((arg) =>
@@ -88,7 +89,7 @@ const EPISODES: Record<
 const posterSvg = (rk: string) => {
   const show =
     SHOWS.find((candidate) => candidate.ratingKey === rk) ??
-    SHOWS[0]!
+    defined(SHOWS[0])
   const words = show.title.split(" ")
   const lines: string[] = []
   let line = ""

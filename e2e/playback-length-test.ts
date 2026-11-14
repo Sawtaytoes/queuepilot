@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { errMessage } from "../server/src/errors.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(path.join(tmpdir(), "playlen-"))
 const SETS_PATH = path.join(SCRATCH, "sets.yaml")
@@ -358,7 +359,9 @@ await ok(
       rotation("Untouched"),
     )
     const reg = await sets.getRegistry()
-    const entry = reg.sets.find((set) => set.id === id)!
+    const entry = defined(
+      reg.sets.find((set) => set.id === id),
+    )
     // The editor posts the EFFECTIVE length on every save — here, the kind's own default.
     await sets.updateSet(id, {
       label: "Untouched Renamed",

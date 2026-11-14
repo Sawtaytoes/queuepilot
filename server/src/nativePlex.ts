@@ -131,6 +131,9 @@ function directOrigin(
     if (url.protocol === "https:") return true
     if (url.protocol !== "http:" || !isLocal) return false
     const octets = url.hostname.split(".").map(Number)
+    // `NaN` compares false, exactly as a missing octet did; the length check below rules
+    // that out anyway.
+    const secondOctet = octets[1] ?? Number.NaN
     return (
       octets.length === 4 &&
       octets.every(
@@ -142,8 +145,8 @@ function directOrigin(
       (octets[0] === 10 ||
         (octets[0] === 192 && octets[1] === 168) ||
         (octets[0] === 172 &&
-          octets[1]! >= 16 &&
-          octets[1]! <= 31))
+          secondOctet >= 16 &&
+          secondOctet <= 31))
     )
   } catch {
     return false

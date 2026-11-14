@@ -2,6 +2,7 @@ import { Badge, Button } from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
 } from "react"
@@ -275,185 +276,212 @@ export function MembersModal() {
     [],
   )
 
+  /**
+   * Load one entry's rows. Only the five keys the effect below passes start a load: `item`,
+   * `vocab` and the entry's draft are read for the unit, the wording and the stored order,
+   * and all three are stable for as long as one entry's panel is open — the load is keyed on
+   * WHICH entry, not on a fresh object identity arriving from an unrelated store refresh.
+   */
+  const loadMembers = useEffectEvent(
+    ({
+      accountUuid,
+      hasSpecials,
+      isCollection,
+      ratingKey,
+      setId,
+    }: {
+      accountUuid: string | null | undefined
+      hasSpecials: boolean
+      isCollection: boolean
+      ratingKey: string
+      setId: string | null
+    }) => {
+      let isStale = false
+
+      setRows(null)
+      setPlexRows([])
+      const storedOrder = entry?.memberDraft
+        ? entry.memberDraft.collectionOrder
+        : isCollection && item && "collectionOrder" in item
+          ? item.collectionOrder || []
+          : []
+      collectionOrderRef.current = storedOrder
+      setCollectionOrder(storedOrder)
+      setNote("")
+      setRecheck(null)
+
+      const qs = [
+        setId ? `set=${encodeURIComponent(setId)}` : "",
+        !isCollection ? "specials=choices" : "",
+        accountUuid
+          ? `uuid=${encodeURIComponent(accountUuid)}`
+          : "",
+        item && "plexServer" in item && item.plexServer
+          ? `plex_server=${encodeURIComponent(item.plexServer)}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("&")
+      const querySuffix = qs ? `?${qs}` : ""
+
+      const load = async () => {
+        if (isCollection) {
+          const res = await api<{
+            children: CollectionChild[]
+          }>(
+            "GET",
+            `/api/collection/${ratingKey}/children${querySuffix}`,
+          )
+
+          return toMemberRows(res.children || [], translate)
+        }
+
+        const res = await api<ShowEpisodes>(
+          "GET",
+          `/api/show/${ratingKey}/episodes${querySuffix}`,
+        )
+
+        return toEpisodeRows(
+          res,
+          unitOf(item, vocab),
+          hasSpecials,
+          item && "plexServer" in item
+            ? (item.plexServer ?? null)
+            : null,
+        )
+      }
+
+      /**
+       * Pass 2, collections only: ask Plex again, with the cache row thrown away first.
+       *
+       * A collection's member order is Plex's own (`collectionSort`), and re-ordering one
+       * moves nothing the derived cache can validate against — no timestamp, no count, no
+       * member. So the cached copy can be wrong for up to its 24 h TTL, which is what the
+       * owner hit: he put a fanedit first in Plex and the app kept the old order
+       * (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+       *
+       * It runs after pass 1 has painted rather than instead of it: opening the panel must
+       * not wait on a Plex round trip, and the correction is worth about a second when it
+       * lands. A failure here is SILENT — pass 1's rows are the ones already on screen and
+       * still the best answer available.
+       */
+      const recheckAgainstPlex = async () => {
+        if (!isCollection) return
+
+        setRecheck("checking")
+
+        try {
+          const res = await api<{
+            children: CollectionChild[]
+            isChanged?: boolean
+          }>(
+            "GET",
+            `/api/collection/${ratingKey}/children${querySuffix ? `${querySuffix}&` : "?"}fresh=1`,
+          )
+
+          if (isStale) return
+
+          const next = toMemberRows(
+            res.children || [],
+            translate,
+          )
+          const owned = new Set(
+            next
+              .map((row) => row.ratingKey)
+              .filter((key): key is string => Boolean(key)),
+          )
+
+          setPlexRows(next)
+          setRows(
+            applyCollectionOrder(
+              next,
+              collectionOrderRef.current,
+            ),
+          )
+          // The user's own ticks OUTRANK the seed on this pass — they may have been editing
+          // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
+          // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
+          setSkips((prev) => {
+            const kept = [...prev].filter((key) =>
+              owned.has(key),
+            )
+            const added = skippedRef.current.filter(
+              (key) => owned.has(key) && !prev.has(key),
+            )
+
+            return new Set([...kept, ...added])
+          })
+          setRecheck(res.isChanged ? "updated" : null)
+
+          // The grid behind this panel names the next member BY POSITION, so a re-order makes
+          // its tile wrong too. The server bumped the cache generation for the same reason;
+          // this is the open page acting on it.
+          if (res.isChanged) {
+            const [data, reg] = await fetchAll()
+
+            if (!isStale) setState({ data, reg })
+          }
+        } catch {
+          if (!isStale) setRecheck(null)
+        }
+      }
+
+      void load()
+        .then((next) => {
+          if (isStale) return
+
+          // Both in one commit: the rows and which of them are already skipped. See the note
+          // on `skippedRef` — the boxes read their seed on the render the rows arrive in.
+          const owned = new Set(
+            next
+              .map((row) => row.ratingKey)
+              .filter((key): key is string => Boolean(key)),
+          )
+
+          setPlexRows(next)
+          setRows(applyCollectionOrder(next, storedOrder))
+          setSkips(
+            new Set(
+              skippedRef.current.filter((key) =>
+                owned.has(key),
+              ),
+            ),
+          )
+          setIncludedSpecials(
+            new Set(
+              includedSpecialsRef.current.filter((key) =>
+                owned.has(key),
+              ),
+            ),
+          )
+
+          return recheckAgainstPlex()
+        })
+        .catch((error: Error) => {
+          if (isStale) return
+
+          setRows([])
+          setNote(
+            `Could not read what is inside this entry: ${error.message}`,
+          )
+        })
+
+      return () => {
+        isStale = true
+      }
+    },
+  )
+
   useEffect(() => {
     if (!ratingKey) return
 
-    let isStale = false
-
-    setRows(null)
-    setPlexRows([])
-    const storedOrder = entry?.memberDraft
-      ? entry.memberDraft.collectionOrder
-      : isCollection && item && "collectionOrder" in item
-        ? item.collectionOrder || []
-        : []
-    collectionOrderRef.current = storedOrder
-    setCollectionOrder(storedOrder)
-    setNote("")
-    setRecheck(null)
-
-    const qs = [
-      setId ? `set=${encodeURIComponent(setId)}` : "",
-      !isCollection ? "specials=choices" : "",
-      accountUuid
-        ? `uuid=${encodeURIComponent(accountUuid)}`
-        : "",
-      item && "plexServer" in item && item.plexServer
-        ? `plex_server=${encodeURIComponent(item.plexServer)}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("&")
-    const querySuffix = qs ? `?${qs}` : ""
-
-    const load = async () => {
-      if (isCollection) {
-        const res = await api<{
-          children: CollectionChild[]
-        }>(
-          "GET",
-          `/api/collection/${ratingKey}/children${querySuffix}`,
-        )
-
-        return toMemberRows(res.children || [], translate)
-      }
-
-      const res = await api<ShowEpisodes>(
-        "GET",
-        `/api/show/${ratingKey}/episodes${querySuffix}`,
-      )
-
-      return toEpisodeRows(
-        res,
-        unitOf(item, vocab),
-        hasSpecials,
-        item && "plexServer" in item
-          ? (item.plexServer ?? null)
-          : null,
-      )
-    }
-
-    /**
-     * Pass 2, collections only: ask Plex again, with the cache row thrown away first.
-     *
-     * A collection's member order is Plex's own (`collectionSort`), and re-ordering one
-     * moves nothing the derived cache can validate against — no timestamp, no count, no
-     * member. So the cached copy can be wrong for up to its 24 h TTL, which is what the
-     * owner hit: he put a fanedit first in Plex and the app kept the old order
-     * (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
-     *
-     * It runs after pass 1 has painted rather than instead of it: opening the panel must
-     * not wait on a Plex round trip, and the correction is worth about a second when it
-     * lands. A failure here is SILENT — pass 1's rows are the ones already on screen and
-     * still the best answer available.
-     */
-    const recheckAgainstPlex = async () => {
-      if (!isCollection) return
-
-      setRecheck("checking")
-
-      try {
-        const res = await api<{
-          children: CollectionChild[]
-          isChanged?: boolean
-        }>(
-          "GET",
-          `/api/collection/${ratingKey}/children${querySuffix ? `${querySuffix}&` : "?"}fresh=1`,
-        )
-
-        if (isStale) return
-
-        const next = toMemberRows(
-          res.children || [],
-          translate,
-        )
-        const owned = new Set(
-          next
-            .map((row) => row.ratingKey)
-            .filter((key): key is string => Boolean(key)),
-        )
-
-        setPlexRows(next)
-        setRows(
-          applyCollectionOrder(
-            next,
-            collectionOrderRef.current,
-          ),
-        )
-        // The user's own ticks OUTRANK the seed on this pass — they may have been editing
-        // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
-        // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
-        setSkips((prev) => {
-          const kept = [...prev].filter((key) =>
-            owned.has(key),
-          )
-          const added = skippedRef.current.filter(
-            (key) => owned.has(key) && !prev.has(key),
-          )
-
-          return new Set([...kept, ...added])
-        })
-        setRecheck(res.isChanged ? "updated" : null)
-
-        // The grid behind this panel names the next member BY POSITION, so a re-order makes
-        // its tile wrong too. The server bumped the cache generation for the same reason;
-        // this is the open page acting on it.
-        if (res.isChanged) {
-          const [data, reg] = await fetchAll()
-
-          if (!isStale) setState({ data, reg })
-        }
-      } catch {
-        if (!isStale) setRecheck(null)
-      }
-    }
-
-    void load()
-      .then((next) => {
-        if (isStale) return
-
-        // Both in one commit: the rows and which of them are already skipped. See the note
-        // on `skippedRef` — the boxes read their seed on the render the rows arrive in.
-        const owned = new Set(
-          next
-            .map((row) => row.ratingKey)
-            .filter((key): key is string => Boolean(key)),
-        )
-
-        setPlexRows(next)
-        setRows(applyCollectionOrder(next, storedOrder))
-        setSkips(
-          new Set(
-            skippedRef.current.filter((key) =>
-              owned.has(key),
-            ),
-          ),
-        )
-        setIncludedSpecials(
-          new Set(
-            includedSpecialsRef.current.filter((key) =>
-              owned.has(key),
-            ),
-          ),
-        )
-
-        return recheckAgainstPlex()
-      })
-      .catch((error: Error) => {
-        if (isStale) return
-
-        setRows([])
-        setNote(
-          `Could not read what is inside this entry: ${error.message}`,
-        )
-      })
-
-    return () => {
-      isStale = true
-    }
-    // `item`/`vocab` are read for the unit and the wording only, and both are stable for as
-    // long as one entry's panel is open — the load is keyed on WHICH entry, not on a fresh
-    // object identity arriving from an unrelated store refresh.
+    return loadMembers({
+      accountUuid,
+      hasSpecials,
+      isCollection,
+      ratingKey,
+      setId,
+    })
   }, [
     accountUuid,
     hasSpecials,

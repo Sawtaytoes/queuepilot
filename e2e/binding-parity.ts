@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -89,17 +90,17 @@ function parseRoute(line: string): RouteRecord {
   )
   if (!match)
     throw new Error(`unparseable route line: ${line}`)
-  // Four capture groups, and the match above already succeeded — the `!`s assert exactly the
-  // guard on the previous line.
+  // Four capture groups, and the match above already succeeded — each `defined()` asserts
+  // exactly the guard on the previous line.
   const [, sid, via, userRepr, acct] = match
   return {
-    sid: sid!,
-    via: via!,
+    sid: defined(sid),
+    via: defined(via),
     plex_user:
       userRepr === "None"
         ? null
-        : userRepr!.replace(/^'(.*)'$/, "$1"),
-    account_id: acct === "None" ? null : acct!,
+        : defined(userRepr).replace(/^'(.*)'$/, "$1"),
+    account_id: acct === "None" ? null : defined(acct),
   }
 }
 
@@ -168,9 +169,9 @@ const pySections = GOLDEN.sections
 // Nullable only for a MISSING/unparseable sets.yaml, and `sets[sid]` only for an id that
 // `reg.order` does not carry — neither is reachable for a committed fixture iterated by its
 // own order list, so each `!` fails exactly where the original did.
-const reg = routing.loadSets(FIXTURE)!
+const reg = defined(routing.loadSets(FIXTURE))
 for (const sid of reg.order) {
-  const cfg = reg.sets[sid]!
+  const cfg = defined(reg.sets[sid])
   const wantSet = pySections[sid].set_sections
   const wantRe = pySections[sid].rewatch_sections
   const gotSet = routing.setSections(cfg)

@@ -24,6 +24,7 @@ import { startFakeMqtt } from "./fake-mqtt.js"
  * a payload the server itself produced (the sets registry, the resolved members list), so
  * the cast lives here once instead of at each of them.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const ROOT = path.resolve(
@@ -167,7 +168,7 @@ try {
   ).find((member) => member.type === "show")
   ok(
     "show member carries next-episode",
-    Boolean(show && show.nextEp),
+    Boolean(show?.nextEp),
   )
 
   // --- 2. The grid renders alphabetically with typed badges ------------------- //

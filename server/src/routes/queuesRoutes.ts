@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import * as cache from "../cache.js"
+import { defined } from "../defined.js"
 import { inProgress } from "../engine/resolve.js"
 import * as routing from "../engine/routing.js"
 import { toWeight } from "../engine/weight.js"
@@ -110,10 +111,9 @@ function isRevivedEntry(
 function placementOf(
   entryObject: EntryObject | null,
 ): "priority" | "random" | null {
-  const placement =
-    entryObject && entryObject.placement
-      ? String(entryObject.placement).trim().toLowerCase()
-      : null
+  const placement = entryObject?.placement
+    ? String(entryObject.placement).trim().toLowerCase()
+    : null
   return placement === "priority" || placement === "random"
     ? placement
     : null
@@ -123,10 +123,9 @@ function placementOf(
 function leadOf(
   entryObject: EntryObject | null,
 ): "once" | "always" | null {
-  const lead =
-    entryObject && entryObject.lead
-      ? String(entryObject.lead).trim().toLowerCase()
-      : null
+  const lead = entryObject?.lead
+    ? String(entryObject.lead).trim().toLowerCase()
+    : null
   return lead === "once" || lead === "always" ? lead : null
 }
 
@@ -156,12 +155,11 @@ function queueTile(
       : null
   // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may stop,
   // as opposed to `episodes` = how long it is.
-  const batchStopsAt =
-    entryObject && entryObject.batch_stops_at
-      ? String(entryObject.batch_stops_at)
-          .trim()
-          .toLowerCase()
-      : null
+  const batchStopsAt = entryObject?.batch_stops_at
+    ? String(entryObject.batch_stops_at)
+        .trim()
+        .toLowerCase()
+    : null
   return {
     key: queueEntry.key,
     raw: tiles.displayFor(queueEntry.value),
@@ -188,12 +186,11 @@ function queueTile(
     // set, so the two are never conflated: a tile has to be able to say "inherited".
     placement: placementOf(entryObject),
     lead: leadOf(entryObject),
-    promote_window:
-      entryObject && entryObject.promote_window
-        ? String(entryObject.promote_window)
-            .trim()
-            .toLowerCase()
-        : null,
+    promote_window: entryObject?.promote_window
+      ? String(entryObject.promote_window)
+          .trim()
+          .toLowerCase()
+      : null,
     batch_stops_at:
       batchStopsAt === "member" || batchStopsAt === "season"
         ? batchStopsAt
@@ -370,7 +367,7 @@ async function filteredParentOf(
   id: string,
 ): Promise<{ id: string; label: string } | null> {
   const set = await sets.getSet(id)
-  if (!set || !set.filtered_from) return null
+  if (!set?.filtered_from) return null
   const parent = await sets.getSet(set.filtered_from)
   return {
     id: set.filtered_from,
@@ -448,7 +445,7 @@ async function entryOwnsPlexItem(
 
 async function historyTarget(setId: string, key: string) {
   const set = await sets.getSet(setId)
-  if (!set || set.source !== "queue") return null
+  if (set?.source !== "queue") return null
   // FIRST MATCH, and correct only because a key names ONE line — the invariant the optional
   // entry `id` exists to hold (2026-09-01). A second line for the same file carries an id and
   // therefore its own key; a hand-written duplicate that carries none is refused by
@@ -793,7 +790,7 @@ export function queuesRoutes(): Hono {
           // `?.` only because `noUncheckedIndexedAccess` cannot see that the loop above wrote
           // this key; upstream indexed it directly and the entry is always there.
           const row = result[s.id]
-          // `cores` is index-aligned with `entries` by contract, which is what the `!` says.
+          // `cores` is index-aligned with `entries` by contract, which is what `defined` says.
           // Same refusal on the PULL path — the provider would happily resolve a bare title
           // against Kavita and paint a cover for an entry the engine will not queue.
           if (row) {
@@ -801,10 +798,11 @@ export function queuesRoutes(): Hono {
             row.items = entries
               .map((entry, index) => ({
                 e: entry,
-                // `cores` is index-aligned with `entries` by contract, which is what the `!` says.
+                // `cores` is index-aligned with `entries` by contract, which is what `defined`
+                // says.
                 core: isLegacyScalarEntry(entry.value)
                   ? tiles.unresolvedTile(entry.value)
-                  : cores[index]!,
+                  : defined(cores[index]),
               }))
               // THE FILTER, applied to a RESOLVED tile — the only point in this request where an
               // entry's library is known. An unresolved one is kept (see `passesFilter`), so a

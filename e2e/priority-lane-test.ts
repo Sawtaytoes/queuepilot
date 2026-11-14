@@ -18,6 +18,7 @@ import type {
   LeadGate,
 } from "../server/src/engine/resolve.js"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 process.env.SETS_PATH =
   "/nonexistent-so-loadSets-is-never-consulted.yaml"
@@ -128,9 +129,10 @@ const entry = (
   rk: string,
   extras: Record<string, unknown> = {},
 ): EntryDescriptor => {
-  const title = (SHOWS.find(
-    (show) => show.ratingKey === rk,
-  ) ?? FILMS.find((film) => film.ratingKey === rk))!.title
+  const title = defined(
+    SHOWS.find((show) => show.ratingKey === rk) ??
+      FILMS.find((film) => film.ratingKey === rk),
+  ).title
   return describeEntry({ ratingKey: rk, title, ...extras })
 }
 

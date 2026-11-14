@@ -11,6 +11,7 @@ import {
   queueTitle,
 } from "../../shared/queueTitle.js"
 import * as cache from "./cache.js"
+import { defined } from "./defined.js"
 import { playbackLength } from "./engine/playbackLength.js"
 import * as resolve from "./engine/resolve.js"
 import * as routing from "./engine/routing.js"
@@ -729,7 +730,7 @@ export async function nativeEvent(
           cursor: plan.cursor,
         }
       validateNativeEvent(plan, event)
-      const item = plan.items[event.index]!
+      const item = defined(plan.items[event.index])
       const access = await grantForPlan(
         plan,
         item.plexServer || plan.homeServerId || "",
@@ -891,9 +892,10 @@ export async function nativeAvatar(
   const person = getPerson(personId),
     accounts = person?.accounts.plex || []
   if (accounts.length !== 1) return null
+  const account = defined(accounts[0])
   const users = await nativeHomeUsers()
   const matches = users.filter((user) =>
-    [user.name, user.username].includes(accounts[0]!),
+    [user.name, user.username].includes(account),
   )
   const thumb =
     matches.length === 1 ? matches[0]?.thumb : null
@@ -941,11 +943,10 @@ export async function avatarBytes(
       url = new URL(target, url).href
       continue
     }
+    const contentType = response.headers.get("content-type")
     if (
       !response.ok ||
-      !response.headers
-        .get("content-type")
-        ?.startsWith("image/")
+      !contentType?.startsWith("image/")
     ) {
       await response.body?.cancel()
       return null
@@ -972,7 +973,7 @@ export async function avatarBytes(
     }
     return {
       bytes: bytes.buffer,
-      type: response.headers.get("content-type")!,
+      type: contentType,
     }
   }
   return null

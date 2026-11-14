@@ -120,12 +120,11 @@ export function orderedPlayableEpisodes<
     }
 
     let insertAt = ordered.length
-    for (
-      let orderedIndex = 0;
-      orderedIndex < ordered.length;
-      orderedIndex += 1
-    ) {
-      const itemDate = dateMs(ordered[orderedIndex]!)
+    for (const [
+      orderedIndex,
+      orderedItem,
+    ] of ordered.entries()) {
+      const itemDate = dateMs(orderedItem)
       if (itemDate != null && itemDate > specialDate) {
         insertAt = orderedIndex
         break

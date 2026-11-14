@@ -6,7 +6,8 @@
 - **Supersedes:** The staging of three house rules at `warn` in
   [ESLint joins Biome, and three house rules are staged at `warn`](2026-11-13-eslint-joins-biome-and-three-house-rules-are-staged.md),
   and that record's note that `e2e/` is not linted.
-- **Superseded by:** —
+- **Superseded by:** In part, [Lint warnings fail CI](2026-11-14-lint-warnings-fail-ci.md),
+  for `--max-warnings`: `lint` now passes `--max-warnings 0` and Biome `--error-on-warnings`.
 
 ## Decision
 

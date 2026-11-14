@@ -8,6 +8,7 @@
 // The full switch path needs the physical TV (see handoff-python-port-status.md D5).
 //
 // Run:  server/node_modules/.bin/tsx e2e/adb-unit-test.ts
+import { defined } from "../server/src/defined.js"
 
 // env BEFORE importing (env.js reads process.env at import).
 process.env.ADB_ENABLED = "false"
@@ -34,20 +35,21 @@ const ok = (
 }
 
 // --- asGroups ---------------------------------------------------------------- //
-// Every `!` below asserts a group the preceding `.length` check has already established;
-// each one erases at compile time, so the emitted assertion is byte-for-byte the original.
+// Every `defined()` below asserts a group the preceding `.length` check has already
+// established, and throws where the read would have thrown.
 console.log("\n=== asGroups ===")
 const flat = adb.asGroups(["A", "B"])
 ok(
   "flat list becomes singleton groups",
   flat.length === 2 &&
-    flat[0]![0] === "A" &&
-    flat[1]![0] === "B",
+    defined(flat[0])[0] === "A" &&
+    defined(flat[1])[0] === "B",
 )
 const mixed = adb.asGroups([["a", "b"], "c"])
 ok(
   "mixed list keeps groups + wraps strings",
-  mixed[0]!.length === 2 && mixed[1]![0] === "c",
+  defined(mixed[0]).length === 2 &&
+    defined(mixed[1])[0] === "c",
 )
 ok(
   "empty/null → []",
@@ -153,9 +155,9 @@ const orderLive = await adb.profileOrder()
 ok(
   "profileOrder honors ADB_PROFILE_ORDER env (incl. flat string wrap)",
   orderLive.length === 4 &&
-    orderLive[0]!.includes("sawtaytoes") &&
-    orderLive[0]!.includes("Bob Smith") &&
-    orderLive[3]![0] === "Demo",
+    defined(orderLive[0]).includes("sawtaytoes") &&
+    defined(orderLive[0]).includes("Bob Smith") &&
+    defined(orderLive[3])[0] === "Demo",
   JSON.stringify(orderLive),
 )
 

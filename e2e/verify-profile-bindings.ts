@@ -338,15 +338,17 @@ try {
   )
   ok(
     "Younger card keeps its own movie ratings (G, not PG)",
-    younger !== undefined &&
-      younger.mr.includes("G") &&
-      !younger.mr.includes("PG"),
+    Boolean(
+      younger?.mr.includes("G") &&
+        !younger.mr.includes("PG"),
+    ),
   )
   ok(
     "Older card keeps its own movie ratings (PG+TV-PG, not blank)",
-    older !== undefined &&
-      older.mr.includes("PG") &&
-      older.mr.includes("TV-PG"),
+    Boolean(
+      older?.mr.includes("PG") &&
+        older.mr.includes("TV-PG"),
+    ),
   )
   await shot("pr2b-dyn-two-binding-edit.png")
 

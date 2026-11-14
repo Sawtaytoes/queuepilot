@@ -39,6 +39,7 @@
 //                      on the mark can still answer with a position up to one grain old. This
 //                      is the floor: no scheduling can beat what the source will not report.
 import assert from "node:assert/strict"
+import { defined } from "../server/src/defined.js"
 
 process.env.RESUME_MIN_MS = "30000"
 process.env.RESUME_MAX_FRACTION = "0.95"
@@ -116,7 +117,7 @@ class VirtualClock {
         }
       }
       if (nextId == null || nextAt > limit) break
-      const task = this.tasks.get(nextId)!
+      const task = defined(this.tasks.get(nextId))
       this.tasks.delete(nextId)
       this.nowMs = Math.max(this.nowMs, task.at)
       task.fn()
@@ -290,7 +291,7 @@ async function measure(
       null,
       `${config.label}: no seek went out for an advance at ${advance}ms`,
     )
-    results.push(latency!)
+    results.push(defined(latency))
   }
   const total = results.reduce(
     (left, right) => left + right,
@@ -408,8 +409,8 @@ for (const row of rows) {
 }
 console.log("")
 
-const before = rows[0]!.withTarget
-const after = rows[rows.length - 1]!.withTarget
+const before = defined(rows[0]).withTarget
+const after = defined(rows[rows.length - 1]).withTarget
 
 check(
   "today reproduces the report: the mean is seconds, not milliseconds",
@@ -436,13 +437,14 @@ check(
 )
 check(
   "DETECTION alone — with the stale-position artifact removed — is under 400 ms, worst case",
-  rows[rows.length - 1]!.detectionOnly.worstMs < 400,
-  `worst ${rows[rows.length - 1]!.detectionOnly.worstMs}ms`,
+  defined(rows[rows.length - 1]).detectionOnly.worstMs <
+    400,
+  `worst ${defined(rows[rows.length - 1]).detectionOnly.worstMs}ms`,
 )
 check(
   "…where it used to be over five seconds",
-  rows[0]!.detectionOnly.worstMs > 5_000,
-  `worst ${rows[0]!.detectionOnly.worstMs}ms`,
+  defined(rows[0]).detectionOnly.worstMs > 5_000,
+  `worst ${defined(rows[0]).detectionOnly.worstMs}ms`,
 )
 check(
   "every step is an improvement on the one before it",
@@ -450,7 +452,7 @@ check(
     (row, index) =>
       index === 0 ||
       row.withTarget.meanMs <=
-        rows[index - 1]!.withTarget.meanMs,
+        defined(rows[index - 1]).withTarget.meanMs,
   ),
   rows
     .map((row) => `${row.withTarget.meanMs}`)
@@ -700,7 +702,7 @@ async function sweepOvershoot({
       null,
       `no skipNext went out for a phase of ${phase}ms`,
     )
-    results.push(overshoot!)
+    results.push(defined(overshoot))
   }
   const total = results.reduce(
     (left, right) => left + right,

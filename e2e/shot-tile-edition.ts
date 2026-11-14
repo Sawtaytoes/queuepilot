@@ -25,6 +25,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 const PORT = 18847
 const tagArg = process.argv.find((arg) =>
@@ -104,7 +105,7 @@ const posterSvg = (rk: string) => {
   const movie =
     LIBRARY.find(
       (candidate) => candidate.ratingKey === rk,
-    ) ?? LIBRARY[0]!
+    ) ?? defined(LIBRARY[0])
   const words = movie.title.split(" ")
   const lines: string[] = []
   let line = ""
@@ -184,7 +185,7 @@ const plexStub = http.createServer((req, res) => {
     const movie =
       LIBRARY.find(
         (candidate) => candidate.ratingKey === rk,
-      ) ?? LIBRARY[0]!
+      ) ?? defined(LIBRARY[0])
     return res.end(
       JSON.stringify({
         MediaContainer: { Metadata: [metadataFor(movie)] },

@@ -2,6 +2,7 @@
 //   WEB_PORT=18917 SHOT_TAG=after server/node_modules/.bin/tsx e2e/shot-entry-modal.ts
 import { chromium } from "./playwright.js"
 import { mkdirSync } from "node:fs"
+import { defined } from "../server/src/defined.js"
 
 const PORT = process.env.WEB_PORT || "18917"
 const TAG = process.env.SHOT_TAG || "after"
@@ -38,12 +39,14 @@ console.log("wrote", path)
 
 // `boundingBox()` is null only for an element that is not rendered; both of these were just
 // waited for and screenshotted, so a null here is a real failure and should throw.
-const box = (await page
-  .locator("#entrymodal")
-  .boundingBox())!
-const btn = (await page
-  .locator("#entrymodal .modalbtns button")
-  .boundingBox())!
+const box = defined(
+  await page.locator("#entrymodal").boundingBox(),
+)
+const btn = defined(
+  await page
+    .locator("#entrymodal .modalbtns button")
+    .boundingBox(),
+)
 const gapRight = Math.round(
   box.x + box.width - (btn.x + btn.width),
 )

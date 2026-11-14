@@ -131,7 +131,7 @@ export async function withContext(
 async function enrichContext(
   now: NowPlaying | null | undefined,
 ): Promise<NowPlaying | null> {
-  if (!now || !now.ratingKey) return now || null
+  if (!now?.ratingKey) return now || null
   if (now.state !== "playing" && now.state !== "paused")
     return { ...now, context: null }
   const matches =
@@ -194,7 +194,7 @@ const nowPayload = (set?: string | null) => ({
   now: lastNow(),
   set:
     set === undefined
-      ? (mqttc.lastState() || {}).set || null
+      ? mqttc.lastState()?.set || null
       : set,
 })
 
@@ -317,7 +317,7 @@ export function startLiveUpdates(): void {
     broadcast("state", state || {})
     // The active-queue badge keys off state.set, so a new session must repaint it even when
     // the Plex-side payload hasn't changed yet.
-    broadcast("now", nowPayload((state || {}).set || null))
+    broadcast("now", nowPayload(state?.set || null))
   })
 
   // Live playback pushes the same way — every state/attribute change on the Shield's
@@ -346,10 +346,7 @@ export function startLiveUpdates(): void {
     // next /api/queues refetches exactly the one show whose watched-state may have moved, and
     // bump the cache generation so a browser's /api/queues ETag busts. Nothing else refetches.
     try {
-      const showRk =
-        LAST_NOW &&
-        LAST_NOW.context &&
-        LAST_NOW.context.showRatingKey
+      const showRk = LAST_NOW?.context?.showRatingKey
       const isPlaybackState =
         LAST_NOW &&
         (LAST_NOW.state === "playing" ||

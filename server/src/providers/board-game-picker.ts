@@ -313,7 +313,7 @@ export function boardGamesProvider({
       ctx: BucketsContext,
     ): Promise<BucketsResult> {
       const entries = (ctx.entries || []).filter(
-        (entry) => entry && entry.id,
+        (entry) => entry?.id,
       )
       if (!entries.length) return { play: [], buckets: [] }
 
@@ -390,7 +390,7 @@ export function boardGamesProvider({
       ctx: BucketsContext,
     ): Promise<Set<string>> {
       const entries = (ctx.entries || []).filter(
-        (entry) => entry && entry.id,
+        (entry) => entry?.id,
       )
       if (!entries.length) return new Set()
 

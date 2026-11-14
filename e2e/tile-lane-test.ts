@@ -279,8 +279,8 @@ try {
   )
   check(
     "the press PATCHes the placement",
-    Boolean(placementWrite) &&
-      JSON.parse(placementWrite!.body).placement ===
+    placementWrite !== undefined &&
+      JSON.parse(placementWrite.body).placement ===
         "priority",
     JSON.stringify(placementWrite ?? null),
   )
@@ -289,9 +289,12 @@ try {
   )
   check(
     "…and an order PATCH follows it, never the other way round",
-    Boolean(orderWrite) &&
-      writes.indexOf(placementWrite!) <
-        writes.indexOf(orderWrite!),
+    orderWrite !== undefined &&
+      // `indexOf(undefined)` is -1: a missing placement write sorts first, as it always has.
+      (placementWrite === undefined
+        ? -1
+        : writes.indexOf(placementWrite)) <
+        writes.indexOf(orderWrite),
     `writes: ${writes.map((write) => write.url.split("/").pop()).join(" → ")}`,
   )
 
@@ -373,8 +376,8 @@ try {
   )
   check(
     "the demote PATCHes placement: random",
-    Boolean(demoteWrite) &&
-      JSON.parse(demoteWrite!.body).placement === "random",
+    demoteWrite !== undefined &&
+      JSON.parse(demoteWrite.body).placement === "random",
     JSON.stringify(demoteWrite ?? null),
   )
   // CHANGED 2026-08-27, and the old claim was the opposite one: "the demote writes NO order".

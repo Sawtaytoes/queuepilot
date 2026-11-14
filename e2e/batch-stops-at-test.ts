@@ -28,6 +28,7 @@ import type {
   PlexClient,
   PlexMetadata,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -132,13 +133,13 @@ const fakeClient = {
     // The capture group of the match that guards the read.
     if (leaves)
       return {
-        Metadata: (LEAVES[leaves[1]!] || []).map(
+        Metadata: (LEAVES[defined(leaves[1])] || []).map(
           (leaf) => ({ ...leaf }),
         ),
       }
     const meta = /^\/library\/metadata\/(\d+)$/.exec(path)
     if (meta) {
-      const rk = meta[1]!
+      const rk = defined(meta[1])
       if (rk === "600" || rk === "700") {
         return {
           Metadata: [
@@ -194,7 +195,7 @@ const titles = async (
   )
   // Every descriptor passed here names a member the fake client resolves; `resolveMember`
   // returns null only for one it cannot find.
-  return res!.items.map((item) => item.title)
+  return defined(res).items.map((item) => item.title)
 }
 
 let failed = 0

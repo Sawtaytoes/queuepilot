@@ -1450,7 +1450,11 @@ await ok(
         def: DEF,
         client: asClient(client),
       })
-      const res = await provider.topupList!({
+      if (!provider.topupList)
+        throw new Error(
+          "the Kavita provider has no topupList",
+        )
+      const res = await provider.topupList({
         setName: "reading",
         setLabel: label,
         window: 3,

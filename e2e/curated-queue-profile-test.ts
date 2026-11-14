@@ -26,6 +26,7 @@ import type {
   EngineBinding,
   PlexClient,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const FAILS: string[] = []
 function ok(
@@ -118,7 +119,7 @@ writeFileSync(
     sections: [5]
 `,
 )
-const loaded = routing.loadSets(routingPath)!
+const loaded = defined(routing.loadSets(routingPath))
 const gatedBinding = routing.bindingFor(loaded.sets.gated)
 const ungatedBinding = routing.bindingFor(
   loaded.sets.ungated,
@@ -228,7 +229,11 @@ const provider = plexProvider({ client: recordingClient })
 const fill = (
   binding: EngineBinding,
   profile: string | null,
-) => provider.profileBinding!(binding, profile)
+) => {
+  if (!provider.profileBinding)
+    throw new Error("the provider has no profileBinding")
+  return provider.profileBinding(binding, profile)
+}
 
 const older = await fill(bindingWith(null), "Older Kids")
 ok(

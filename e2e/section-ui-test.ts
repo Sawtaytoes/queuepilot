@@ -31,6 +31,7 @@ import {
   killServer,
   spawnServer,
 } from "./stubs/server-process.mjs"
+import { defined } from "../server/src/defined.js"
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -202,7 +203,7 @@ try {
     ),
   ]
   const itemFor = (key: string) =>
-    items.find((entry) => entry.key === key)!
+    defined(items.find((entry) => entry.key === key))
 
   const browser = await chromium.launch()
   const page = await browser.newPage({

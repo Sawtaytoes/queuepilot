@@ -1,3 +1,4 @@
+import { defined } from "../defined.js"
 // WEIGHTS — how often one entry comes up when a set is randomized.
 //
 // A weight is **slots per round**, not a probability: weight 3 takes about three of the queue's
@@ -50,7 +51,7 @@ export function toWeight(value: unknown): number {
 
 export const weightOf = (
   bucket: Weighted | null | undefined,
-): number => toWeight(bucket && bucket.weight)
+): number => toWeight(bucket?.weight)
 
 // True when nothing in `buckets` is weighted, i.e. the weighted paths below must reduce to the
 // unweighted ones. Every caller branches on this rather than trusting the maths, because
@@ -111,11 +112,12 @@ export function weightedInterleave<
       )
         best = bucketState // ties keep the earlier bucket
     }
-    // `live` is non-empty here, so the loop above always elected one — the assertions keep the
-    // control flow byte-identical rather than inventing a branch the JS never had.
-    best!.current -= total
-    out.push(best!.items[best!.cursor] as TItem)
-    best!.cursor += 1
+    // `live` is non-empty here, so the loop above always elected one — `defined` keeps the
+    // control flow identical rather than inventing a branch the JS never had.
+    const elected = defined(best)
+    elected.current -= total
+    out.push(elected.items[elected.cursor] as TItem)
+    elected.cursor += 1
   }
   return out
 }
@@ -134,12 +136,12 @@ export function weightedShuffle<T extends Weighted>(
   arr: T[],
   rng: Rng | null = null,
 ): T[] {
-  // Bound through a const so the `typeof` probe survives into the closure; `source.random!()`
-  // keeps `this === rng`, exactly as `rng.random()` did.
+  // Bound through a const so the `typeof` probe survives into the closure. `.call(source)`
+  // keeps `this === rng`, and the method is read at each call, exactly as `rng.random()` did.
   const source = rng
   const random =
     source && typeof source.random === "function"
-      ? () => source.random!()
+      ? () => defined(source.random).call(source)
       : Math.random
   const keyed = arr.map((item, index) => {
     const draw = random()

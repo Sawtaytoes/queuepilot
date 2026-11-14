@@ -130,11 +130,13 @@ jobs:
           echo "$pnpm_global_bin" >> "$GITHUB_PATH"
           $PNPM install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
 
-      # Lint, from the workspace root, over web/, server/ and shared/: Biome (format +
+      # Lint, from the workspace root, over web/, server/, shared/ and e2e/: Biome (format +
       # lint, `biome.json`) and then ESLint (the type-aware house rules, `eslint.config.mjs`),
       # both adopted whole from Charcuterie. Check mode only, never `--write`/`--fix`: CI
-      # reports a problem, it does not repair one. It runs first so a formatting or lint
-      # failure reads as one, rather than as a build problem.
+      # reports a problem, it does not repair one. The script passes
+      # `--error-on-warnings` and `--max-warnings 0`, so a warning fails this step like an
+      # error. It runs first so a formatting or lint failure reads as one, rather than as a
+      # build problem.
       - name: Lint (Biome + ESLint)
         run: $PNPM run lint
 

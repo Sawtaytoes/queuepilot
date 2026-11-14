@@ -20,6 +20,7 @@ import type {
   PlexClient,
   PlexMetadata,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const SETS = "/tmp/sets-pending-test.yaml"
 const QUEUES = "/tmp/queues-pending-test.yaml"
@@ -655,7 +656,9 @@ check("a later arrival is new again", await keysNow(), [
 // oracles that hold it there, whatever this comment used to say: `queue_builder/` was deleted
 // in `7bf01e0`, and no golden file contains an `rk:` or `title:` key.) The duplicate test is a
 // SECOND, looser identity check that asks which ITEM an entry names.
-const animeCfg = routing.loadSets()!.sets.anime!
+const animeCfg = defined(
+  defined(routing.loadSets()).sets.anime,
+)
 const asAdded = {
   ratingKey: "705",
   title: "Detective Days",
@@ -737,7 +740,7 @@ check(
 // identity one, and answering it here would refuse an add the owner may well mean.
 const collDup = await findDuplicateItem(
   fakeClient,
-  routing.loadSets()!.sets.franchise!,
+  defined(defined(routing.loadSets()).sets.franchise),
   await queues.listSet("franchise"),
   "Collection: Bunny Films",
 )
