@@ -167,7 +167,7 @@ export function boardGamesProvider({
     delivery: "pull",
     unit: "play",
     // The picker's play log is lifetime; a queue entry's progress is not. See the header.
-    stampsQueuedAt: true,
+    isStampingQueuedAt: true,
 
     /**
      * The owner's own categories, and ONLY those.

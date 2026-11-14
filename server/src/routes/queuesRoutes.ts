@@ -896,7 +896,7 @@ export function queuesRoutes(): Hono {
       // TV's add (`queueItemAdd.ts`), so the two routes cannot drift apart.
       return context.json(
         await addQueueItem(set, value, position, {
-          allowDuplicate: isDuplicateAllowed,
+          isDuplicateAllowed,
         }),
       )
     } catch (error) {

@@ -419,8 +419,8 @@ export function isCountableEpisode(
 export function isPlayableEpisode(
   ep: EpisodeLike | null | undefined,
   {
-    includeSpecials: isIncludingSpecials = false,
-  }: { includeSpecials?: boolean } = {},
+    isIncludingSpecials = false,
+  }: { isIncludingSpecials?: boolean } = {},
 ): boolean {
   if (!ep) return false
   if (isExtraOrPromo(ep)) return false
@@ -1592,7 +1592,7 @@ export async function showEpisodes(
       if (!isCountableEpisode(episode)) continue
     } else if (
       !isPlayableEpisode(episode, {
-        includeSpecials: !hasRealSeasons,
+        isIncludingSpecials: !hasRealSeasons,
       })
     )
       continue

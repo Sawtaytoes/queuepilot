@@ -149,7 +149,7 @@ export function misterProvider({
     delivery: "pull",
     unit: "play",
     // Nothing to count from. See this file's header.
-    stampsQueuedAt: false,
+    isStampingQueuedAt: false,
 
     /** The installed systems — SNES, NES, Arcade. A queue scopes its searches to these. */
     async libraries(): Promise<ProviderLibrary[]> {

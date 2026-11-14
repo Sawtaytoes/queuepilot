@@ -187,7 +187,7 @@ ok(
 // --- keep_completed / reel exempt the set (even with a window set) ------------ //
 seed()
 res = await queues.sweepCompleted("bob", {
-  keepCompleted: true,
+  isKeepingCompleted: true,
   removeCompletedAfter: "24h",
   now: NOW,
 })
@@ -199,7 +199,7 @@ ok(
 
 seed()
 res = await queues.sweepCompleted("bob", {
-  reel: true,
+  isReel: true,
   removeCompletedAfter: "24h",
   now: NOW,
 })

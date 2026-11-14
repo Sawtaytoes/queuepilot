@@ -127,7 +127,7 @@ export interface PeopleMapping {
 }
 
 export interface PeopleImportReport {
-  imported: boolean
+  isImported: boolean
   reason: string
   /** Where the mapping was read from, or null when there was none. */
   file: string | null
@@ -368,7 +368,7 @@ const report = (
 ): PeopleImportReport => ({
   ...EMPTY,
   file,
-  imported: isImported,
+  isImported,
   reason,
   ...extra,
 })
@@ -380,9 +380,9 @@ const report = (
  * or the validation. There is no flag that writes an unconfirmed mapping, on purpose.
  */
 export function importPeople({
-  force: isForced = false,
+  isForced = false,
 }: {
-  force?: boolean
+  isForced?: boolean
 } = {}): PeopleImportReport {
   const file = mappingPath()
   if (!file)
@@ -596,7 +596,7 @@ export function ensurePeopleImported(): PeopleImportReport {
 
   const result = importPeople()
 
-  if (result.imported) {
+  if (result.isImported) {
     console.log(
       `[people] imported ${result.personIds.length} person(s), ${result.accountCount} account(s), ` +
         `${result.rosterCount} roster place(s) across ${result.groupIds.length} group(s), ` +

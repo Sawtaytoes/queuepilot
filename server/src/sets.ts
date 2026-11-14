@@ -401,8 +401,8 @@ const normalizePromoteWindowForWrite = (
  * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
  */
 type SeasonWrite =
-  | { ok: true; start: string | null; end: string | null }
-  | { ok: false; error: string }
+  | { isOk: true; start: string | null; end: string | null }
+  | { isOk: false; error: string }
 const normalizeSeasonForWrite = (
   rawStart: unknown,
   rawEnd: unknown,
@@ -412,7 +412,7 @@ const normalizeSeasonForWrite = (
   const endText =
     rawEnd == null ? "" : String(rawEnd).trim()
   if (!startText && !endText)
-    return { end: null, ok: true, start: null }
+    return { end: null, isOk: true, start: null }
   const start = parseSeasonDay(startText)
   const end = parseSeasonDay(endText)
   // Named individually, because "the season dates are wrong" sends somebody back to a form
@@ -420,13 +420,13 @@ const normalizeSeasonForWrite = (
   if (startText && !start) {
     return {
       error: `season_start '${startText}' is not a MM-DD date`,
-      ok: false,
+      isOk: false,
     }
   }
   if (endText && !end) {
     return {
       error: `season_end '${endText}' is not a MM-DD date`,
-      ok: false,
+      isOk: false,
     }
   }
   if (!start || !end) {
@@ -434,7 +434,7 @@ const normalizeSeasonForWrite = (
       error:
         "a season window needs BOTH season_start and season_end — send both, or send " +
         "neither to clear it",
-      ok: false,
+      isOk: false,
     }
   }
   // ⚠️ NO ordering check, and that is the feature rather than an omission. `season_start`
@@ -444,7 +444,7 @@ const normalizeSeasonForWrite = (
 
   return {
     end: formatSeasonDay(end),
-    ok: true,
+    isOk: true,
     start: formatSeasonDay(start),
   }
 }
@@ -1526,7 +1526,7 @@ export async function createSet(
       body.season_start,
       body.season_end,
     )
-    if (!season.ok) throw new Error(season.error)
+    if (!season.isOk) throw new Error(season.error)
     if (season.start && season.end) {
       obj.season_start = season.start
       obj.season_end = season.end
@@ -1535,7 +1535,7 @@ export async function createSet(
     // plausible, and a set created with only a non-Plex block would otherwise be written
     // with no source at all and silently play nothing.
     const created = validateBlocks(body.providers)
-    if (!created.ok)
+    if (!created.isOk)
       throw new Error(created.errors.join("; "))
     if (created.blocks.length)
       obj.providers = writableBlocks(created.blocks)
@@ -1731,7 +1731,7 @@ export async function updateSet(
             ? patch.season_end
             : node.get("season_end"),
         )
-        if (!season.ok) throw new Error(season.error)
+        if (!season.isOk) throw new Error(season.error)
         if (!season.start || !season.end) {
           node.delete("season_start")
           node.delete("season_end")
@@ -1947,11 +1947,8 @@ export async function updateSet(
         // block list. An empty list drops the key entirely, which is NOT the same as
         // "no providers" — it means "fall back to the implicit single Plex block", so a
         // set that never had blocks is byte-identical after an unrelated edit.
-        const {
-          ok: isOk,
-          errors,
-          blocks,
-        } = validateBlocks(value)
+        const { isOk, errors, blocks } =
+          validateBlocks(value)
         if (!isOk) throw new Error(errors.join("; "))
         if (!blocks.length) {
           node.delete("providers")

@@ -73,7 +73,7 @@ const r1 = await queues.markDone(
   ["title:Movie A", "rk:2002"],
   NOW,
 )
-ok("markDone changes", r1.changed === true)
+ok("markDone changes", r1.hasChanged === true)
 const list = await queues.listSet("bob")
 const movieA = findEntry(list, "title:Movie A")
 const entry2002 = findEntry(list, "rk:2002")
@@ -98,7 +98,7 @@ ok(
 )
 
 const r2 = await queues.clearDone("bob", ["title:Movie A"])
-ok("clearDone changes", r2.changed === true)
+ok("clearDone changes", r2.hasChanged === true)
 const list2 = await queues.listSet("bob")
 const a2 = findEntry(list2, "title:Movie A")
 ok(

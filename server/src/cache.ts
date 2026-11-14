@@ -61,7 +61,7 @@ export interface CollectionValidator {
  * the caller can serve it AND kick a background refresh. */
 export interface SectionListingHit<T> {
   payload: T
-  stale: boolean
+  isStale: boolean
 }
 
 /** One history row as `addHistory` takes it. */
@@ -621,7 +621,8 @@ export async function getSectionListing<T = unknown>(
   if (!row) return null
   return {
     payload: payloadOf<T>(row),
-    stale: now() - Number(row.fetched_at) > SECTION_SOFT_MS,
+    isStale:
+      now() - Number(row.fetched_at) > SECTION_SOFT_MS,
   }
 }
 

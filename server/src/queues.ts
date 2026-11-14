@@ -378,8 +378,8 @@ export async function removeCompleted(
 
 /** `sweepCompleted()`'s options — the set's own consumption knobs, plus a clock for tests. */
 export interface SweepOptions {
-  keepCompleted?: boolean
-  reel?: boolean
+  isKeepingCompleted?: boolean
+  isReel?: boolean
   removeCompletedAfter?: string | null
   /** Epoch SECONDS; defaults to the wall clock. */
   now?: number
@@ -396,8 +396,8 @@ export async function sweepCompleted(
   opts: SweepOptions = {},
 ): Promise<{ removed: number }> {
   const {
-    keepCompleted: isKeepingCompleted = false,
-    reel: isReel = false,
+    isKeepingCompleted = false,
+    isReel = false,
     removeCompletedAfter = DEFAULT_REMOVE_COMPLETED_AFTER,
     now,
   } = opts
@@ -473,7 +473,7 @@ export interface AddItemOptions {
    * three windows of one film at three positions. Saying yes mints an `id` for the new line,
    * which is what makes the two independently addressable.
    */
-  allowDuplicate?: boolean
+  isDuplicateAllowed?: boolean
 }
 
 // Add a new entry. `value` is a string (title), a number (ratingKey), or a mapping — the API
@@ -488,9 +488,7 @@ export async function addItem(
   setName: string,
   value: EntryValue,
   position: "top" | "bottom" = "top",
-  {
-    allowDuplicate: isDuplicateAllowed = false,
-  }: AddItemOptions = {},
+  { isDuplicateAllowed = false }: AddItemOptions = {},
 ): Promise<{ added: boolean; key: string }> {
   const owner = await entryOwner(setName)
   return withLock(async () => {
@@ -863,7 +861,7 @@ export async function stampQueuedAt(
 // Tag the given entry keys **done** in place — kept in the file, excluded from play.
 // Scalar entries become mappings so they can carry `done` + `done_at` (epoch seconds). Match is
 // by entryKey, which names ONE line, so "every match" here is the same single line a
-// `rewriteEntry` setter's first match would find. Returns { changed: bool }.
+// `rewriteEntry` setter's first match would find. Returns { hasChanged: bool }.
 export async function markDone(
   setName: string,
   keepKeys:
@@ -871,9 +869,9 @@ export async function markDone(
     | null
     | undefined,
   nowSec: number | null = null,
-): Promise<{ changed: boolean }> {
+): Promise<{ hasChanged: boolean }> {
   const want = new Set((keepKeys || []).filter(Boolean))
-  if (!want.size) return { changed: false }
+  if (!want.size) return { hasChanged: false }
   const now =
     nowSec == null
       ? Math.floor(Date.now() / 1000)
@@ -882,7 +880,8 @@ export async function markDone(
   return withLock(async () => {
     const doc = await readDoc()
     const seq = doc.get(owner)
-    if (!(seq instanceof YAMLSeq)) return { changed: false }
+    if (!(seq instanceof YAMLSeq))
+      return { hasChanged: false }
     let hasChanged = false
     for (
       let index = 0;
@@ -917,26 +916,27 @@ export async function markDone(
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed: hasChanged }
+    return { hasChanged }
   })
 }
 
 // Un-mark the given entry keys — strip `done` + `done_at` (stale-done recovery). Match is by
-// entryKey, one key one line, exactly as `markDone`. Returns { changed: bool }.
+// entryKey, one key one line, exactly as `markDone`. Returns { hasChanged: bool }.
 export async function clearDone(
   setName: string,
   keepKeys:
     | (string | null | undefined)[]
     | null
     | undefined,
-): Promise<{ changed: boolean }> {
+): Promise<{ hasChanged: boolean }> {
   const want = new Set((keepKeys || []).filter(Boolean))
-  if (!want.size) return { changed: false }
+  if (!want.size) return { hasChanged: false }
   const owner = await entryOwner(setName)
   return withLock(async () => {
     const doc = await readDoc()
     const seq = doc.get(owner)
-    if (!(seq instanceof YAMLSeq)) return { changed: false }
+    if (!(seq instanceof YAMLSeq))
+      return { hasChanged: false }
     let hasChanged = false
     for (
       let index = 0;
@@ -959,7 +959,7 @@ export async function clearDone(
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed: hasChanged }
+    return { hasChanged }
   })
 }
 
@@ -1474,13 +1474,13 @@ export async function setCollectionOrder(
  */
 export async function deleteSetKey(
   setName: string,
-): Promise<{ deleted: boolean }> {
+): Promise<{ isDeleted: boolean }> {
   return withLock(async () => {
     const doc = await readDoc()
-    if (!doc.has(setName)) return { deleted: false }
+    if (!doc.has(setName)) return { isDeleted: false }
     doc.delete(setName)
     await writeDoc(doc)
-    return { deleted: true }
+    return { isDeleted: true }
   })
 }
 

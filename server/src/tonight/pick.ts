@@ -380,10 +380,10 @@ export function playItemLabel(item: PlayItem): {
 /** The first entry a curated queue has not finished with — the head of its lineup, read out
  *  of this app's own store rather than out of the provider. */
 export function firstUnfinishedEntry(
-  entries: readonly { done: boolean; display: string }[],
+  entries: readonly { isDone: boolean; display: string }[],
 ): string | null {
   for (const entry of entries) {
-    if (!entry.done && entry.display) return entry.display
+    if (!entry.isDone && entry.display) return entry.display
   }
   return null
 }

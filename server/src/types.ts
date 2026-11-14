@@ -1194,7 +1194,7 @@ export interface BucketsResult {
   /** Priority-lane entry keys held back this scan by an unexpired lead window. */
   suppressed?: string[]
   /** Set by the rewatch branch, which returns a single pick rather than a lineup. */
-  rewatch?: boolean
+  isRewatch?: boolean
   /** Kavita returns its buckets alongside `play` so the caller can render the pool. */
   buckets?: unknown[]
   /**
@@ -1502,7 +1502,7 @@ export interface BucketsContext {
 
 /** Options for `handoff()`. Plex reads all of them; Kavita ignores them entirely. */
 export interface HandoffOptions {
-  useFsm?: boolean
+  isFsmUsed?: boolean
   requiredProfile?: string | null
   device?: Device | null
   cancel?: CancelFlag | null
@@ -1542,7 +1542,7 @@ export interface Provider {
    * Board Game Picker needs it because its play log is the household's book of record and
    * goes back years.
    */
-  stampsQueuedAt?: boolean
+  isStampingQueuedAt?: boolean
   /**
    * Can this provider play a SECTION of an item — begin at an offset and stop at one?
    *
@@ -1559,7 +1559,7 @@ export interface Provider {
    * reading queue whose token is not configured
    * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
    */
-  playsSections?: boolean
+  hasSectionPlayback?: boolean
 
   // --- required -------------------------------------------------------------- //
   buckets(ctx: BucketsContext): Promise<BucketsResult>
@@ -1674,7 +1674,7 @@ export interface Provider {
     itemId: string,
     opts?: {
       uuid?: string | null
-      includeSpecialChoices?: boolean
+      isIncludingSpecialChoices?: boolean
     },
   ): Promise<UnitList | null>
   /**

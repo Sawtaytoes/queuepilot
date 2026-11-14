@@ -186,8 +186,8 @@ export async function applyQueueWriteSide(
     await exhaustion.restartIfExhausted(setName)
   }
   await queues.sweepCompleted(setName, {
-    keepCompleted: Boolean(cfg.keep_completed),
-    reel: Boolean(cfg.reel),
+    isKeepingCompleted: Boolean(cfg.keep_completed),
+    isReel: Boolean(cfg.reel),
     removeCompletedAfter: cfg.remove_completed_after,
   })
   return { marked: isMarking ? newly.length : 0 }
@@ -208,7 +208,7 @@ export async function reconcileQueue(
     binding: EngineBinding
     token: string
   },
-): Promise<{ reconciled: boolean }> {
+): Promise<{ isReconciled: boolean }> {
   const reg = routing.loadSets()
   const cfg = reg && reg.sets[setName]
   // Only a CURATED queue has entries to mark. A rotation channel's lineup is computed, and a
@@ -223,7 +223,7 @@ export async function reconcileQueue(
     cfg.source !== "queue" ||
     cfg.reel
   )
-    return { reconciled: false }
+    return { isReconciled: false }
   try {
     const { binding, provider } =
       scope || (await scopedBinding(cfg, profileTitle))
@@ -252,12 +252,12 @@ export async function reconcileQueue(
       console.log(
         `[finished] ${setName}: marked ${marked} finished after playback`,
       )
-    return { reconciled: true }
+    return { isReconciled: true }
   } catch (error) {
     console.log(
       `[finished] reconcile of '${setName}' skipped (${errMessage(error)})`,
     )
-    return { reconciled: false }
+    return { isReconciled: false }
   }
 }
 

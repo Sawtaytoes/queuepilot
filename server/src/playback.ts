@@ -1193,8 +1193,8 @@ export async function currentSession({
   timeoutMs = RESUME_POLL_TIMEOUT_MS,
   playQueueID = null,
   userUuid = null,
-  includeTelemetry: isTelemetryIncluded = false,
-  throwOnError: isThrowingOnError = false,
+  isTelemetryIncluded = false,
+  isThrowingOnError = false,
 }: {
   device?: Device | null
   /**
@@ -1206,8 +1206,8 @@ export async function currentSession({
   timeoutMs?: number
   playQueueID?: number | string | null
   userUuid?: string | null
-  includeTelemetry?: boolean
-  throwOnError?: boolean
+  isTelemetryIncluded?: boolean
+  isThrowingOnError?: boolean
 } = {}): Promise<CurrentSession | null> {
   let data: PlexReqJson
   try {

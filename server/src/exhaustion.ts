@@ -109,12 +109,12 @@ export async function isExhausted(
  */
 export async function restartIfExhausted(
   setName: string,
-): Promise<{ restarted: boolean }> {
+): Promise<{ isRestarted: boolean }> {
   if (!(await isExhausted(setName)))
-    return { restarted: false }
+    return { isRestarted: false }
   await _reset(setName)
   console.log(
     `[finished] ${setName}: every entry is done — cleared, and a new round starts`,
   )
-  return { restarted: true }
+  return { isRestarted: true }
 }

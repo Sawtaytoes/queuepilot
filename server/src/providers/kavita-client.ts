@@ -333,8 +333,8 @@ export function kavitaClient({
     path: string,
     {
       body = null,
-      retryOn401: isRetryAllowed = true,
-    }: { body?: unknown; retryOn401?: boolean } = {},
+      isRetryAllowed = true,
+    }: { body?: unknown; isRetryAllowed?: boolean } = {},
   ): Promise<T | null> {
     const bearer = await token()
     const headers: Record<string, string> = {
@@ -356,7 +356,7 @@ export function kavitaClient({
       jwtAt = 0
       return req<T>(method, path, {
         body,
-        retryOn401: false,
+        isRetryAllowed: false,
       })
     }
     if (!res.ok)

@@ -117,7 +117,7 @@ const DIRECTORIES: readonly {
 ]
 
 interface Options {
-  apply: boolean
+  isApplying: boolean
   cache: boolean
   from: string
   images: boolean
@@ -138,7 +138,7 @@ function parseArgs(argv: readonly string[]): Options {
   const queues =
     process.env.QUEUES_PATH || "/config/queues.yaml"
   return {
-    apply: argv.includes("--apply"),
+    isApplying: argv.includes("--apply"),
     cache: !argv.includes("--no-cache"),
     from:
       argFor(argv, "--from") ||
@@ -356,7 +356,7 @@ function main(): number {
     }
 
     const staged = path.join(options.to, STAGED_NAME)
-    if (options.apply) {
+    if (options.isApplying) {
       const pending = `${staged}.staging`
       copyFileSync(copy, pending)
       adoptGroup(pending, options.to)
@@ -380,10 +380,14 @@ function main(): number {
         continue
       }
       const target = path.join(options.to, directory.to)
-      const result = copyTree(source, target, options.apply)
+      const result = copyTree(
+        source,
+        target,
+        options.isApplying,
+      )
       console.log(
         `${directory.from}/ → ${directory.to}/ — ` +
-          `${result.written} file(s) ${options.apply ? "copied" : "would be copied"}, ` +
+          `${result.written} file(s) ${options.isApplying ? "copied" : "would be copied"}, ` +
           `${result.kept} already there`,
       )
     }

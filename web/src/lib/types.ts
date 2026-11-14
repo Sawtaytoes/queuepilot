@@ -250,7 +250,7 @@ export type QueueItem = {
    * owner. The tile then renders its title as plain text — a dead link is worse than none.
    */
   webUrl?: string | null
-  pending?: boolean
+  isPending?: boolean
 }
 
 /** One resolved member of a rotation channel (`GET /api/sets/:id/members`). */

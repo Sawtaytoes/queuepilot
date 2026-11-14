@@ -95,7 +95,7 @@ describe("importYaml", () => {
   })
 
   test("counts what it wrote", () => {
-    expect(first.imported).toBe(true)
+    expect(first.isImported).toBe(true)
     expect(first.entryCount).toBe(2)
     expect(first.dismissedCount).toBe(2)
     expect(first.seenThrough).toBe(1755000000)
@@ -124,7 +124,7 @@ describe("importYaml", () => {
 
   test("is IDEMPOTENT — a second run over unchanged YAML writes nothing", () => {
     const again = importYaml()
-    expect(again.imported).toBe(false)
+    expect(again.isImported).toBe(false)
     expect(again.reason).toMatch(/has not changed/)
     // …and the rows are exactly what the first run left.
     expect(
@@ -142,7 +142,7 @@ describe("importYaml", () => {
       `${SETS}- id: carol\n  label: Carol\n  kind: picks\n  source: queue\n`,
     )
     const third = importYaml()
-    expect(third.imported).toBe(true)
+    expect(third.isImported).toBe(true)
     expect(third.setIds).toEqual([
       "bob",
       "bob_alice",
@@ -171,8 +171,8 @@ describe("importYaml", () => {
   })
 
   test("imports anyway when it is told to, and still copies aside first", () => {
-    const forced = importYaml({ force: true })
-    expect(forced.imported).toBe(true)
+    const forced = importYaml({ isForced: true })
+    expect(forced.isImported).toBe(true)
     expect(forced.setIds).toContain("dave")
     expect(forced.reason).toBe("forced")
     expect(forced.backupDir).not.toBeNull()

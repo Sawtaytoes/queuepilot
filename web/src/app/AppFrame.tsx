@@ -108,7 +108,9 @@ export function AppFrame() {
       <Suspense fallback={null}>
         {overlays.setModal ? <SetModal /> : null}
         {overlays.dynModal ? <DynModal /> : null}
-        {overlays.peopleModal ? <PeopleModal /> : null}
+        {overlays.isPeopleModalOpen ? (
+          <PeopleModal />
+        ) : null}
         {overlays.groupsModal ? <GroupsModal /> : null}
         {overlays.startModal ? <StartModal /> : null}
         {overlays.membersModal ? <MembersModal /> : null}

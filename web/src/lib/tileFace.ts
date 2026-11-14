@@ -197,7 +197,7 @@ export type TileFace = {
   fullTitle?: string
   year: number | null
   next: string
-  nextDone: boolean
+  isNextDone: boolean
   /** The collection a borrowed face came from (null for a plain series/movie). */
   from: string | null
   /**
@@ -307,7 +307,7 @@ export function tileFace(item: TileEntry): TileFace {
     edition: item.editionTitle ?? null,
     from: null,
     next: "",
-    nextDone: false,
+    isNextDone: false,
     ratingKey: item.ratingKey,
     title: item.title,
     year: item.year,
@@ -321,7 +321,7 @@ export function tileFace(item: TileEntry): TileFace {
   ) {
     base.next =
       item.type === "show" ? "Any episode" : "Any item"
-    base.nextDone = false
+    base.isNextDone = false
 
     return base
   }
@@ -343,7 +343,7 @@ export function tileFace(item: TileEntry): TileFace {
           : `${label} · ${nextEp.title}`
     } else if (item.resolved && !item.isNextEpFailed) {
       base.next = allWatchedLabel(unit)
-      base.nextDone = true
+      base.isNextDone = true
     }
 
     return base
@@ -363,7 +363,7 @@ export function tileFace(item: TileEntry): TileFace {
 
     if (item.resolved && !item.isNextEpFailed) {
       base.next = allWatchedLabel(item.unit ?? "episode")
-      base.nextDone = true
+      base.isNextDone = true
 
       return base
     }
@@ -396,7 +396,7 @@ export function tileFace(item: TileEntry): TileFace {
         : nextEp.position && orderCount
           ? `${nextEp.position} of ${orderCount}`
           : "",
-    nextDone: false,
+    isNextDone: false,
     ratingKey: nextEp.memberRatingKey || item.ratingKey,
     title: withoutCollectionPrefix(
       nextEp.member,

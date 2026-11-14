@@ -533,8 +533,8 @@ describe("firstUnfinishedEntry — the head of a curated queue, off our own stor
   test("skips what is already done", () => {
     expect(
       firstUnfinishedEntry([
-        { display: "Watched Thing", done: true },
-        { display: "Next Thing", done: false },
+        { display: "Watched Thing", isDone: true },
+        { display: "Next Thing", isDone: false },
       ]),
     ).toBe("Next Thing")
   })
@@ -542,7 +542,7 @@ describe("firstUnfinishedEntry — the head of a curated queue, off our own stor
   test("answers null when the whole queue is finished", () => {
     expect(
       firstUnfinishedEntry([
-        { display: "Done", done: true },
+        { display: "Done", isDone: true },
       ]),
     ).toBeNull()
     expect(firstUnfinishedEntry([])).toBeNull()
@@ -550,7 +550,9 @@ describe("firstUnfinishedEntry — the head of a curated queue, off our own stor
 
   test("skips an entry with nothing to print rather than showing a blank line", () => {
     expect(
-      firstUnfinishedEntry([{ display: "", done: false }]),
+      firstUnfinishedEntry([
+        { display: "", isDone: false },
+      ]),
     ).toBeNull()
   })
 })

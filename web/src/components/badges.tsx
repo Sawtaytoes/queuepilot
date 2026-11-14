@@ -38,7 +38,7 @@ export function TypeBadge({
    * every page load is exactly the bug this phase exists to remove. A placeholder at
    * badge height keeps the caption block from growing when the real badge arrives.
    */
-  if ((item as QueueItem).pending) {
+  if ((item as QueueItem).isPending) {
     return (
       <Skeleton
         blockSize="1.25rem"

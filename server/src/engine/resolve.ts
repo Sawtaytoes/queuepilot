@@ -241,7 +241,7 @@ export interface EntryDescriptor {
    * resolver, so a stale hand-typed line stops one entry rather than a whole file
    * (decision `2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key`).
    */
-  legacy: boolean
+  isLegacy: boolean
 }
 
 /**
@@ -495,7 +495,7 @@ export function describe(entry: unknown): EntryDescriptor {
           ? Number(entry.done_at)
           : null,
       raw: entry,
-      legacy: false,
+      isLegacy: false,
     }
   }
   if (isRatingKey(entry)) {
@@ -521,7 +521,7 @@ export function describe(entry: unknown): EntryDescriptor {
       done: false,
       doneAt: null,
       raw: entry,
-      legacy: true,
+      isLegacy: true,
     }
   }
   const { title, year, guid } = parseTitleString(entry)
@@ -549,7 +549,7 @@ export function describe(entry: unknown): EntryDescriptor {
     done: false,
     doneAt: null,
     raw: entry,
-    legacy: true,
+    isLegacy: true,
   }
 }
 
@@ -618,7 +618,7 @@ export function loadEntries(
   seq.forEach((entry, index) => {
     const desc = describe(entry)
     if (desc.key == null) return
-    if (desc.legacy) {
+    if (desc.isLegacy) {
       complainOnce(
         setName,
         index,

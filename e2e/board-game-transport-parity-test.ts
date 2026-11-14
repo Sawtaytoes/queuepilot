@@ -940,7 +940,7 @@ const { importBoardGames } = await import(
 const absorb = importBoardGames()
 ok(
   "the fixture collection absorbed",
-  absorb.imported,
+  absorb.isImported,
   absorb.reason,
 )
 ok(

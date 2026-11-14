@@ -553,7 +553,7 @@ async function startSessionOnDevice(
     }
     if (res.last)
       _publishLastPlayed(lastPlayedFromItem(res.last))
-  } else if (res.rewatch) {
+  } else if (res.isRewatch) {
     if (!res.play?.length) {
       _publishState({
         error:
@@ -689,7 +689,7 @@ async function startSessionOnDevice(
   // serve a section offers NO section rather than accepting one and playing the item in full
   // (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
   const isSectionPlaybackSupported =
-    provider.playsSections === true
+    provider.hasSectionPlayback === true
 
   // The head's start is FREE. Companion `playMedia` already takes an `offset` that applies to
   // the item it starts on, and that offset IS the section start — no poll, no seek, no delay.
@@ -699,7 +699,7 @@ async function startSessionOnDevice(
     ? section.asCandidate(playItems[0] as PlexPlayItem)
     : null
   resumeMs = section.headStartOffsetMs(head, resumeMs, {
-    playsSections: isSectionPlaybackSupported,
+    hasSectionPlayback: isSectionPlaybackSupported,
   })
 
   // Arm resume-on-advance for THIS lineup before playing: playMedia resumes only the head, so
@@ -728,7 +728,7 @@ async function startSessionOnDevice(
     ),
     {
       isHeadStartApplied: true,
-      playsSections: isSectionPlaybackSupported,
+      hasSectionPlayback: isSectionPlaybackSupported,
     },
   )
   // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
@@ -863,7 +863,7 @@ async function startSessionOnDevice(
   let result: HandoffResult & { cancelled?: boolean }
   if (PLAYBACK_FSM) {
     result = await provider.handoff(artifact, {
-      useFsm: true,
+      isFsmUsed: true,
       requiredProfile: required,
       device: device as Device | null,
       cancel,
@@ -882,7 +882,7 @@ async function startSessionOnDevice(
     }
     if (isCancelled(cancel)) return { cancelled: true }
     result = await provider.handoff(artifact, {
-      useFsm: false,
+      isFsmUsed: false,
       device: device as Device | null,
     })
   }

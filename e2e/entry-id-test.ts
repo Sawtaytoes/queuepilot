@@ -276,7 +276,7 @@ const minted = await queues.addItem(
   "demo",
   { ...FILM },
   "bottom",
-  { allowDuplicate: true },
+  { isDuplicateAllowed: true },
 )
 ok("an explicit duplicate add lands", minted.added)
 ok(
@@ -344,7 +344,7 @@ same(
 // Minting is CHECKED against the file, never trusted to entropy. Ten more copies, all unique.
 for (let attempt = 0; attempt < 10; attempt += 1) {
   await queues.addItem("demo", { ...FILM }, "bottom", {
-    allowDuplicate: true,
+    isDuplicateAllowed: true,
   })
 }
 const many = await keysOf("demo")

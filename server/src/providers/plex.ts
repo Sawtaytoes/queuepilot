@@ -206,7 +206,7 @@ export function plexProvider({
      * `providers/config.ts PLAYS_SECTIONS` is the same fact keyed by kind, for the API paths
      * that must answer without a token.
      */
-    playsSections: true,
+    hasSectionPlayback: true,
 
     /**
      * Libraries, for the queue editor's provider block.
@@ -293,11 +293,10 @@ export function plexProvider({
       itemId: string,
       {
         uuid = null,
-        includeSpecialChoices:
-          isIncludingSpecialChoices = false,
+        isIncludingSpecialChoices = false,
       }: {
         uuid?: string | null
-        includeSpecialChoices?: boolean
+        isIncludingSpecialChoices?: boolean
       } = {},
     ): Promise<UnitList | null> {
       let scope = {}
@@ -520,7 +519,7 @@ export function plexProvider({
           } as PlexPlayItem)
         }
 
-        return { play, rewatch: true }
+        return { play, isRewatch: true }
       }
 
       // What goes in the queue UP FRONT — one window at most. An infinite lineup cannot be
@@ -579,7 +578,7 @@ export function plexProvider({
     async handoff(
       artifact: PlexArtifact,
       {
-        useFsm: isFsmUsed = false,
+        isFsmUsed = false,
         requiredProfile = null,
         device = null,
         cancel = null,
