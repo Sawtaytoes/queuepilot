@@ -17,17 +17,20 @@ import { hostval } from "./hostConfig.js"
 const str = (name: string, fallback: string): string =>
   process.env[name] ?? fallback
 const int = (name: string, fallback: number): number => {
-  const n = parseInt(process.env[name] ?? "", 10)
-  return Number.isFinite(n) ? n : fallback
+  const parsed = parseInt(process.env[name] ?? "", 10)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 const float = (name: string, fallback: number): number => {
-  const n = parseFloat(process.env[name] ?? "")
-  return Number.isFinite(n) ? n : fallback
+  const parsed = parseFloat(process.env[name] ?? "")
+  return Number.isFinite(parsed) ? parsed : fallback
 }
-const bool = (name: string, fallback: boolean): boolean => {
-  const v = process.env[name]
-  if (v == null || v === "") return fallback
-  return ["1", "true", "yes"].includes(v.toLowerCase())
+const bool = (
+  name: string,
+  isDefaultOn: boolean,
+): boolean => {
+  const value = process.env[name]
+  if (value == null || value === "") return isDefaultOn
+  return ["1", "true", "yes"].includes(value.toLowerCase())
 }
 // A JSON-valued env var, with the Python default reproduced as a literal. A malformed value
 // falls back rather than crashing boot — config.py would raise here, but this process also
@@ -40,10 +43,10 @@ const bool = (name: string, fallback: boolean): boolean => {
 // crash this function exists to avoid. The consumers of the two JSON knobs
 // (PROFILE_SET_MAP, ADB_PROFILE_ORDER) already tolerate junk values.
 const json = <T>(name: string, fallback: T): T => {
-  const v = process.env[name]
-  if (v == null || v.trim() === "") return fallback
+  const value = process.env[name]
+  if (value == null || value.trim() === "") return fallback
   try {
-    return JSON.parse(v) as T
+    return JSON.parse(value) as T
   } catch {
     console.log(
       `[env] ${name} is not valid JSON — using the default`,
@@ -72,8 +75,8 @@ export const WATCH_COUNT_ACCOUNTS = String(
   str("WATCH_COUNT_ACCOUNTS", "1,11111111,22222222"),
 )
   .split(",")
-  .map((a) => parseInt(a.trim(), 10))
-  .filter((n) => Number.isFinite(n))
+  .map((part) => parseInt(part.trim(), 10))
+  .filter((accountId) => Number.isFinite(accountId))
 
 // --- curated queues ---------------------------------------------------------- //
 // Episodes queued for a series entry per play, TV-style (it resumes next scan). DEFAULT is 1
@@ -169,6 +172,7 @@ export const PLEX_LOCAL_URL = String(
 // A Plex playQueue has no per-item resume point and playMedia's `offset` only applies to the
 // item it starts on, so episodes 2..N restart at 0:00. resume.js seeks them to their own
 // marker after the player advances. RESUME_ON_ADVANCE=0 turns the whole thing off.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const RESUME_ON_ADVANCE = bool(
   "RESUME_ON_ADVANCE",
   true,
@@ -210,6 +214,7 @@ export const RESUME_RETRY_MS = int("RESUME_RETRY_MS", 400)
 // reported a playing state it could not name (`ratingKey: null`) on this setup. An event
 // without a usable ratingKey is ignored rather than guessed at, so the poll still covers it —
 // but RESUME_PUSH_TRIGGER=0 turns the whole path off without a redeploy.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const RESUME_PUSH_TRIGGER = bool(
   "RESUME_PUSH_TRIGGER",
   true,
@@ -260,6 +265,7 @@ export const PROFILE_SET_MAP = json<Record<string, string>>(
 // Closes the loop on a profile gate: instead of only waiting for a human to pick the profile
 // on screen, drive the Shield's picker with D-pad events. OFF by default — it injects key
 // events into whatever is on the family TV, so it must be opted into explicitly.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const ADB_ENABLED = bool("ADB_ENABLED", false)
 export const ADB_BIN = str("ADB_BIN", "adb")
 export const ADB_TARGET = str(
@@ -302,6 +308,7 @@ export const ADB_PICKER_WAIT_SECONDS = int(
 // force-stop + relaunch cold-starts the app straight back to the picker. Only ever done when
 // a switch is actually needed and the grace period found no picker; it does kill whatever
 // Plex was playing, which is why it is a knob.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const ADB_RESTART_TO_PICKER = bool(
   "ADB_RESTART_TO_PICKER",
   true,
@@ -319,6 +326,7 @@ export const ADB_PLEX_LAUNCH_WAIT_SECONDS = int(
 // which SAMPLES real state and drives VERIFIED, RETRIED, NON-DESTRUCTIVE transitions
 // (unreachable -> device_on -> plex_foreground -> signed_in(required) -> playing).
 // Flip with PLAYBACK_FSM=true once verified on-Shield. See docs/playback-state-machine-design.md.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const PLAYBACK_FSM = bool("PLAYBACK_FSM", false)
 // The Plex Companion TCP port on the client (playMedia lands here). The FSM probes this
 // immediately before firing play so a closed / mid-nav Plex surfaces as "not ready, re-open

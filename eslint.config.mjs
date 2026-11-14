@@ -51,12 +51,13 @@ export default defineConfig(
   // house rules found more than a sweep in the same change could
   // review safely:
   //
-  //   - `id-length`: 1,752 (1,202 in server, 549 in web, 1 in
-  //     shared)
-  //   - `@typescript-eslint/naming-convention`: 381 (315 in
-  //     server, 66 in web). Many are wire and YAML fields, such
-  //     as `ok`, `done`, `enabled`, and `keep_completed`, which a
-  //     rename would break. Each needs a decision.
+  //   - `id-length`: 549, all in web. `server/` and `shared/`
+  //     are swept.
+  //   - `@typescript-eslint/naming-convention`: 268 (202 type
+  //     properties in server, 66 in web). Many are wire and YAML
+  //     fields, such as `ok`, `done`, `enabled`, and
+  //     `keep_completed`, which a rename would break. Each needs a
+  //     decision.
   //   - `react/no-multi-comp`: 65, all in web
   //
   // They are `warn`, not `off`, so each one stays visible. Only

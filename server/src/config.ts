@@ -6,8 +6,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { hostval } from "./hostConfig.js"
 
-const rstrip = (s: string | null | undefined): string =>
-  (s || "").replace(/\/+$/, "")
+const rstrip = (text: string | null | undefined): string =>
+  (text || "").replace(/\/+$/, "")
 
 export const PLEX_URL = rstrip(
   hostval(
@@ -116,6 +116,7 @@ export const STORE_BACKEND: "sqlite" | "yaml" =
  * importer's copy-aside is what keeps the original readable. Set `STORE_YAML_MIRROR=0` to stop
  * writing them; after that YAML is an import bridge and nothing else.
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
 export const STORE_YAML_MIRROR =
   process.env.STORE_YAML_MIRROR !== "0"
 
