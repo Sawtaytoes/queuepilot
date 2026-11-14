@@ -18,6 +18,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { waitReady } from './fixture-server.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 export interface TonightServer {
@@ -114,15 +115,7 @@ export async function startTonightServer(port: number): Promise<TonightServer> {
 
   const base = `http://localhost:${port}`;
 
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try {
-      const res = await fetch(`${base}/api/sets`);
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+  await waitReady(`${base}/api/sets`);
 
   // The trays, over the API the editor writes through. A refusal is THROWN rather than
   // logged: a harness that boots with half its audience written would fail its callers

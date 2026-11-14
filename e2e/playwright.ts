@@ -403,6 +403,7 @@ export interface Browser {
 export interface LaunchOptions {
   headless?: boolean;
   args?: string[];
+  ignoreDefaultArgs?: boolean | string[];
   channel?: string;
   executablePath?: string;
   slowMo?: number;
