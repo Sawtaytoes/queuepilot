@@ -114,7 +114,10 @@ describe("TLS", () => {
 
   test("the cast sidecar checks the Plex certificate", () => {
     const sidecar = readFileSync(
-      new URL("../../cast_sidecar/service.py", import.meta.url),
+      new URL(
+        "../../cast_sidecar/service.py",
+        import.meta.url,
+      ),
       "utf8",
     )
     const code = sidecar
@@ -127,7 +130,9 @@ describe("TLS", () => {
     // False)`), an unverified SSL context, and a session handed to PlexServer
     // in place of plexapi's own verifying one.
     expect(code).not.toMatch(/verify[^\n]*False/)
-    expect(code).not.toMatch(/CERT_NONE|_create_unverified_context/)
+    expect(code).not.toMatch(
+      /CERT_NONE|_create_unverified_context/,
+    )
     expect(code).not.toMatch(/PlexServer\([^)]*session\s*=/)
   })
 
