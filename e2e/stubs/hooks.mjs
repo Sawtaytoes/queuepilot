@@ -8,35 +8,49 @@
 // Parents are matched through ./module-id.mjs rather than by literal filename, so these keep
 // working across the .js -> .ts conversion and whatever comes after it. See that file for the
 // silent-fallthrough failure this prevents.
-import { registerHooks } from 'node:module';
-import { parentIs, specifierIs } from './module-id.mjs';
+import { registerHooks } from "node:module"
+import { parentIs, specifierIs } from "./module-id.mjs"
 
 const STUBS = {
-  './adb.js': new URL('./adb.stub.mjs', import.meta.url).href,
-  './playback.js': new URL('./playback.stub.mjs', import.meta.url).href,
-  './profiles.js': new URL('./profiles.stub.mjs', import.meta.url).href,
+  "./adb.js": new URL("./adb.stub.mjs", import.meta.url)
+    .href,
+  "./playback.js": new URL(
+    "./playback.stub.mjs",
+    import.meta.url,
+  ).href,
+  "./profiles.js": new URL(
+    "./profiles.stub.mjs",
+    import.meta.url,
+  ).href,
   // The real one opens the book of record. These suites have no database, and a profile-gate
   // assertion must not migrate a SQLite file as a side effect.
-  './store/db/gatedPush.js': new URL('./gatedPush.stub.mjs', import.meta.url).href,
-};
+  "./store/db/gatedPush.js": new URL(
+    "./gatedPush.stub.mjs",
+    import.meta.url,
+  ).href,
+}
 
-const fromAdbFacade = parentIs('/server/src/adb');
-const fromAdbLegacy = parentIs('/server/src/adbLegacy');
-const fromAdb = (ctx) => fromAdbFacade(ctx) || fromAdbLegacy(ctx);
-const fromDriver = parentIs('/server/src/driver');
+const fromAdbFacade = parentIs("/server/src/adb")
+const fromAdbLegacy = parentIs("/server/src/adbLegacy")
+const fromAdb = (ctx) =>
+  fromAdbFacade(ctx) || fromAdbLegacy(ctx)
+const fromDriver = parentIs("/server/src/driver")
 
 // Swap node:child_process for the scripted stub, but ONLY for server/src/adb — so a test
 // can drive the real adb module offline while everything else keeps the genuine module.
 export function stubAdbShell() {
-  const url = new URL('./child-process.stub.mjs', import.meta.url).href;
+  const url = new URL(
+    "./child-process.stub.mjs",
+    import.meta.url,
+  ).href
   registerHooks({
     resolve(spec, ctx, next) {
-      if (spec === 'node:child_process' && fromAdb(ctx)) {
-        return { url, shortCircuit: true };
+      if (spec === "node:child_process" && fromAdb(ctx)) {
+        return { url, shortCircuit: true }
       }
-      return next(spec, ctx);
+      return next(spec, ctx)
     },
-  });
+  })
 }
 
 export function stubDriverDeps() {
@@ -44,10 +58,11 @@ export function stubDriverDeps() {
     resolve(spec, ctx, next) {
       if (fromDriver(ctx)) {
         for (const [name, url] of Object.entries(STUBS)) {
-          if (specifierIs(spec, name)) return { url, shortCircuit: true };
+          if (specifierIs(spec, name))
+            return { url, shortCircuit: true }
         }
       }
-      return next(spec, ctx);
+      return next(spec, ctx)
     },
-  });
+  })
 }

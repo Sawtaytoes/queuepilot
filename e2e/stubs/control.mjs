@@ -7,10 +7,10 @@
 // object. `reset()` restores the baseline between scenarios (the Python test's `Env` class).
 export const CTL = {
   calls: [],
-  foreground: '',
+  foreground: "",
   onboarding: false,
   companionUp: true,
-  switchResult: [true, 'selected on the picker'],
+  switchResult: [true, "selected on the picker"],
   same: new Map(), // "a|b" -> bool override for sameProfile
   playResults: [],
   // Mirrors profiles.LAST_SEEN, provenance included: `isObserved` marks a title the PMS
@@ -20,7 +20,11 @@ export const CTL = {
   // `observedAt` carries the same force. An observation only clears a gate while it is
   // FRESH, so a scenario that wants the skip must stamp a time as well as the flag;
   // `observe()` below does both and is what a test should call.
-  lastSeen: { title: null, isObserved: false, observedAt: null },
+  lastSeen: {
+    title: null,
+    isObserved: false,
+    observedAt: null,
+  },
   // Seconds an observation may clear a gate for. Mirrors PROFILE_OBSERVATION_TTL_SECONDS.
   observationTtlSeconds: 600,
   awake: true,
@@ -38,26 +42,33 @@ export const CTL = {
   // What the one-shot pre-switch `/status/sessions` read should answer. Null means the
   // target has no active session, so the driver falls back to LAST_SEEN or the picker.
   accountObservation: null,
-};
+}
 
 export function reset() {
-  CTL.calls = [];
-  CTL.foreground = 'com.plexapp.android/.PlayerActivity'; // Plex up by default
-  CTL.onboarding = false;
-  CTL.companionUp = true;
-  CTL.switchResult = [true, 'selected on the picker'];
-  CTL.same = new Map();
-  CTL.playResults = [{ queued: 1, played: true, mode: 'client', client: 'SHIELD' }];
-  CTL.lastSeen.title = null;
-  CTL.lastSeen.isObserved = false;
-  CTL.lastSeen.observedAt = null;
-  CTL.observationTtlSeconds = 600;
-  CTL.awake = true;
-  CTL.onSwitch = null;
-  CTL.accountVerdict = null;
-  CTL.accountVerdicts = [];
-  CTL.accountObservation = null;
-  CTL.gatedPushes = [];
+  CTL.calls = []
+  CTL.foreground = "com.plexapp.android/.PlayerActivity" // Plex up by default
+  CTL.onboarding = false
+  CTL.companionUp = true
+  CTL.switchResult = [true, "selected on the picker"]
+  CTL.same = new Map()
+  CTL.playResults = [
+    {
+      queued: 1,
+      played: true,
+      mode: "client",
+      client: "SHIELD",
+    },
+  ]
+  CTL.lastSeen.title = null
+  CTL.lastSeen.isObserved = false
+  CTL.lastSeen.observedAt = null
+  CTL.observationTtlSeconds = 600
+  CTL.awake = true
+  CTL.onSwitch = null
+  CTL.accountVerdict = null
+  CTL.accountVerdicts = []
+  CTL.accountObservation = null
+  CTL.gatedPushes = []
 }
 
 /**
@@ -66,13 +77,15 @@ export function reset() {
  * scenarios set up an observation that must no longer clear the gate.
  */
 export function observe(title, ageSeconds = 0) {
-  CTL.lastSeen.title = title;
-  CTL.lastSeen.isObserved = true;
-  CTL.lastSeen.observedAt = Date.now() - ageSeconds * 1000;
+  CTL.lastSeen.title = title
+  CTL.lastSeen.isObserved = true
+  CTL.lastSeen.observedAt = Date.now() - ageSeconds * 1000
 }
 
-export const record = (...call) => CTL.calls.push(call);
-export const nCalls = (name) => CTL.calls.filter((c) => c[0] === name).length;
-export const firstIndex = (name) => CTL.calls.findIndex((c) => c[0] === name);
+export const record = (...call) => CTL.calls.push(call)
+export const nCalls = (name) =>
+  CTL.calls.filter((c) => c[0] === name).length
+export const firstIndex = (name) =>
+  CTL.calls.findIndex((c) => c[0] === name)
 
-reset();
+reset()

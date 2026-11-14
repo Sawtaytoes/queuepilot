@@ -12,33 +12,43 @@
 // pixels do not change: shared memory carries the same buffers either way. Asking that module,
 // rather than copying its rule, keeps one threshold and one log line for every capture. Outside
 // CI, or with tools that lack the module, Playwright's default stays.
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 
 interface SharedMemoryChoice {
-  ignoreDefaultArgs: string[];
-  message: string;
+  ignoreDefaultArgs: string[]
+  message: string
 }
 
 interface SharedMemoryModule {
-  chooseSharedMemory: (availableBytes: number | null) => SharedMemoryChoice;
-  readAvailableSharedMemory: () => Promise<number | null>;
+  chooseSharedMemory: (
+    availableBytes: number | null,
+  ) => SharedMemoryChoice
+  readAvailableSharedMemory: () => Promise<number | null>
 }
 
 /** The `ignoreDefaultArgs` for `chromium.launch`. */
-export const chooseVrtSharedMemory = async (): Promise<string[]> => {
-  const tools = process.env.VRT_TOOLS;
-  if (!tools) return [];
+export const chooseVrtSharedMemory = async (): Promise<
+  string[]
+> => {
+  const tools = process.env.VRT_TOOLS
+  if (!tools) return []
 
-  let sharedMemory: SharedMemoryModule;
+  let sharedMemory: SharedMemoryModule
   try {
-    sharedMemory = (await import(pathToFileURL(join(tools, 'sharedMemory.js')).href)) as SharedMemoryModule;
+    sharedMemory = (await import(
+      pathToFileURL(join(tools, "sharedMemory.js")).href
+    )) as SharedMemoryModule
   } catch {
-    console.log('[vrt] Chromium shared memory: temp files, because the shared tools have no sharedMemory.js.');
-    return [];
+    console.log(
+      "[vrt] Chromium shared memory: temp files, because the shared tools have no sharedMemory.js.",
+    )
+    return []
   }
 
-  const choice = sharedMemory.chooseSharedMemory(await sharedMemory.readAvailableSharedMemory());
-  console.log(choice.message);
-  return choice.ignoreDefaultArgs;
-};
+  const choice = sharedMemory.chooseSharedMemory(
+    await sharedMemory.readAvailableSharedMemory(),
+  )
+  console.log(choice.message)
+  return choice.ignoreDefaultArgs
+}

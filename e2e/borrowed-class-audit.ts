@@ -29,29 +29,35 @@
 // fixture that reaches it — absence of a finding here is not evidence of absence.
 //
 // Usage: `server/node_modules/.bin/tsx e2e/borrowed-class-audit.ts`
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = parseInt(process.env.WEB_PORT || '18824', 10);
-const BASE = `http://localhost:${PORT}`;
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+)
+const PORT = parseInt(process.env.WEB_PORT || "18824", 10)
+const BASE = `http://localhost:${PORT}`
 
 type Finding = {
-  classes: string;
-  cls: string;
-  id: string | null;
-  selectors: string[];
-  tag: string;
-};
+  classes: string
+  cls: string
+  id: string | null
+  selectors: string[]
+  tag: string
+}
 
 type Report = {
-  classesKnown: number;
-  elements: number;
-  findings: Finding[];
-};
+  classesKnown: number
+  elements: number
+  findings: Finding[]
+}
 
 /**
  * Runs IN THE PAGE — as a SOURCE STRING, not as a function.
@@ -156,148 +162,193 @@ const AUDIT = `(() => {
 })()`
 
 const waitReady = async (url: string, ms = 30000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + ms
   for (;;) {
     try {
-      if ((await fetch(url)).ok) return;
+      if ((await fetch(url)).ok) return
     } catch {
       /* not up yet */
     }
-    if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (Date.now() > end)
+      throw new Error(`not ready: ${url}`)
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-};
+}
 
-await fs.copyFile(`${ROOT}/e2e/fixtures/queues.fixture.yaml`, '/tmp/queues-classaudit.yaml');
-await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-classaudit.yaml');
-for (const lock of ['/tmp/queues-classaudit.yaml.lock', '/tmp/sets-classaudit.yaml.lock']) {
-  await fs.rm(lock, { force: true });
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/queues.fixture.yaml`,
+  "/tmp/queues-classaudit.yaml",
+)
+await fs.copyFile(
+  `${ROOT}/e2e/fixtures/sets.fixture.yaml`,
+  "/tmp/sets-classaudit.yaml",
+)
+for (const lock of [
+  "/tmp/queues-classaudit.yaml.lock",
+  "/tmp/sets-classaudit.yaml.lock",
+]) {
+  await fs.rm(lock, { force: true })
 }
 
 const srv = spawnServer({
   env: {
     ...process.env,
-    HISTORY_PATH: '/tmp/.history-classaudit.json',
-    MQTT_HOST: '',
-    NODE_TLS_REJECT_UNAUTHORIZED: '0',
-    QUEUES_PATH: '/tmp/queues-classaudit.yaml',
-    SETS_PATH: '/tmp/sets-classaudit.yaml',
+    HISTORY_PATH: "/tmp/.history-classaudit.json",
+    MQTT_HOST: "",
+    NODE_TLS_REJECT_UNAUTHORIZED: "0",
+    QUEUES_PATH: "/tmp/queues-classaudit.yaml",
+    SETS_PATH: "/tmp/sets-classaudit.yaml",
     WEB_PORT: String(PORT),
   },
-  stdio: ['ignore', 'ignore', 'inherit'],
-});
+  stdio: ["ignore", "ignore", "inherit"],
+})
 
 /** class + element identity, so one shared component is reported once and not per instance. */
-const seen = new Map<string, Finding & { where: Set<string> }>();
+const seen = new Map<
+  string,
+  Finding & { where: Set<string> }
+>()
 
 try {
-  await waitReady(`${BASE}/api/queues`);
+  await waitReady(`${BASE}/api/queues`)
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+  const browser = await chromium.launch()
+  const page = await browser.newPage({
+    viewport: { width: 1400, height: 950 },
+  })
 
-  const visit = async (route: string, open?: () => Promise<void>) => {
-    await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2500);
+  const visit = async (
+    route: string,
+    open?: () => Promise<void>,
+  ) => {
+    await page.goto(`${BASE}${route}`, {
+      waitUntil: "domcontentloaded",
+    })
+    await page.waitForTimeout(2500)
 
     if (open) {
       try {
-        await open();
-      } catch (e) {
-        console.log(`  (${route}: could not open — ${(e as Error).message.split('\n')[0]})`);
+        await open()
+      } catch (error) {
+        console.log(
+          `  (${route}: could not open — ${(error as Error).message.split("\n")[0]})`,
+        )
       }
     }
 
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(600)
 
     // A self-test, because the failure mode of this harness is a SILENT zero (see the two
     // traps above). A probe wearing `.ptitle` with no `.pendingtile` ancestor must be
     // flagged, or the run is reporting its own breakage as cleanliness.
     await page.evaluate(() => {
-      const probe = document.createElement('div');
-      probe.className = 'ptitle qp-audit-probe';
-      document.body.appendChild(probe);
-    });
+      const probe = document.createElement("div")
+      probe.className = "ptitle qp-audit-probe"
+      document.body.appendChild(probe)
+    })
 
-    const report = (await page.evaluate(AUDIT)) as Report;
-    const isProbeFlagged = report.findings.some((f) => f.classes.includes('qp-audit-probe'));
+    const report = (await page.evaluate(AUDIT)) as Report
+    const isProbeFlagged = report.findings.some((finding) =>
+      finding.classes.includes("qp-audit-probe"),
+    )
 
     await page.evaluate(() => {
-      document.querySelector('.qp-audit-probe')?.remove();
-    });
+      document.querySelector(".qp-audit-probe")?.remove()
+    })
 
-    if (!isProbeFlagged) throw new Error(`self-test failed on ${route} — the auditor is broken`);
+    if (!isProbeFlagged)
+      throw new Error(
+        `self-test failed on ${route} — the auditor is broken`,
+      )
 
-    const real = report.findings.filter((f) => !f.classes.includes('qp-audit-probe'));
+    const real = report.findings.filter(
+      (finding) =>
+        !finding.classes.includes("qp-audit-probe"),
+    )
 
-    for (const f of real) {
-      const key = `${f.cls}|${f.tag}|${f.id ?? ''}|${f.classes}`;
-      const row = seen.get(key) ?? { ...f, where: new Set<string>() };
-      row.where.add(route);
-      seen.set(key, row);
+    for (const finding of real) {
+      const key = `${finding.cls}|${finding.tag}|${finding.id ?? ""}|${finding.classes}`
+      const row = seen.get(key) ?? {
+        ...finding,
+        where: new Set<string>(),
+      }
+      row.where.add(route)
+      seen.set(key, row)
     }
 
     console.log(
       `${route.padEnd(16)} elements=${String(report.elements).padStart(5)}  classes=${report.classesKnown}  flagged=${real.length}`,
-    );
-  };
+    )
+  }
 
-  await visit('/');
-  await visit('/queues');
-  await visit('/pending');
-  await visit('/what-to-watch-play');
-  await visit('/channels');
+  await visit("/")
+  await visit("/queues")
+  await visit("/pending")
+  await visit("/what-to-watch-play")
+  await visit("/channels")
   // The two WP-8 routes. `.subhint` is the class this audit is about on both of them: every
   // other rule for it in `app.css` is scoped under a view or modal id, so a new page wearing
   // it renders unstyled while looking styled in the diff.
-  await visit('/board-game-collection');
-  await visit('/result');
-  await visit('/overview', async () => {
-    await page.click('#playnewqueue');
-    await page.waitForTimeout(900);
-  });
-  await visit('/queues', async () => {
-    await page.click('#newqueue');
-    await page.waitForTimeout(900);
-  });
-  await visit('/channels', async () => {
-    await page.click('#newdyn');
-    await page.waitForTimeout(1400);
-  });
+  await visit("/board-game-collection")
+  await visit("/result")
+  await visit("/overview", async () => {
+    await page.click("#playnewqueue")
+    await page.waitForTimeout(900)
+  })
+  await visit("/queues", async () => {
+    await page.click("#newqueue")
+    await page.waitForTimeout(900)
+  })
+  await visit("/channels", async () => {
+    await page.click("#newdyn")
+    await page.waitForTimeout(1400)
+  })
 
   const queueRoute = await page.evaluate(async () => {
-    const registry = (await (await fetch('/api/sets')).json()) as {
-      sets?: { id: string; source: string }[];
-    };
-    const queue = (registry.sets ?? []).find((s) => s.source === 'queue');
-    return queue ? `/q/${queue.id}` : null;
-  });
+    const registry = (await (
+      await fetch("/api/sets")
+    ).json()) as {
+      sets?: { id: string; source: string }[]
+    }
+    const queue = (registry.sets ?? []).find(
+      (set) => set.source === "queue",
+    )
+    return queue ? `/q/${queue.id}` : null
+  })
 
   if (queueRoute) {
-    await visit(queueRoute);
+    await visit(queueRoute)
     await visit(queueRoute, async () => {
-      await page.click('.tile .thumb');
-      await page.waitForTimeout(900);
-    });
+      await page.click(".tile .thumb")
+      await page.waitForTimeout(900)
+    })
   }
 
-  await browser.close();
+  await browser.close()
 } finally {
-  killServer(srv);
+  killServer(srv)
 }
 
-const rows = Array.from(seen.values()).sort((a, b) => a.cls.localeCompare(b.cls));
+const rows = Array.from(seen.values()).sort((left, right) =>
+  left.cls.localeCompare(right.cls),
+)
 
-console.log(`\n=== ${rows.length} class/element pairs match no rule for that class ===`);
 console.log(
-  'A state class on an ANCESTOR (body.play-view, ul.editable) is expected here and is not a\n' +
-    'finding. Everything else is a class name doing nothing.\n',
-);
+  `\n=== ${rows.length} class/element pairs match no rule for that class ===`,
+)
+console.log(
+  "A state class on an ANCESTOR (body.play-view, ul.editable) is expected here and is not a\n" +
+    "finding. Everything else is a class name doing nothing.\n",
+)
 
 for (const row of rows) {
-  console.log(`.${row.cls}  <${row.tag}${row.id ? ` id="${row.id}"` : ''} class="${row.classes}">`);
-  console.log(`    routes : ${Array.from(row.where).join(', ')}`);
-  console.log(`    rules  : ${row.selectors.join(' | ')}`);
+  console.log(
+    `.${row.cls}  <${row.tag}${row.id ? ` id="${row.id}"` : ""} class="${row.classes}">`,
+  )
+  console.log(
+    `    routes : ${Array.from(row.where).join(", ")}`,
+  )
+  console.log(`    rules  : ${row.selectors.join(" | ")}`)
 }
 
-process.exit(0);
+process.exit(0)

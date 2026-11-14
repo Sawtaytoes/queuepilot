@@ -22,123 +22,209 @@
 //
 //   PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot \
 //     server/node_modules/.bin/tsx e2e/shot-person-photos.ts --tag=after
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs"
+import path from "node:path"
 
-import { startFixtureServer } from './fixture-server.js';
-import { chromium } from './playwright.js';
-import { killServer, REPO_ROOT } from './stubs/server-process.mjs';
+import { startFixtureServer } from "./fixture-server.js"
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  REPO_ROOT,
+} from "./stubs/server-process.mjs"
 
-const PORT = Number(process.env.SHOT_PORT ?? 18795);
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
-const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
-const OUT = path.join(REPO_ROOT, '__screenshots__');
-const photo = (name: string) => path.join(REPO_ROOT, 'e2e', 'fixtures', 'photos', `${name}.jpg`);
+const PORT = Number(process.env.SHOT_PORT ?? 18795)
+const tagArg = process.argv.find((arg) =>
+  arg.startsWith("--tag="),
+)
+const TAG = tagArg ? tagArg.slice("--tag=".length) : "after"
+const OUT = path.join(REPO_ROOT, "__screenshots__")
+const photo = (name: string) =>
+  path.join(
+    REPO_ROOT,
+    "e2e",
+    "fixtures",
+    "photos",
+    `${name}.jpg`,
+  )
 
 const darkInit = () => {
   try {
-    localStorage.setItem('charcuterie-scheme', 'dark');
+    localStorage.setItem("charcuterie-scheme", "dark")
   } catch {
     /* light then */
   }
-};
+}
 
-await fs.mkdir(OUT, { recursive: true });
+await fs.mkdir(OUT, { recursive: true })
 
 const server = await startFixtureServer(PORT, {
-  groups: 'landing.groups.yaml',
-  people: 'landing.people-mapping.yaml',
-  queues: 'landing.queues.yaml',
-  sets: 'landing.sets.yaml',
-});
-const browser = await chromium.launch();
+  groups: "landing.groups.yaml",
+  people: "landing.people-mapping.yaml",
+  queues: "landing.queues.yaml",
+  sets: "landing.sets.yaml",
+})
+const browser = await chromium.launch()
 
 try {
-  for (const id of ['ada', 'grace']) {
-    const res = await fetch(`${server.base}/api/people/${id}/photo`, {
-      body: await fs.readFile(photo(id)),
-      headers: { 'content-type': 'image/jpeg' },
-      method: 'PUT',
-    });
-    console.log(`PUT ${id}'s photo → ${res.status}`);
+  for (const id of ["ada", "grace"]) {
+    const res = await fetch(
+      `${server.base}/api/people/${id}/photo`,
+      {
+        body: await fs.readFile(photo(id)),
+        headers: { "content-type": "image/jpeg" },
+        method: "PUT",
+      },
+    )
+    console.log(`PUT ${id}'s photo → ${res.status}`)
   }
 
-  const ctx = await browser.newContext({ viewport: { height: 1000, width: 1420 } });
-  await ctx.addInitScript(darkInit);
-  const page = await ctx.newPage();
+  const ctx = await browser.newContext({
+    viewport: { height: 1000, width: 1420 },
+  })
+  await ctx.addInitScript(darkInit)
+  const page = await ctx.newPage()
 
-  await page.goto(`${server.base}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#play .playcard', { timeout: 60_000 });
-  await page.waitForTimeout(2500);
-  await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-overview.png`) });
-  const photoFaces = await page.$$eval('[data-person-face] img', (nodes) =>
-    nodes.filter((n) => (n as HTMLImageElement).naturalWidth > 0).length,
-  );
-  console.log(`${photoFaces} faces on the Overview drew a photo`);
+  await page.goto(`${server.base}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#play .playcard", {
+    timeout: 60_000,
+  })
+  await page.waitForTimeout(2500)
+  await page.screenshot({
+    path: path.join(
+      OUT,
+      `personphotos-${TAG}-overview.png`,
+    ),
+  })
+  const photoFaces = await page.$$eval(
+    "[data-person-face] img",
+    (nodes) =>
+      nodes.filter(
+        (node) =>
+          (node as HTMLImageElement).naturalWidth > 0,
+      ).length,
+  )
+  console.log(
+    `${photoFaces} faces on the Overview drew a photo`,
+  )
 
-  await page.goto(`${server.base}/queues`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.shelf', { timeout: 60_000 });
-  await page.waitForTimeout(2500);
-  await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-queues.png`) });
+  await page.goto(`${server.base}/queues`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(".shelf", { timeout: 60_000 })
+  await page.waitForTimeout(2500)
+  await page.screenshot({
+    path: path.join(OUT, `personphotos-${TAG}-queues.png`),
+  })
 
-  await page.goto(`${server.base}/people`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#people', { timeout: 60_000 });
-  await page.getByRole('button', { name: 'Edit people' }).click();
-  await page.waitForSelector('#peoplemodal', { timeout: 15_000 });
-  await page.waitForTimeout(800);
+  await page.goto(`${server.base}/people`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#people", { timeout: 60_000 })
+  await page
+    .getByRole("button", { name: "Edit people" })
+    .click()
+  await page.waitForSelector("#peoplemodal", {
+    timeout: 15_000,
+  })
+  await page.waitForTimeout(800)
 
-  const adaPhoto = page.getByRole('button', { name: 'Photo for Ada' });
+  const adaPhoto = page.getByRole("button", {
+    name: "Photo for Ada",
+  })
   if ((await adaPhoto.count()) === 0) {
-    await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-editor.png`) });
-    console.log('no Photo button — the BEFORE state');
+    await page.screenshot({
+      path: path.join(
+        OUT,
+        `personphotos-${TAG}-editor.png`,
+      ),
+    })
+    console.log("no Photo button — the BEFORE state")
   } else {
-    await adaPhoto.click();
-    await page.waitForSelector('[data-testid="photopanel-ada"] .photopreview img');
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-editor.png`) });
-    await page.getByRole('button', { name: 'Done' }).click();
+    await adaPhoto.click()
+    await page.waitForSelector(
+      '[data-testid="photopanel-ada"] .photopreview img',
+    )
+    await page.waitForTimeout(600)
+    await page.screenshot({
+      path: path.join(
+        OUT,
+        `personphotos-${TAG}-editor.png`,
+      ),
+    })
+    await page.getByRole("button", { name: "Done" }).click()
 
-    await page.getByRole('button', { name: 'Photo for Linus' }).click();
     await page
-      .locator('[data-testid="photopanel-linus"] input[type="file"]')
-      .setInputFiles(photo('grace'));
-    await page.waitForSelector('[data-testid="photopanel-linus"] .photopreview img');
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-pending.png`) });
-    console.log('a chosen picture previews before it is saved');
+      .getByRole("button", { name: "Photo for Linus" })
+      .click()
+    await page
+      .locator(
+        '[data-testid="photopanel-linus"] input[type="file"]',
+      )
+      .setInputFiles(photo("grace"))
+    await page.waitForSelector(
+      '[data-testid="photopanel-linus"] .photopreview img',
+    )
+    await page.waitForTimeout(600)
+    await page.screenshot({
+      path: path.join(
+        OUT,
+        `personphotos-${TAG}-pending.png`,
+      ),
+    })
+    console.log(
+      "a chosen picture previews before it is saved",
+    )
   }
-  await ctx.close();
+  await ctx.close()
 
   const narrowCtx = await browser.newContext({
     deviceScaleFactor: 3.75,
     hasTouch: true,
     isMobile: true,
     viewport: { height: 824, width: 384 },
-  });
-  await narrowCtx.addInitScript(darkInit);
-  const narrow = await narrowCtx.newPage();
-  await narrow.goto(`${server.base}/people`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('#people', { timeout: 60_000 });
-  await narrow.getByRole('button', { name: 'Edit people' }).click();
-  await narrow.waitForSelector('#peoplemodal', { timeout: 15_000 });
-  const narrowPhoto = narrow.getByRole('button', { name: 'Photo for Ada' });
+  })
+  await narrowCtx.addInitScript(darkInit)
+  const narrow = await narrowCtx.newPage()
+  await narrow.goto(`${server.base}/people`, {
+    waitUntil: "domcontentloaded",
+  })
+  await narrow.waitForSelector("#people", {
+    timeout: 60_000,
+  })
+  await narrow
+    .getByRole("button", { name: "Edit people" })
+    .click()
+  await narrow.waitForSelector("#peoplemodal", {
+    timeout: 15_000,
+  })
+  const narrowPhoto = narrow.getByRole("button", {
+    name: "Photo for Ada",
+  })
   if ((await narrowPhoto.count()) > 0) {
-    await narrowPhoto.click();
-    await narrow.waitForSelector('[data-testid="photopanel-ada"] .photopreview img');
+    await narrowPhoto.click()
+    await narrow.waitForSelector(
+      '[data-testid="photopanel-ada"] .photopreview img',
+    )
   }
-  await narrow.waitForTimeout(800);
-  await narrow.screenshot({ path: path.join(OUT, `personphotos-${TAG}-narrow.png`) });
+  await narrow.waitForTimeout(800)
+  await narrow.screenshot({
+    path: path.join(OUT, `personphotos-${TAG}-narrow.png`),
+  })
   const overflow = await narrow.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  )
   console.log(
     overflow > 1
       ? `⚠️ the Narrow View scrolls horizontally by ${overflow}px`
-      : 'the Narrow View does not scroll horizontally',
-  );
-  await narrowCtx.close();
+      : "the Narrow View does not scroll horizontally",
+  )
+  await narrowCtx.close()
 } finally {
-  await browser.close();
-  killServer(server.child);
-  await fs.rm(server.dir, { force: true, recursive: true });
+  await browser.close()
+  killServer(server.child)
+  await fs.rm(server.dir, { force: true, recursive: true })
 }

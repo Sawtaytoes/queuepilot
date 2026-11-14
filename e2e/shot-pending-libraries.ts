@@ -11,90 +11,135 @@
 //
 // Usage: `server/node_modules/.bin/tsx e2e/shot-pending-libraries.ts [before|after]`
 // Writes `__screenshots__/pending-libraries-<stage>.png`.
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { chromium } from "./playwright.js"
 import {
-  PENDING_YAML, QUEUES_YAML, SETS_YAML, startStubPlex,
-} from './stubs/plex-pending-libraries.mjs';
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
+import {
+  PENDING_YAML,
+  QUEUES_YAML,
+  SETS_YAML,
+  startStubPlex,
+} from "./stubs/plex-pending-libraries.mjs"
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const STAGE = process.argv[2] === 'after' ? 'after' : 'before';
-const PORT = parseInt(process.env.WEB_PORT || '18896', 10);
-const PLEX_PORT = parseInt(process.env.STUB_PLEX_PORT || '18897', 10);
-const BASE = `http://localhost:${PORT}`;
-const OUT = `${ROOT}/__screenshots__`;
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+)
+const STAGE =
+  process.argv[2] === "after" ? "after" : "before"
+const PORT = parseInt(process.env.WEB_PORT || "18896", 10)
+const PLEX_PORT = parseInt(
+  process.env.STUB_PLEX_PORT || "18897",
+  10,
+)
+const BASE = `http://localhost:${PORT}`
+const OUT = `${ROOT}/__screenshots__`
 
 const waitReady = async (url: string, ms = 30000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + ms
   for (;;) {
-    try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
-    if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    try {
+      if ((await fetch(url)).ok) return
+    } catch {
+      /* not up yet */
+    }
+    if (Date.now() > end)
+      throw new Error(`not ready: ${url}`)
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-};
-
-await fs.mkdir(OUT, { recursive: true });
-await fs.writeFile('/tmp/queues-plib.yaml', QUEUES_YAML);
-await fs.writeFile('/tmp/sets-plib.yaml', SETS_YAML);
-await fs.writeFile('/tmp/pending-plib.yaml', PENDING_YAML);
-for (const p of ['/tmp/queues-plib.yaml.lock', '/tmp/sets-plib.yaml.lock', '/tmp/cache-plib.sqlite']) {
-  await fs.rm(p, { recursive: true, force: true });
 }
 
-const plex = startStubPlex(PLEX_PORT);
-await plex.ready;
+await fs.mkdir(OUT, { recursive: true })
+await fs.writeFile("/tmp/queues-plib.yaml", QUEUES_YAML)
+await fs.writeFile("/tmp/sets-plib.yaml", SETS_YAML)
+await fs.writeFile("/tmp/pending-plib.yaml", PENDING_YAML)
+for (const file of [
+  "/tmp/queues-plib.yaml.lock",
+  "/tmp/sets-plib.yaml.lock",
+  "/tmp/cache-plib.sqlite",
+]) {
+  await fs.rm(file, { recursive: true, force: true })
+}
+
+const plex = startStubPlex(PLEX_PORT)
+await plex.ready
 
 const srv = spawnServer({
   env: {
     ...process.env,
     PLEX_API_SERVER_URL: `http://127.0.0.1:${PLEX_PORT}`,
-    PLEX_TOKEN: 'stub',
-    QUEUES_PATH: '/tmp/queues-plib.yaml',
-    SETS_PATH: '/tmp/sets-plib.yaml',
-    PENDING_PATH: '/tmp/pending-plib.yaml',
-    HISTORY_PATH: '/tmp/.history-plib.json',
-    CACHE_PATH: '/tmp/cache-plib.sqlite',
-    ADB_ENABLED: 'false',
+    PLEX_TOKEN: "stub",
+    QUEUES_PATH: "/tmp/queues-plib.yaml",
+    SETS_PATH: "/tmp/sets-plib.yaml",
+    PENDING_PATH: "/tmp/pending-plib.yaml",
+    HISTORY_PATH: "/tmp/.history-plib.json",
+    CACHE_PATH: "/tmp/cache-plib.sqlite",
+    ADB_ENABLED: "false",
     WEB_PORT: String(PORT),
-    MQTT_HOST: '',
+    MQTT_HOST: "",
   },
-  stdio: ['ignore', 'inherit', 'inherit'],
-});
+  stdio: ["ignore", "inherit", "inherit"],
+})
 
 try {
-  await waitReady(`${BASE}/api/shelves`);
+  await waitReady(`${BASE}/api/shelves`)
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  const browser = await chromium.launch()
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 900 },
+  })
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
   // The stub serves no artwork, so a thumb request would only stall the shot. Both stages
   // render the same placeholder.
-  await page.route('**/api/thumb/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route("**/api/thumb/**", (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  )
 
-  await page.goto(`${BASE}/pending`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#pending:not([hidden])', { timeout: 30000 });
-  await page.waitForSelector('#pendinggrid li', { timeout: 120000 });
-  await page.waitForTimeout(1200);
+  await page.goto(`${BASE}/pending`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#pending:not([hidden])", {
+    timeout: 30000,
+  })
+  await page.waitForSelector("#pendinggrid li", {
+    timeout: 120000,
+  })
+  await page.waitForTimeout(1200)
 
   // The numbers the caption claims, read off the page rather than asserted about it. `cells`
   // is what EXISTS and `total` is what the list HOLDS — before the change they are the same
   // number, which is the whole finding.
   const stats = await page.evaluate(() => ({
-    cells: document.querySelectorAll('#pendinggrid li').length,
-    total: document.querySelector('#pendinggrid li')?.getAttribute('aria-setsize') ?? 'n/a',
-    domNodes: document.getElementsByTagName('*').length,
-    buttons: document.querySelectorAll('button').length,
-    libraryBoxes: document.querySelectorAll('#pending-libs input[type=checkbox]').length,
-  }));
-  console.log(`${STAGE}:`, JSON.stringify(stats));
+    cells: document.querySelectorAll("#pendinggrid li")
+      .length,
+    total:
+      document
+        .querySelector("#pendinggrid li")
+        ?.getAttribute("aria-setsize") ?? "n/a",
+    domNodes: document.getElementsByTagName("*").length,
+    buttons: document.querySelectorAll("button").length,
+    libraryBoxes: document.querySelectorAll(
+      "#pending-libs input[type=checkbox]",
+    ).length,
+  }))
+  console.log(`${STAGE}:`, JSON.stringify(stats))
 
-  await page.screenshot({ path: `${OUT}/pending-libraries-${STAGE}.png` });
-  console.log('shot:', `${OUT}/pending-libraries-${STAGE}.png`);
-  await browser.close();
+  await page.screenshot({
+    path: `${OUT}/pending-libraries-${STAGE}.png`,
+  })
+  console.log(
+    "shot:",
+    `${OUT}/pending-libraries-${STAGE}.png`,
+  )
+  await browser.close()
 } finally {
-  await killServer(srv);
-  await plex.close();
+  await killServer(srv)
+  await plex.close()
 }

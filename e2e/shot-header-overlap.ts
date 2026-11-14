@@ -17,55 +17,71 @@
 import {
   startBoardGameServer,
   stopBoardGameServer,
-} from './board-game-play-harness.js';
-import { chromium } from './playwright.js';
+} from "./board-game-play-harness.js"
+import { chromium } from "./playwright.js"
 
-const PORT = 18871;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
-const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
+const PORT = 18871
+const tagArg = process.argv.find((arg) =>
+  arg.startsWith("--tag="),
+)
+const TAG = tagArg ? tagArg.slice("--tag=".length) : "after"
 
-const server = await startBoardGameServer(PORT);
-const browser = await chromium.launch();
+const server = await startBoardGameServer(PORT)
+const browser = await chromium.launch()
 
 try {
-  const ctx = await browser.newContext({ viewport: { width: 1420, height: 620 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1420, height: 620 },
+  })
   await ctx.addInitScript(() => {
     try {
-      localStorage.setItem('charcuterie-scheme', 'dark');
+      localStorage.setItem("charcuterie-scheme", "dark")
     } catch {
       /* private mode — the shot is light then, and says so */
     }
-  });
+  })
 
-  const page = await ctx.newPage();
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  const page = await ctx.newPage()
+  page.on("pageerror", (error) =>
+    console.log("PAGEERROR", error.message),
+  )
 
-  await page.goto(`${server.base}/board-game-collection`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#collection:not([hidden]) #collection-grid', { timeout: 30000 });
-  await page.waitForTimeout(900);
+  await page.goto(`${server.base}/board-game-collection`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(
+    "#collection:not([hidden]) #collection-grid",
+    { timeout: 30000 },
+  )
+  await page.waitForTimeout(900)
 
   // Scroll far enough that the first row's card titles are above the page header's bottom
   // edge. That is the state the bug lives in; unscrolled, both look identical.
-  await page.mouse.wheel(0, 420);
-  await page.waitForTimeout(600);
+  await page.mouse.wheel(0, 420)
+  await page.waitForTimeout(600)
 
-  const path = `__screenshots__/header-overlap-${TAG}.png`;
-  await page.screenshot({ path });
-  console.log('wrote', path);
+  const path = `__screenshots__/header-overlap-${TAG}.png`
+  await page.screenshot({ path })
+  console.log("wrote", path)
 
   // The measurement behind the picture: a card heading that is `sticky` at the viewport top
   // is the defect, whatever the pixels look like.
   const probe = await page.evaluate(() => {
-    const head = document.querySelector('#collection-grid header');
-    const cs = head ? getComputedStyle(head) : null;
+    const head = document.querySelector(
+      "#collection-grid header",
+    )
+    const cs = head ? getComputedStyle(head) : null
     return {
-      cardHeaderPosition: cs?.position ?? '(no card header)',
-      cardHeaderZIndex: cs?.zIndex ?? '(none)',
-      pageHeaderIsScoped: Boolean(document.querySelector('#apphead')),
-    };
-  });
-  console.log(TAG, JSON.stringify(probe));
+      cardHeaderPosition:
+        cs?.position ?? "(no card header)",
+      cardHeaderZIndex: cs?.zIndex ?? "(none)",
+      pageHeaderIsScoped: Boolean(
+        document.querySelector("#apphead"),
+      ),
+    }
+  })
+  console.log(TAG, JSON.stringify(probe))
 } finally {
-  await browser.close();
-  stopBoardGameServer(server);
+  await browser.close()
+  stopBoardGameServer(server)
 }

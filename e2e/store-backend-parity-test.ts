@@ -19,16 +19,19 @@
 //
 // Plex is unreachable on purpose (`PLEX_API_SERVER_URL` points at a closed port), so both
 // runs take the degraded path and neither is talking to the household's server.
-import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { ChildProcess } from 'node:child_process';
+import { promises as fs } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import type { ChildProcess } from "node:child_process"
 
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.join(HERE, 'fixtures');
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const FIXTURES = path.join(HERE, "fixtures")
 
 /**
  * MASKED FIELDS: NONE. That is a measured result, not an oversight.
@@ -56,18 +59,42 @@ const FIXTURES = path.join(HERE, 'fixtures');
  * If a future change makes a body carry a clock reading, mask that field HERE and say why in
  * this comment. An unexplained mask is how a real regression hides.
  */
-let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
-};
+let failures = 0
+const ok = (
+  name: string,
+  isPassing: boolean,
+  extra = "",
+): void => {
+  console.log(
+    `${isPassing ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`,
+  )
+  if (!isPassing) failures += 1
+}
 
-const ROUTES = ['/api/queues', '/api/sets', '/api/groups', '/api/pending'] as const;
+const ROUTES = [
+  "/api/queues",
+  "/api/sets",
+  "/api/groups",
+  "/api/pending",
+] as const
 
-async function capture(backend: 'yaml' | 'sqlite', port: number): Promise<Record<string, unknown>> {
-  const dir = await fs.mkdtemp(path.join(tmpdir(), `qp-parity-${backend}-`));
-  for (const name of ['sets', 'queues', 'groups', 'pending']) {
-    await fs.copyFile(path.join(FIXTURES, `store-parity.${name}.yaml`), path.join(dir, `${name}.yaml`));
+async function capture(
+  backend: "yaml" | "sqlite",
+  port: number,
+): Promise<Record<string, unknown>> {
+  const dir = await fs.mkdtemp(
+    path.join(tmpdir(), `qp-parity-${backend}-`),
+  )
+  for (const name of [
+    "sets",
+    "queues",
+    "groups",
+    "pending",
+  ]) {
+    await fs.copyFile(
+      path.join(FIXTURES, `store-parity.${name}.yaml`),
+      path.join(dir, `${name}.yaml`),
+    )
   }
 
   const child: ChildProcess = spawnServer({
@@ -75,86 +102,136 @@ async function capture(backend: 'yaml' | 'sqlite', port: number): Promise<Record
       ...process.env,
       WEB_PORT: String(port),
       STORE_BACKEND: backend,
-      QUEUES_PATH: path.join(dir, 'queues.yaml'),
-      SETS_PATH: path.join(dir, 'sets.yaml'),
-      GROUPS_PATH: path.join(dir, 'groups.yaml'),
-      PENDING_PATH: path.join(dir, 'pending.yaml'),
-      HISTORY_PATH: path.join(dir, '.history.json'),
-      CACHE_PATH: path.join(dir, 'cache.sqlite'),
-      PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-      PLEX_TOKEN: '',
-      MQTT_HOST: '',
-      NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      QUEUES_PATH: path.join(dir, "queues.yaml"),
+      SETS_PATH: path.join(dir, "sets.yaml"),
+      GROUPS_PATH: path.join(dir, "groups.yaml"),
+      PENDING_PATH: path.join(dir, "pending.yaml"),
+      HISTORY_PATH: path.join(dir, ".history.json"),
+      CACHE_PATH: path.join(dir, "cache.sqlite"),
+      PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+      PLEX_TOKEN: "",
+      MQTT_HOST: "",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
     },
-    stdio: 'ignore',
-  });
+    stdio: "ignore",
+  })
 
   try {
     for (let attempt = 0; attempt < 80; attempt += 1) {
       try {
-        await fetch(`http://localhost:${port}/api/history`);
-        break;
+        await fetch(`http://localhost:${port}/api/history`)
+        break
       } catch {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 200),
+        )
       }
     }
 
-    const bodies: Record<string, unknown> = {};
+    const bodies: Record<string, unknown> = {}
     for (const route of ROUTES) {
-      const response = await fetch(`http://localhost:${port}${route}`);
-      bodies[route] = await response.json();
+      const response = await fetch(
+        `http://localhost:${port}${route}`,
+      )
+      bodies[route] = await response.json()
     }
-    return bodies;
+    return bodies
   } finally {
     await new Promise((resolve) => {
-      child.once('exit', resolve);
-      killServer(child);
-    });
+      child.once("exit", resolve)
+      killServer(child)
+    })
   }
 }
 
 // The YAML backend first, so a failure in the OLD path is not blamed on the new one.
-const fromYaml = await capture('yaml', 18795);
-const fromSqlite = await capture('sqlite', 18796);
+const fromYaml = await capture("yaml", 18795)
+const fromSqlite = await capture("sqlite", 18796)
 
 for (const route of ROUTES) {
-  const left = JSON.stringify(fromYaml[route]);
-  const right = JSON.stringify(fromSqlite[route]);
-  ok(`${route} is identical under both backends`, left === right);
+  const left = JSON.stringify(fromYaml[route])
+  const right = JSON.stringify(fromSqlite[route])
+  ok(
+    `${route} is identical under both backends`,
+    left === right,
+  )
   if (left !== right) {
     // Print the first divergence rather than two 200 KB blobs.
-    let index = 0;
-    while (index < left.length && index < right.length && left[index] === right[index]) index += 1;
-    console.log(`   yaml   …${left.slice(Math.max(0, index - 120), index + 200)}`);
-    console.log(`   sqlite …${right.slice(Math.max(0, index - 120), index + 200)}`);
+    let index = 0
+    while (
+      index < left.length &&
+      index < right.length &&
+      left[index] === right[index]
+    )
+      index += 1
+    console.log(
+      `   yaml   …${left.slice(Math.max(0, index - 120), index + 200)}`,
+    )
+    console.log(
+      `   sqlite …${right.slice(Math.max(0, index - 120), index + 200)}`,
+    )
   }
 }
 
 // The wire ids, named rather than counted. A body that matched but had renamed every set
 // would pass the compare above and break every NFC card in the house.
-const sets = (fromSqlite['/api/sets'] as { sets?: { id: string }[] }).sets ?? [];
-const queues = Object.keys((fromSqlite['/api/queues'] as { sets?: Record<string, unknown> }).sets ?? {});
-const groups = (fromSqlite['/api/groups'] as { groups?: { id: string }[] }).groups ?? [];
+const sets =
+  (fromSqlite["/api/sets"] as { sets?: { id: string }[] })
+    .sets ?? []
+const queues = Object.keys(
+  (
+    fromSqlite["/api/queues"] as {
+      sets?: Record<string, unknown>
+    }
+  ).sets ?? {},
+)
+const groups =
+  (
+    fromSqlite["/api/groups"] as {
+      groups?: { id: string }[]
+    }
+  ).groups ?? []
 
-const EXPECTED_SETS = ['bob', 'bob_alice', 'demo', 'carol_reading', 'empty_queue', 'kids'];
-const EXPECTED_QUEUES = ['bob', 'bob_alice', 'demo', 'carol_reading', 'empty_queue'];
-const EXPECTED_GROUPS = ['bob', 'bob-and-others', 'kids'];
+const EXPECTED_SETS = [
+  "bob",
+  "bob_alice",
+  "demo",
+  "carol_reading",
+  "empty_queue",
+  "kids",
+]
+const EXPECTED_QUEUES = [
+  "bob",
+  "bob_alice",
+  "demo",
+  "carol_reading",
+  "empty_queue",
+]
+const EXPECTED_GROUPS = ["bob", "bob-and-others", "kids"]
 
 ok(
   `every set wire id survived (${sets.length})`,
-  EXPECTED_SETS.every((id) => sets.some((set) => set.id === id)),
-  sets.map((set) => set.id).join(','),
-);
+  EXPECTED_SETS.every((id) =>
+    sets.some((set) => set.id === id),
+  ),
+  sets.map((set) => set.id).join(","),
+)
 ok(
-  'every queue wire id survived, including the EMPTY one',
+  "every queue wire id survived, including the EMPTY one",
   EXPECTED_QUEUES.every((id) => queues.includes(id)),
-  queues.join(','),
-);
+  queues.join(","),
+)
 ok(
   `every group wire id survived (${groups.length})`,
-  EXPECTED_GROUPS.every((id) => groups.some((group) => group.id === id)),
-  groups.map((group) => group.id).join(','),
-);
+  EXPECTED_GROUPS.every((id) =>
+    groups.some((group) => group.id === id),
+  ),
+  groups.map((group) => group.id).join(","),
+)
 
-console.log(failures ? `\n${failures} parity assertion(s) failed` : '\nstore backends agree');
-process.exit(failures ? 1 : 0);
+console.log(
+  failures
+    ? `\n${failures} parity assertion(s) failed`
+    : "\nstore backends agree",
+)
+process.exit(failures ? 1 : 0)

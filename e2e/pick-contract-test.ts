@@ -24,11 +24,11 @@
 //   - Re-clicking an open trigger CLOSES it. `closeVia` depends on this, and
 //     an outside-press dismiss that fires before the toggle would instead
 //     close-then-reopen, hanging every suite that reads options and moves on.
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawn } from "node:child_process"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
-import { chromium } from './playwright.js';
+import { chromium } from "./playwright.js"
 import {
   currentValue,
   pickIndex,
@@ -36,22 +36,33 @@ import {
   readOptionPairs,
   readOptions,
   readOptionValues,
-} from './pick.js';
+} from "./pick.js"
 
 // Its own port, unrelated to WEB_PORT: this suite deliberately does not use
 // the shared app server, so it cannot collide with one that is running.
-const PORT = process.env.PICK_CONTRACT_PORT || 18771;
-const HARNESS_URL = `http://localhost:${PORT}/e2e-harness/pick-contract.html`;
-const TRIGGER = '[data-testid="addpos"]';
-const WEB_DIR = fileURLToPath(new URL('../web/', import.meta.url));
+const PORT = process.env.PICK_CONTRACT_PORT || 18771
+const HARNESS_URL = `http://localhost:${PORT}/e2e-harness/pick-contract.html`
+const TRIGGER = '[data-testid="addpos"]'
+const WEB_DIR = fileURLToPath(
+  new URL("../web/", import.meta.url),
+)
 
-const ok = (name: string, isPass: boolean, detail = '') => {
-  console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}${detail && !isPass ? ` — ${detail}` : ''}`);
-  if (!isPass) process.exitCode = 1;
-};
-const eq = (name: string, actual: unknown, expected: unknown) =>
-  ok(name, JSON.stringify(actual) === JSON.stringify(expected),
-    `got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+const ok = (name: string, isPass: boolean, detail = "") => {
+  console.log(
+    `${isPass ? "PASS" : "FAIL"} ${name}${detail && !isPass ? ` — ${detail}` : ""}`,
+  )
+  if (!isPass) process.exitCode = 1
+}
+const eq = (
+  name: string,
+  actual: unknown,
+  expected: unknown,
+) =>
+  ok(
+    name,
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`,
+  )
 
 // `vite` (not `vite build` + preview): the harness page is dev-only, and the
 // production build has a single entry that does not include it.
@@ -63,115 +74,210 @@ const eq = (name: string, actual: unknown, expected: unknown) =>
 // `detached` puts vite in its own process group so the whole group can be
 // signalled; `unref` keeps a still-running server from holding this process
 // open after the assertions are done.
-const vite = spawn(join(WEB_DIR, 'node_modules/.bin/vite'),
-  ['--port', String(PORT), '--strictPort'], {
+const vite = spawn(
+  join(WEB_DIR, "node_modules/.bin/vite"),
+  ["--port", String(PORT), "--strictPort"],
+  {
     cwd: WEB_DIR,
     detached: true,
-    env: { ...process.env, BROWSER: 'none' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+    env: { ...process.env, BROWSER: "none" },
+    stdio: ["ignore", "pipe", "pipe"],
+  },
+)
 
-const viteLog: string[] = [];
-vite.stdout.on('data', (chunk) => viteLog.push(String(chunk)));
-vite.stderr.on('data', (chunk) => viteLog.push(String(chunk)));
-vite.unref();
+const viteLog: string[] = []
+vite.stdout.on("data", (chunk) =>
+  viteLog.push(String(chunk)),
+)
+vite.stderr.on("data", (chunk) =>
+  viteLog.push(String(chunk)),
+)
+vite.unref()
 
-let isStopped = false;
+let isStopped = false
 const stopVite = () => {
-  if (isStopped) return;
-  isStopped = true;
+  if (isStopped) return
+  isStopped = true
   try {
     // Negative pid = the whole group, so vite's own children go too. `pid` is
     // `undefined` only when the spawn itself failed, in which case there is nothing to
     // signal and `waitForServer` below is what reports it.
-    if (vite.pid !== undefined) process.kill(-vite.pid, 'SIGTERM');
+    if (vite.pid !== undefined)
+      process.kill(-vite.pid, "SIGTERM")
   } catch {
     // already gone
   }
-};
-process.on('exit', stopVite);
-process.on('SIGINT', () => { stopVite(); process.exit(130); });
+}
+process.on("exit", stopVite)
+process.on("SIGINT", () => {
+  stopVite()
+  process.exit(130)
+})
 
 // If vite dies (most often --strictPort losing to a leftover server), say so
 // instead of polling for 30s and then blaming the page.
-let viteExit: number | 'signal' | null = null;
-vite.on('exit', (code) => { viteExit = code ?? 'signal'; });
+let viteExit: number | "signal" | null = null
+vite.on("exit", (code) => {
+  viteExit = code ?? "signal"
+})
 
 /** Poll rather than parse vite's banner — the banner has moved between majors. */
 const waitForServer = async () => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (viteExit !== null) {
-      throw new Error(`vite exited (${viteExit}) before serving\n${viteLog.join('')}`);
+      throw new Error(
+        `vite exited (${viteExit}) before serving\n${viteLog.join("")}`,
+      )
     }
     try {
-      const response = await fetch(HARNESS_URL);
-      if (response.ok) return;
+      const response = await fetch(HARNESS_URL)
+      if (response.ok) return
     } catch {
       // not listening yet
     }
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300))
   }
-  throw new Error(`vite never served ${HARNESS_URL}\n${viteLog.join('')}`);
-};
+  throw new Error(
+    `vite never served ${HARNESS_URL}\n${viteLog.join("")}`,
+  )
+}
 
-await waitForServer();
+await waitForServer()
 
-const browser = await chromium.launch();
-const page = await browser.newPage();
+const browser = await chromium.launch()
+const page = await browser.newPage()
 
 // A harness that throws is a broken gate, not a passing one.
-page.on('pageerror', (error) => ok(`no page error (${error.message})`, false));
+page.on("pageerror", (error) =>
+  ok(`no page error (${error.message})`, false),
+)
 
 try {
-  await page.goto(HARNESS_URL, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector(TRIGGER, { timeout: 30000 });
+  await page.goto(HARNESS_URL, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector(TRIGGER, { timeout: 30000 })
 
-  eq('trigger carries `id` as data-testid', await page.getAttribute(TRIGGER, 'data-testid'), 'addpos');
-  eq('accessible name is "<label>: <value>"', await page.getAttribute(TRIGGER, 'aria-label'), 'Add to: Bottom');
+  eq(
+    "trigger carries `id` as data-testid",
+    await page.getAttribute(TRIGGER, "data-testid"),
+    "addpos",
+  )
+  eq(
+    'accessible name is "<label>: <value>"',
+    await page.getAttribute(TRIGGER, "aria-label"),
+    "Add to: Bottom",
+  )
 
   // The readers, which every suite uses to assert what a picker offers.
-  eq('readOptionValues', await readOptionValues(page, TRIGGER), ['top', 'bottom', 'none']);
-  eq('readOptions', await readOptions(page, TRIGGER), ['Top (plays next)', 'Bottom', 'Nowhere']);
-  eq('readOptionPairs', await readOptionPairs(page, TRIGGER),
-    [['Top (plays next)', 'top'], ['Bottom', 'bottom'], ['Nowhere', 'none']]);
-  eq('currentValue reads aria-selected', await currentValue(page, TRIGGER), 'bottom');
+  eq(
+    "readOptionValues",
+    await readOptionValues(page, TRIGGER),
+    ["top", "bottom", "none"],
+  )
+  eq("readOptions", await readOptions(page, TRIGGER), [
+    "Top (plays next)",
+    "Bottom",
+    "Nowhere",
+  ])
+  eq(
+    "readOptionPairs",
+    await readOptionPairs(page, TRIGGER),
+    [
+      ["Top (plays next)", "top"],
+      ["Bottom", "bottom"],
+      ["Nowhere", "none"],
+    ],
+  )
+  eq(
+    "currentValue reads aria-selected",
+    await currentValue(page, TRIGGER),
+    "bottom",
+  )
 
   // The writers.
-  await pickValue(page, TRIGGER, 'top');
-  eq('pickValue reached onChange', await page.textContent('[data-testid="chosen"]'), 'top');
-  eq('accessible name followed the value', await page.getAttribute(TRIGGER, 'aria-label'), 'Add to: Top (plays next)');
-  eq('listbox closed after a pick', await page.locator('[role="listbox"]').count(), 0);
+  await pickValue(page, TRIGGER, "top")
+  eq(
+    "pickValue reached onChange",
+    await page.textContent('[data-testid="chosen"]'),
+    "top",
+  )
+  eq(
+    "accessible name followed the value",
+    await page.getAttribute(TRIGGER, "aria-label"),
+    "Add to: Top (plays next)",
+  )
+  eq(
+    "listbox closed after a pick",
+    await page.locator('[role="listbox"]').count(),
+    0,
+  )
 
-  await pickIndex(page, TRIGGER, 1);
-  eq('pickIndex counts every option, disabled included',
-    await page.textContent('[data-testid="chosen"]'), 'bottom');
+  await pickIndex(page, TRIGGER, 1)
+  eq(
+    "pickIndex counts every option, disabled included",
+    await page.textContent('[data-testid="chosen"]'),
+    "bottom",
+  )
 
   // `closeVia`: re-click closes. Must not close-then-reopen.
-  await page.click(TRIGGER);
-  await page.waitForSelector('[role="listbox"] [role="option"]');
-  await page.click(TRIGGER);
-  await page.waitForTimeout(300);
-  eq('re-clicking the trigger closes it (closeVia)', await page.locator('[role="listbox"]').count(), 0);
+  await page.click(TRIGGER)
+  await page.waitForSelector(
+    '[role="listbox"] [role="option"]',
+  )
+  await page.click(TRIGGER)
+  await page.waitForTimeout(300)
+  eq(
+    "re-clicking the trigger closes it (closeVia)",
+    await page.locator('[role="listbox"]').count(),
+    0,
+  )
 
   // The Default / Watched chip rides `badge` on the option. StartModal already
   // passed one; CountPicker is why it had to actually render.
-  const COUNT = '[data-testid="count"]';
-  await page.click(COUNT);
-  await page.waitForSelector('[role="listbox"] [role="option"]');
-  const defaultChip = page.locator('[role="listbox"] .optionbadge');
-  eq('Default chip is on the default option', await defaultChip.textContent(), 'Default');
-  eq('Default chip sits on value 2',
-    await page.locator('[role="listbox"] [data-value="2"] .optionbadge').count(), 1);
-  eq('1 is not tagged Default',
-    await page.locator('[role="listbox"] [data-value="1"] .optionbadge').count(), 0);
-  await page.click(COUNT);
+  const COUNT = '[data-testid="count"]'
+  await page.click(COUNT)
+  await page.waitForSelector(
+    '[role="listbox"] [role="option"]',
+  )
+  const defaultChip = page.locator(
+    '[role="listbox"] .optionbadge',
+  )
+  eq(
+    "Default chip is on the default option",
+    await defaultChip.textContent(),
+    "Default",
+  )
+  eq(
+    "Default chip sits on value 2",
+    await page
+      .locator(
+        '[role="listbox"] [data-value="2"] .optionbadge',
+      )
+      .count(),
+    1,
+  )
+  eq(
+    "1 is not tagged Default",
+    await page
+      .locator(
+        '[role="listbox"] [data-value="1"] .optionbadge',
+      )
+      .count(),
+    0,
+  )
+  await page.click(COUNT)
 } finally {
-  await browser.close();
-  stopVite();
+  await browser.close()
+  stopVite()
 }
 
-console.log(process.exitCode ? '\npick.ts contract BROKEN' : '\npick.ts contract holds');
+console.log(
+  process.exitCode
+    ? "\npick.ts contract BROKEN"
+    : "\npick.ts contract holds",
+)
 
 // Explicit: the dev server is detached and unref'd, but a lingering handle
 // should never turn a finished suite into a hung CI job.
-process.exit(process.exitCode ?? 0);
+process.exit(process.exitCode ?? 0)

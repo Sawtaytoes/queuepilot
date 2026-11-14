@@ -57,76 +57,95 @@
 //
 // Offline: Plex points at a closed port, the other providers at `.invalid` hosts, and the
 // broker is an in-process aedes. Nothing here reaches the household.
-import { createRequire } from 'node:module';
-import net from 'node:net';
-import { DatabaseSync } from 'node:sqlite';
-import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import type { ChildProcess } from 'node:child_process';
+import { createRequire } from "node:module"
+import net from "node:net"
+import { DatabaseSync } from "node:sqlite"
+import { promises as fs } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import type { ChildProcess } from "node:child_process"
 
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
 // Same resolution the fake broker uses: aedes belongs to the `e2e/broker` workspace and the
 // mqtt client to `server/`, and neither is resolvable from `e2e/` itself.
-const requireBroker = createRequire(new URL('./broker/node_modules/', import.meta.url).pathname);
-const requireClient = createRequire(new URL('../server/node_modules/', import.meta.url).pathname);
-/* eslint-disable @typescript-eslint/no-explicit-any -- see fake-mqtt.ts: hand-writing an aedes
-   surface to type a fake broker would be more machinery than the broker. */
-const Aedes = requireBroker('aedes') as new () => any;
-const mqtt = requireClient('mqtt') as { connect(opts: unknown): MqttHandle };
-/* eslint-enable @typescript-eslint/no-explicit-any */
+const requireBroker = createRequire(
+  new URL("./broker/node_modules/", import.meta.url)
+    .pathname,
+)
+const requireClient = createRequire(
+  new URL("../server/node_modules/", import.meta.url)
+    .pathname,
+)
 
-interface MqttHandle {
-  on(event: 'connect', handler: () => void): void;
-  on(event: 'message', handler: (topic: string, payload: Buffer) => void): void;
-  publish(topic: string, payload: string, opts?: { qos?: number; retain?: boolean }): void;
-  subscribe(topics: string[], cb: () => void): void;
-  end(force?: boolean): void;
+const Aedes = requireBroker("aedes") as new () => any
+const mqtt = requireClient("mqtt") as {
+  connect(opts: unknown): MqttHandle
 }
 
-const BROKER_PORT = 21891;
-const WEB_PORT = 18791;
+interface MqttHandle {
+  on(event: "connect", handler: () => void): void
+  on(
+    event: "message",
+    handler: (topic: string, payload: Buffer) => void,
+  ): void
+  publish(
+    topic: string,
+    payload: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
+    opts?: { qos?: number; retain?: boolean },
+  ): void
+  subscribe(topics: string[], cb: () => void): void
+  end(force?: boolean): void
+}
 
-const T_CMD_START = 'queuepilot/cmd/session/start';
-const T_CMD_ADVANCE = 'queuepilot/cmd/session/advance';
-const T_CMD_TOPUP = 'queuepilot/cmd/session/topup';
-const T_CMD_PREVIEW = 'queuepilot/cmd/generic/preview';
-const T_RESP_TOPUP = 'queuepilot/resp/topup';
-const T_STATE = 'queuepilot/state';
-const T_DISCOVERY = 'homeassistant/sensor/queuepilot_status/config';
+const BROKER_PORT = 21891
+const WEB_PORT = 18791
+
+const T_CMD_START = "queuepilot/cmd/session/start"
+const T_CMD_ADVANCE = "queuepilot/cmd/session/advance"
+const T_CMD_TOPUP = "queuepilot/cmd/session/topup"
+const T_CMD_PREVIEW = "queuepilot/cmd/generic/preview"
+const T_RESP_TOPUP = "queuepilot/resp/topup"
+const T_STATE = "queuepilot/state"
+const T_DISCOVERY =
+  "homeassistant/sensor/queuepilot_status/config"
 
 /**
  * THE TWENTY. Placeholders, and a one-for-one stand-in for the live registry's twenty — same
  * count, same mix of curated queues and rules pools, same shapes.
  */
 const EXPECTED_SETS = [
-  'bob',
-  'bob_kids',
-  'bob_carol_movies',
-  'bob_alice',
-  'bob_dave_movies',
-  'demo',
-  'bob_erin_movies',
-  'carol_1',
-  'bob_frank_movies',
-  'bob_anime',
-  'bob_alice_anime',
-  'bob_kids_anime',
-  'family_anime',
-  'manga_webtoons',
-  'older_kids_shorts_shows',
-  'younger_kids_shows',
-  'younger',
-  'older',
-  'shorts',
-  'movies',
-] as const;
+  "bob",
+  "bob_kids",
+  "bob_carol_movies",
+  "bob_alice",
+  "bob_dave_movies",
+  "demo",
+  "bob_erin_movies",
+  "carol_1",
+  "bob_frank_movies",
+  "bob_anime",
+  "bob_alice_anime",
+  "bob_kids_anime",
+  "family_anime",
+  "manga_webtoons",
+  "older_kids_shorts_shows",
+  "younger_kids_shows",
+  "younger",
+  "older",
+  "shorts",
+  "movies",
+] as const
 
 /** The sixteen `source: queue` sets. The four rules pools have no curated lineup. */
 const EXPECTED_QUEUES = EXPECTED_SETS.filter(
-  (id) => !['younger', 'older', 'shorts', 'movies'].includes(id),
-);
+  (id) =>
+    !["younger", "older", "shorts", "movies"].includes(id),
+)
 
 /**
  * THE CARD TABLE — the same shape as `tag_command_map` in `automation.plex_nfc_scanner`, and
@@ -137,20 +156,32 @@ const EXPECTED_QUEUES = EXPECTED_SETS.filter(
  * with `requires_profile` refuses a card that names a different one, so this table is also
  * what proves the gates and the cards still agree with each other.
  */
-const CARDS: readonly { set: string; kind: 'picks' | 'rules'; profile: string }[] = [
-  { kind: 'picks', profile: 'Older Kids', set: 'older_kids_shorts_shows' },
-  { kind: 'rules', profile: 'Older Kids', set: 'movies' },
-  { kind: 'picks', profile: 'Younger Kids', set: 'younger_kids_shows' },
-  { kind: 'rules', profile: 'Younger Kids', set: 'shorts' },
-  { kind: 'rules', profile: 'Younger Kids', set: 'movies' },
-  { kind: 'picks', profile: '', set: 'bob' },
-  { kind: 'picks', profile: '', set: 'bob_anime' },
-  { kind: 'picks', profile: '', set: 'bob_alice' },
-  { kind: 'picks', profile: '', set: 'bob_alice_anime' },
-  { kind: 'picks', profile: '', set: 'bob_kids' },
-  { kind: 'picks', profile: '', set: 'bob_kids_anime' },
-  { kind: 'picks', profile: '', set: 'demo' },
-];
+const CARDS: readonly {
+  set: string
+  kind: "picks" | "rules"
+  profile: string
+}[] = [
+  {
+    kind: "picks",
+    profile: "Older Kids",
+    set: "older_kids_shorts_shows",
+  },
+  { kind: "rules", profile: "Older Kids", set: "movies" },
+  {
+    kind: "picks",
+    profile: "Younger Kids",
+    set: "younger_kids_shows",
+  },
+  { kind: "rules", profile: "Younger Kids", set: "shorts" },
+  { kind: "rules", profile: "Younger Kids", set: "movies" },
+  { kind: "picks", profile: "", set: "bob" },
+  { kind: "picks", profile: "", set: "bob_anime" },
+  { kind: "picks", profile: "", set: "bob_alice" },
+  { kind: "picks", profile: "", set: "bob_alice_anime" },
+  { kind: "picks", profile: "", set: "bob_kids" },
+  { kind: "picks", profile: "", set: "bob_kids_anime" },
+  { kind: "picks", profile: "", set: "demo" },
+]
 
 /**
  * The sentences the app publishes when a WIRE id fails to resolve. Matched as text because
@@ -159,229 +190,380 @@ const CARDS: readonly { set: string; kind: 'picks' | 'rules'; profile: string }[
  * further down the chain (Plex unreachable, a provider not configured) is expected here and
  * must NOT fail the suite: this gate is about the id reaching the set, not about the play.
  */
-const WIRE_FAILURES = [/not enabled/i, /profile mismatch/i, /has no set mapped/i, /no profile/i];
+const WIRE_FAILURES = [
+  /not enabled/i,
+  /profile mismatch/i,
+  /has no set mapped/i,
+  /no profile/i,
+]
 
-let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
-};
+let failures = 0
+const ok = (
+  name: string,
+  isPassing: boolean,
+  extra = "",
+): void => {
+  console.log(
+    `${isPassing ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`,
+  )
+  if (!isPassing) failures += 1
+}
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 interface StateMessage {
-  error?: unknown;
-  awaiting?: unknown;
-  [field: string]: unknown;
+  error?: unknown
+  awaiting?: unknown
+  [field: string]: unknown
 }
 
 async function main(): Promise<void> {
   // ---- the broker -------------------------------------------------------------------- //
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped aedes */
-  const aedes = new Aedes();
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- untyped aedes */
-  const broker = net.createServer(aedes.handle);
+
+  const aedes = new Aedes()
+
+  const broker = net.createServer(aedes.handle)
   /** Every topic the app under test subscribed to, recorded at the broker. */
-  const subscribed = new Set<string>();
-  /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
-  aedes.on('subscribe', (subs: { topic: string }[]) => {
-    for (const s of subs) subscribed.add(s.topic);
-  });
-  /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
-  await new Promise<void>((resolve) => broker.listen(BROKER_PORT, resolve));
+  const subscribed = new Set<string>()
+
+  aedes.on("subscribe", (subs: { topic: string }[]) => {
+    for (const sub of subs) subscribed.add(sub.topic)
+  })
+
+  await new Promise<void>((resolve) =>
+    broker.listen(BROKER_PORT, resolve),
+  )
 
   // ---- the config directory ---------------------------------------------------------- //
-  const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-wire-'));
-  await fs.copyFile('e2e/fixtures/wire-contract.sets.yaml', path.join(dir, 'sets.yaml'));
-  await fs.copyFile('e2e/fixtures/wire-contract.queues.yaml', path.join(dir, 'queues.yaml'));
-  await fs.writeFile(path.join(dir, 'groups.yaml'), 'groups: []\n');
-  await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
+  const dir = await fs.mkdtemp(
+    path.join(tmpdir(), "qp-wire-"),
+  )
+  await fs.copyFile(
+    "e2e/fixtures/wire-contract.sets.yaml",
+    path.join(dir, "sets.yaml"),
+  )
+  await fs.copyFile(
+    "e2e/fixtures/wire-contract.queues.yaml",
+    path.join(dir, "queues.yaml"),
+  )
+  await fs.writeFile(
+    path.join(dir, "groups.yaml"),
+    "groups: []\n",
+  )
+  await fs.writeFile(
+    path.join(dir, "pending.yaml"),
+    "seen_through: 0\n",
+  )
 
-  let child: ChildProcess | null = null;
-  let client: MqttHandle | null = null;
+  let child: ChildProcess | null = null
+  let client: MqttHandle | null = null
 
   try {
     child = spawnServer({
       env: {
         ...process.env,
-        BOARD_GAME_PICKER_URL: 'https://board-games.invalid',
-        CACHE_PATH: path.join(dir, 'cache.sqlite'),
-        GROUPS_PATH: path.join(dir, 'groups.yaml'),
-        HISTORY_PATH: path.join(dir, '.history.json'),
-        KAVITA_API_KEY: 'offline-harness-key',
-        KAVITA_API_SERVER_URL: 'https://kavita.invalid',
-        MQTT_HOST: '127.0.0.1',
+        BOARD_GAME_PICKER_URL:
+          "https://board-games.invalid",
+        CACHE_PATH: path.join(dir, "cache.sqlite"),
+        GROUPS_PATH: path.join(dir, "groups.yaml"),
+        HISTORY_PATH: path.join(dir, ".history.json"),
+        KAVITA_API_KEY: "offline-harness-key",
+        KAVITA_API_SERVER_URL: "https://kavita.invalid",
+        MQTT_HOST: "127.0.0.1",
         MQTT_PORT: String(BROKER_PORT),
-        NODE_TLS_REJECT_UNAUTHORIZED: '0',
-        PENDING_PATH: path.join(dir, 'pending.yaml'),
+        NODE_TLS_REJECT_UNAUTHORIZED: "0",
+        PENDING_PATH: path.join(dir, "pending.yaml"),
         // The LIVE setting. Without it a gated set takes the pre-FSM branch and blocks on
         // `waitForProfile` for two minutes per card, which is both slow and a different code
         // path from the one the household runs.
-        PLAYBACK_FSM: 'true',
-        PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-        PLEX_TOKEN: '',
+        PLAYBACK_FSM: "true",
+        PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+        PLEX_TOKEN: "",
         // Only the `set: "auto"` branch reaches this, and it has no profile to find here.
-        PROFILE_WAIT_SECONDS: '1',
-        PROVIDERS_PATH: path.join(dir, 'providers.yaml'),
-        PROVIDERS_SECRETS_PATH: path.join(dir, 'providers.secrets.yaml'),
-        QUEUES_PATH: path.join(dir, 'queues.yaml'),
-        SETS_PATH: path.join(dir, 'sets.yaml'),
-        STORE_BACKEND: 'sqlite',
+        PROFILE_WAIT_SECONDS: "1",
+        PROVIDERS_PATH: path.join(dir, "providers.yaml"),
+        PROVIDERS_SECRETS_PATH: path.join(
+          dir,
+          "providers.secrets.yaml",
+        ),
+        QUEUES_PATH: path.join(dir, "queues.yaml"),
+        SETS_PATH: path.join(dir, "sets.yaml"),
+        STORE_BACKEND: "sqlite",
         // Named rather than derived, so the harness can read the book of record back.
-        STORE_PATH: path.join(dir, 'queuepilot.sqlite'),
+        STORE_PATH: path.join(dir, "queuepilot.sqlite"),
         WEB_PORT: String(WEB_PORT),
       },
-      stdio: 'ignore',
-    });
+      stdio: "ignore",
+    })
 
-    const base = `http://localhost:${WEB_PORT}`;
+    const base = `http://localhost:${WEB_PORT}`
     for (let attempt = 0; attempt < 150; attempt += 1) {
       try {
-        const res = await fetch(`${base}/api/sets`);
-        if (res.ok) break;
+        const res = await fetch(`${base}/api/sets`)
+        if (res.ok) break
       } catch {
         /* not up yet */
       }
-      await sleep(200);
+      await sleep(200)
     }
 
     // ---- 1 + 2: the ids, by name --------------------------------------------------- //
-    const setsBody = (await (await fetch(`${base}/api/sets`)).json()) as {
-      sets?: { id: string }[];
-    };
-    const setIds = (setsBody.sets ?? []).map((s) => s.id);
+    const setsBody = (await (
+      await fetch(`${base}/api/sets`)
+    ).json()) as {
+      sets?: { id: string }[]
+    }
+    const setIds = (setsBody.sets ?? []).map(
+      (set) => set.id,
+    )
     ok(
-      'twenty set ids, none missing',
+      "twenty set ids, none missing",
       EXPECTED_SETS.every((id) => setIds.includes(id)),
       `missing ${JSON.stringify(EXPECTED_SETS.filter((id) => !setIds.includes(id)))}`,
-    );
+    )
     ok(
-      'twenty set ids, none extra',
-      setIds.every((id) => (EXPECTED_SETS as readonly string[]).includes(id)),
+      "twenty set ids, none extra",
+      setIds.every((id) =>
+        (EXPECTED_SETS as readonly string[]).includes(id),
+      ),
       `extra ${JSON.stringify(setIds.filter((id) => !(EXPECTED_SETS as readonly string[]).includes(id)))}`,
-    );
-    ok('the count is twenty', setIds.length === 20, `saw ${setIds.length}`);
+    )
+    ok(
+      "the count is twenty",
+      setIds.length === 20,
+      `saw ${setIds.length}`,
+    )
 
     // Read off the BOOK OF RECORD rather than off `/api/queues`, and the difference is the
     // point: that endpoint answers with a row per SET (a rotation pool included, with an
     // empty `items`), so it cannot tell "this queue is keyed `bob`" from "this set has no
     // lineup". `queues.set_id` is a wire id in its own right and this is where it lives.
-    const db = new DatabaseSync(path.join(dir, 'queuepilot.sqlite'), { readOnly: true });
-    let queueIds: string[] = [];
+    const db = new DatabaseSync(
+      path.join(dir, "queuepilot.sqlite"),
+      { readOnly: true },
+    )
+    let queueIds: string[] = []
     try {
       queueIds = (
-        db.prepare('select distinct set_id from queues order by set_id').all() as {
-          set_id: string;
+        db
+          .prepare(
+            "select distinct set_id from queues order by set_id",
+          )
+          .all() as {
+          set_id: string
         }[]
-      ).map((row) => row.set_id);
+      ).map((row) => row.set_id)
     } finally {
-      db.close();
+      db.close()
     }
     ok(
-      'sixteen queue ids, none missing',
+      "sixteen queue ids, none missing",
       EXPECTED_QUEUES.every((id) => queueIds.includes(id)),
       `missing ${JSON.stringify(EXPECTED_QUEUES.filter((id) => !queueIds.includes(id)))}`,
-    );
+    )
     ok(
-      'sixteen queue ids, none extra',
-      queueIds.every((id) => EXPECTED_QUEUES.includes(id as (typeof EXPECTED_QUEUES)[number])),
+      "sixteen queue ids, none extra",
+      queueIds.every((id) =>
+        EXPECTED_QUEUES.includes(
+          id as (typeof EXPECTED_QUEUES)[number],
+        ),
+      ),
       `extra ${JSON.stringify(queueIds.filter((id) => !EXPECTED_QUEUES.includes(id as (typeof EXPECTED_QUEUES)[number])))}`,
-    );
+    )
     ok(
-      'every queue id is also a set id — a card resolves to a lineup, not to an orphan',
+      "every queue id is also a set id — a card resolves to a lineup, not to an orphan",
       queueIds.every((id) => setIds.includes(id)),
-    );
+    )
 
     // ---- the client ----------------------------------------------------------------- //
-    const states: StateMessage[] = [];
-    const topups: unknown[] = [];
-    const chooserEvents: Record<string, unknown>[] = [];
-    const discovery: Record<string, unknown>[] = [];
+    const states: StateMessage[] = []
+    const topups: unknown[] = []
+    const chooserEvents: Record<string, unknown>[] = []
+    const discovery: Record<string, unknown>[] = []
 
     client = mqtt.connect({
-      clientId: 'wire-contract-probe',
-      host: '127.0.0.1',
+      clientId: "wire-contract-probe",
+      host: "127.0.0.1",
       port: BROKER_PORT,
-      protocol: 'mqtt',
-    });
+      protocol: "mqtt",
+    })
 
     await new Promise<void>((resolve) => {
-      client!.on('connect', () => {
-        client!.subscribe([T_STATE, T_RESP_TOPUP, T_DISCOVERY, 'queuepilot/resp/chooser/desk'], resolve);
-      });
-    });
+      client!.on("connect", () => {
+        client!.subscribe(
+          [
+            T_STATE,
+            T_RESP_TOPUP,
+            T_DISCOVERY,
+            "queuepilot/resp/chooser/desk",
+          ],
+          resolve,
+        )
+      })
+    })
 
-    client.on('message', (topic, buf) => {
-      let parsed: unknown = null;
+    client.on("message", (topic, buf) => {
+      let parsed: unknown = null
       try {
-        parsed = JSON.parse(buf.toString() || 'null');
+        parsed = JSON.parse(buf.toString() || "null")
       } catch {
-        return;
+        return
       }
-      if (topic === T_STATE && parsed && typeof parsed === 'object') {
-        states.push(parsed as StateMessage);
+      if (
+        topic === T_STATE &&
+        parsed &&
+        typeof parsed === "object"
+      ) {
+        states.push(parsed as StateMessage)
       }
-      if (topic === T_RESP_TOPUP) topups.push(parsed);
-      if (topic === 'queuepilot/resp/chooser/desk' && parsed && typeof parsed === 'object') chooserEvents.push(parsed as Record<string, unknown>);
-      if (topic === T_DISCOVERY && parsed && typeof parsed === 'object') {
-        discovery.push(parsed as Record<string, unknown>);
+      if (topic === T_RESP_TOPUP) topups.push(parsed)
+      if (
+        topic === "queuepilot/resp/chooser/desk" &&
+        parsed &&
+        typeof parsed === "object"
+      )
+        chooserEvents.push(
+          parsed as Record<string, unknown>,
+        )
+      if (
+        topic === T_DISCOVERY &&
+        parsed &&
+        typeof parsed === "object"
+      ) {
+        discovery.push(parsed as Record<string, unknown>)
       }
-    });
+    })
 
     // The retained discovery + boot state land on subscribe.
-    await sleep(1500);
+    await sleep(1500)
 
     // ---- 3: the topics HA speaks ---------------------------------------------------- //
-    for (const topic of [T_CMD_START, T_CMD_ADVANCE, T_CMD_TOPUP, T_CMD_PREVIEW]) {
-      ok(`subscribed to ${topic}`, subscribed.has(topic));
+    for (const topic of [
+      T_CMD_START,
+      T_CMD_ADVANCE,
+      T_CMD_TOPUP,
+      T_CMD_PREVIEW,
+    ]) {
+      ok(`subscribed to ${topic}`, subscribed.has(topic))
     }
 
     // Person cards use their own reader-local seam and cannot start a session by scanning.
-    ok('subscribed to person-card chooser', subscribed.has('queuepilot/cmd/chooser/+'));
-    const personResponse = await fetch(`${base}/api/people`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: 'Ada' }),
-    });
-    ok('fixture person created', personResponse.status === 201);
-    const statesBeforeScan = states.length;
-    client.publish('queuepilot/cmd/chooser/desk', JSON.stringify({ action: 'scan', personId: 'ada', eventId: 'sample-scan', atMs: Date.now() }));
-    for (let attempt = 0; attempt < 50 && !chooserEvents.length; attempt += 1) await sleep(50);
-    const choice = chooserEvents[0];
-    ok('scan publishes a visible chooser over the broker', choice?.event === 'show' && choice?.isActive === true);
-    ok('scan alone never enters the playback path', states.length === statesBeforeScan);
-    const choices = choice?.queues as { id: string; kind: string }[] | undefined;
-    ok('chooser reads the real queue catalog', Array.isArray(choices) && choices.some((queue) => queue.id === 'bob'));
+    ok(
+      "subscribed to person-card chooser",
+      subscribed.has("queuepilot/cmd/chooser/+"),
+    )
+    const personResponse = await fetch(
+      `${base}/api/people`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ displayName: "Ada" }),
+      },
+    )
+    ok(
+      "fixture person created",
+      personResponse.status === 201,
+    )
+    const statesBeforeScan = states.length
+    client.publish(
+      "queuepilot/cmd/chooser/desk",
+      JSON.stringify({
+        action: "scan",
+        personId: "ada",
+        eventId: "sample-scan",
+        atMs: Date.now(),
+      }),
+    )
+    for (
+      let attempt = 0;
+      attempt < 50 && !chooserEvents.length;
+      attempt += 1
+    )
+      await sleep(50)
+    const choice = chooserEvents[0]
+    ok(
+      "scan publishes a visible chooser over the broker",
+      choice?.event === "show" && choice?.isActive === true,
+    )
+    ok(
+      "scan alone never enters the playback path",
+      states.length === statesBeforeScan,
+    )
+    const choices = choice?.queues as
+      | { id: string; kind: string }[]
+      | undefined
+    ok(
+      "chooser reads the real queue catalog",
+      Array.isArray(choices) &&
+        choices.some((queue) => queue.id === "bob"),
+    )
     if (choice) {
-      client.publish('queuepilot/cmd/chooser/desk', JSON.stringify({ action: 'choose', sessionId: choice.sessionId, revision: choice.revision, queueId: 'bob' }));
-      for (let attempt = 0; attempt < 50 && !chooserEvents.some((event) => event.event === 'play'); attempt += 1) await sleep(50);
-      const play = chooserEvents.find((event) => event.event === 'play');
-      ok('tap publishes the explicit room-control intent', (play?.queue as { id?: string })?.id === 'bob' && play?.isActive === false);
-      ok('room automation remains the only hardware-control caller', states.length === statesBeforeScan);
+      client.publish(
+        "queuepilot/cmd/chooser/desk",
+        JSON.stringify({
+          action: "choose",
+          sessionId: choice.sessionId,
+          revision: choice.revision,
+          queueId: "bob",
+        }),
+      )
+      for (
+        let attempt = 0;
+        attempt < 50 &&
+        !chooserEvents.some(
+          (event) => event.event === "play",
+        );
+        attempt += 1
+      )
+        await sleep(50)
+      const play = chooserEvents.find(
+        (event) => event.event === "play",
+      )
+      ok(
+        "tap publishes the explicit room-control intent",
+        (play?.queue as { id?: string })?.id === "bob" &&
+          play?.isActive === false,
+      )
+      ok(
+        "room automation remains the only hardware-control caller",
+        states.length === statesBeforeScan,
+      )
     }
 
     // ---- 4: the discovery config ---------------------------------------------------- //
-    const cfg = discovery[discovery.length - 1] ?? null;
-    ok('discovery config published', cfg != null);
+    const cfg = discovery[discovery.length - 1] ?? null
+    ok("discovery config published", cfg != null)
     ok(
-      'discovery object_id is queuepilot_status',
-      cfg?.object_id === 'queuepilot_status',
+      "discovery object_id is queuepilot_status",
+      cfg?.object_id === "queuepilot_status",
       String(cfg?.object_id),
-    );
-    ok('discovery state topic is queuepilot/state', cfg?.state_topic === T_STATE);
+    )
     ok(
-      'discovery exposes the state as attributes for HA dashboards and household automations',
+      "discovery state topic is queuepilot/state",
+      cfg?.state_topic === T_STATE,
+    )
+    ok(
+      "discovery exposes the state as attributes for HA dashboards and household automations",
       cfg?.json_attributes_topic === T_STATE,
-    );
+    )
 
     /** Publish one command and wait for the next state message it causes. */
-    const startAndRead = async (payload: Record<string, unknown>): Promise<StateMessage[]> => {
-      const before = states.length;
-      client!.publish(T_CMD_START, JSON.stringify(payload), { qos: 1 });
+    const startAndRead = async (
+      payload: Record<string, unknown>,
+    ): Promise<StateMessage[]> => {
+      const before = states.length
+      client!.publish(
+        T_CMD_START,
+        JSON.stringify(payload),
+        { qos: 1 },
+      )
       for (let attempt = 0; attempt < 60; attempt += 1) {
-        await sleep(100);
-        if (states.length > before) break;
+        await sleep(100)
+        if (states.length > before) break
       }
-      return states.slice(before);
-    };
+      return states.slice(before)
+    }
 
     // ---- 5: every card's payload reaches its set ------------------------------------ //
     for (const card of CARDS) {
@@ -390,87 +572,133 @@ async function main(): Promise<void> {
         kind: card.kind,
         profile: card.profile,
         set: card.set,
-        via: 'ha',
-      });
+        via: "ha",
+      })
       const errors = seen
-        .map((s) => (typeof s.error === 'string' ? s.error : ''))
-        .filter(Boolean);
-      const wireFailure = errors.find((e) => WIRE_FAILURES.some((rx) => rx.test(e)));
+        .map((message) =>
+          typeof message.error === "string"
+            ? message.error
+            : "",
+        )
+        .filter(Boolean)
+      const wireFailure = errors.find((error) =>
+        WIRE_FAILURES.some((rx) => rx.test(error)),
+      )
       ok(
-        `card {"set": "${card.set}"${card.profile ? `, "profile": "${card.profile}"` : ''}} resolves`,
+        `card {"set": "${card.set}"${card.profile ? `, "profile": "${card.profile}"` : ""}} resolves`,
         seen.length > 0 && !wireFailure,
-        wireFailure ?? (seen.length ? '' : 'no state was published at all'),
-      );
+        wireFailure ??
+          (seen.length
+            ? ""
+            : "no state was published at all"),
+      )
     }
 
     // Every id in the registry, not only the twelve that are on cardboard: a web tile, a
     // voice sentence and `automation.plex_app_control` publish the same payload for any of
     // them, and an id that resolves for nobody is still a broken address.
     for (const id of EXPECTED_SETS) {
-      const seen = await startAndRead({ kind: 'picks', profile: '', set: id, via: 'ha' });
+      const seen = await startAndRead({
+        kind: "picks",
+        profile: "",
+        set: id,
+        via: "ha",
+      })
       const errors = seen
-        .map((s) => (typeof s.error === 'string' ? s.error : ''))
-        .filter(Boolean);
-      const notEnabled = errors.find((e) => /not enabled/i.test(e));
-      ok(`{"set": "${id}"} is a live address`, seen.length > 0 && !notEnabled, notEnabled ?? '');
+        .map((message) =>
+          typeof message.error === "string"
+            ? message.error
+            : "",
+        )
+        .filter(Boolean)
+      const notEnabled = errors.find((error) =>
+        /not enabled/i.test(error),
+      )
+      ok(
+        `{"set": "${id}"} is a live address`,
+        seen.length > 0 && !notEnabled,
+        notEnabled ?? "",
+      )
     }
 
     // ---- 6: the gate can fail ------------------------------------------------------- //
     const bogus = await startAndRead({
-      kind: 'picks',
-      profile: '',
-      set: 'no_such_set_id',
-      via: 'ha',
-    });
+      kind: "picks",
+      profile: "",
+      set: "no_such_set_id",
+      via: "ha",
+    })
     ok(
-      'an unknown id is refused BY NAME (so a green run means something)',
-      bogus.some((s) => typeof s.error === 'string' && /no_such_set_id.*not enabled/i.test(s.error)),
-      JSON.stringify(bogus.map((s) => s.error)),
-    );
+      "an unknown id is refused BY NAME (so a green run means something)",
+      bogus.some(
+        (message) =>
+          typeof message.error === "string" &&
+          /no_such_set_id.*not enabled/i.test(
+            message.error,
+          ),
+      ),
+      JSON.stringify(bogus.map((message) => message.error)),
+    )
 
     // ---- 7: `set: "auto"` still routes ---------------------------------------------- //
-    const auto = await startAndRead({ kind: 'rules', profile: '', set: 'auto', via: 'ha' });
+    const auto = await startAndRead({
+      kind: "rules",
+      profile: "",
+      set: "auto",
+      via: "ha",
+    })
     ok(
       'set "auto" reaches the profile-driven router',
-      auto.some((s) => s.awaiting === 'profile'),
-      JSON.stringify(auto.map((s) => s.awaiting ?? s.error)),
-    );
+      auto.some(
+        (message) => message.awaiting === "profile",
+      ),
+      JSON.stringify(
+        auto.map(
+          (message) => message.awaiting ?? message.error,
+        ),
+      ),
+    )
 
     // ---- 8: a top-up tick is answered ----------------------------------------------- //
-    const topupsBefore = topups.length;
-    client.publish(T_CMD_TOPUP, '{}', { qos: 1 });
+    const topupsBefore = topups.length
+    client.publish(T_CMD_TOPUP, "{}", { qos: 1 })
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      await sleep(100);
-      if (topups.length > topupsBefore) break;
+      await sleep(100)
+      if (topups.length > topupsBefore) break
     }
     ok(
-      'an empty {} manual top-up is answered on resp/topup',
+      "an empty {} manual top-up is answered on resp/topup",
       topups.length > topupsBefore,
-    );
+    )
 
     // An advance with an empty body must not take the service down — it is what the
     // "switch it up" card and the voice sentence both send.
-    client.publish(T_CMD_ADVANCE, '{}', { qos: 1 });
-    await sleep(500);
-    const stillUp = await fetch(`${base}/api/sets`).then(
-      (r) => r.ok,
+    client.publish(T_CMD_ADVANCE, "{}", { qos: 1 })
+    await sleep(500)
+    const isStillUp = await fetch(`${base}/api/sets`).then(
+      (response) => response.ok,
       () => false,
-    );
-    ok('an empty advance leaves the service running', stillUp);
+    )
+    ok(
+      "an empty advance leaves the service running",
+      isStillUp,
+    )
   } finally {
-    client?.end(true);
-    if (child) killServer(child);
-    broker.close();
-    /* eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-    aedes.close();
-    await fs.rm(dir, { force: true, recursive: true });
+    client?.end(true)
+    if (child) killServer(child)
+    broker.close()
+
+    aedes.close()
+    await fs.rm(dir, { force: true, recursive: true })
   }
 
-  console.log(failures ? `\n${failures} failed` : '\nall passed');
-  process.exit(failures ? 1 : 0);
+  console.log(
+    failures ? `\n${failures} failed` : "\nall passed",
+  )
+  process.exit(failures ? 1 : 0)
 }
 
-main().catch((e: unknown) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((error: unknown) => {
+  console.error(error)
+  process.exit(1)
+})
