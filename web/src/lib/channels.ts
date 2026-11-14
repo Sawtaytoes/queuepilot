@@ -32,7 +32,7 @@ export function activeBinding(
 
   if (ch.has_explicit_profiles && currentProfile) {
     const hit = ps.find(
-      (p) => p.plex_user === currentProfile,
+      (binding) => binding.plex_user === currentProfile,
     )
 
     if (hit) return hit
@@ -62,15 +62,15 @@ export async function fetchRatings(
 ): Promise<string[]> {
   if (!ch) return FALLBACK_RATINGS
 
-  const b = binding ?? activeBinding(ch, null)
+  const resolvedBinding = binding ?? activeBinding(ch, null)
   const key = ch.has_explicit_profiles
-    ? `${ch.id}::${b.plex_user || ""}`
+    ? `${ch.id}::${resolvedBinding.plex_user || ""}`
     : ch.id
 
   if (ratingsCache.has(key)) return ratingsCache.get(key)!
 
   const url = ch.has_explicit_profiles
-    ? `/api/ratings?uuid=${encodeURIComponent(b.user_uuid || "")}`
+    ? `/api/ratings?uuid=${encodeURIComponent(resolvedBinding.user_uuid || "")}`
     : `/api/ratings?set=${encodeURIComponent(ch.id)}`
 
   try {
@@ -103,13 +103,16 @@ export async function fetchScopedRatings(
 
     if (uuid) qs.set("uuid", uuid)
 
-    const r = await api<{ ratings: string[] }>(
+    const response = await api<{ ratings: string[] }>(
       "GET",
       `/api/ratings?${qs}`,
     )
 
-    if (Array.isArray(r.ratings) && r.ratings.length)
-      return r.ratings
+    if (
+      Array.isArray(response.ratings) &&
+      response.ratings.length
+    )
+      return response.ratings
   } catch {
     /* keep the fallback list */
   }
@@ -157,8 +160,10 @@ export const getCachedProfiles = () => PROFILES || []
 
 /** A stable `<option>` value per profile (managed users key on uuid; the admin has
  * none). */
-export const profileValue = (p: Profile) =>
-  p.admin ? "admin" : String(p.uuid || p.id || p.name)
+export const profileValue = (profile: Profile) =>
+  profile.admin
+    ? "admin"
+    : String(profile.uuid || profile.id || profile.name)
 
 /**
  * Which libraries a channel has checked, per picker group.
@@ -220,7 +225,7 @@ export function channelAccountLabel(
 
   const label = channel.label?.trim().toLowerCase() ?? ""
   const accounts = (channel.profiles || [])
-    .map((b) => b.plex_user?.trim() ?? "")
+    .map((binding) => binding.plex_user?.trim() ?? "")
     .filter(
       (name) =>
         Boolean(name) && name.toLowerCase() !== label,

@@ -93,7 +93,7 @@ export function SectionModal() {
   useEffect(() => {
     setStartMs(stored?.startMs ?? null)
     setEndMs(stored?.endMs ?? null)
-    setSeed((n) => n + 1)
+    setSeed((previousSeed) => previousSeed + 1)
   }, [entry])
 
   const isPlayingThis =
@@ -103,7 +103,7 @@ export function SectionModal() {
     if (!entry || !isPlayingThis) return
 
     const id = window.setInterval(() => {
-      setTick((n) => n + 1)
+      setTick((previousTick) => previousTick + 1)
     }, 1_000)
 
     return () => {
@@ -126,7 +126,7 @@ export function SectionModal() {
   }
 
   const setInfo = reg?.sets.find(
-    (s) => s.id === entry.setId,
+    (set) => set.id === entry.setId,
   )
   /**
    * The item's runtime, or null when nothing knows it.
@@ -174,7 +174,7 @@ export function SectionModal() {
     if (endpoint === "start") setStartMs(livePositionMs)
     else setEndMs(livePositionMs)
 
-    setSeed((n) => n + 1)
+    setSeed((previousSeed) => previousSeed + 1)
   }
 
   /** Read the draft back as the value to persist. Null = no section at all. */
@@ -325,7 +325,7 @@ export function SectionModal() {
             onChange={applyDrag}
             onChangeEnd={(value) => {
               applyDrag(value)
-              setSeed((n) => n + 1)
+              setSeed((previousSeed) => previousSeed + 1)
             }}
             step={STEP_MS}
             value={{

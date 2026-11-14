@@ -1,9 +1,4 @@
-import {
-  Badge,
-  Button,
-  Checkbox,
-  IconButton,
-} from "@charcuterie/ui"
+import { Badge, Button } from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
@@ -33,6 +28,10 @@ import {
   setState,
   useStore,
 } from "../state/store"
+import {
+  MemberListRow,
+  type MemberRow,
+} from "./MemberListRow"
 import { Modal } from "./Modal"
 
 /**
@@ -68,21 +67,6 @@ import { Modal } from "./Modal"
  * and not a card (decision `2026-08-25-a-text-heavy-row-list-is-one-column`).
  */
 
-/** One row, whatever it came from — a collection member or an episode. */
-type MemberRow = {
-  /** The leaf key, or null when the provider names none (no control on that row). */
-  ratingKey: string | null
-  label: string
-  /** The second line: the edition, the runtime, how far through it you are. */
-  detail: string
-  /** Fully watched / read — a chip, not a word buried in `detail`. */
-  isDone: boolean
-  /** Season 0: absent from playback until its leaf id is explicitly included. */
-  isSpecial: boolean
-  /** The season this row sits in, for the group headings. Null on a collection member. */
-  season: number | null
-}
-
 const HINT =
   "Normal episodes play unless you untick them. Specials start unticked, and you can include only the ones you want. A skipped normal episode counts as dealt with."
 
@@ -90,7 +74,7 @@ const HINT =
  *  duplicate members differ by, then the runtime, then a show's progress. */
 function memberDetail(
   child: CollectionChild,
-  t: (s: string) => string,
+  translate: (s: string) => string,
 ): string {
   const parts: string[] = []
 
@@ -103,7 +87,7 @@ function memberDetail(
 
   if (child.type === "show" && child.leafCount) {
     parts.push(
-      `${child.viewedLeafCount || 0}/${child.leafCount} ${t("watched")}`,
+      `${child.viewedLeafCount || 0}/${child.leafCount} ${translate("watched")}`,
     )
   }
 
@@ -112,10 +96,10 @@ function memberDetail(
 
 function toMemberRows(
   children: CollectionChild[],
-  t: (s: string) => string,
+  translate: (s: string) => string,
 ): MemberRow[] {
   return children.map((child) => ({
-    detail: memberDetail(child, t),
+    detail: memberDetail(child, translate),
     isDone:
       child.type === "show"
         ? Boolean(
@@ -137,25 +121,25 @@ function toEpisodeRows(
   hasSpecials: boolean,
   plexServer: string | null = null,
 ): MemberRow[] {
-  return data.seasons.flatMap((s) =>
-    s.episodes.map((e) => ({
-      detail: e.title || "",
-      isDone: Boolean(e.watched),
-      isSpecial: hasSpecials && s.season === 0,
+  return data.seasons.flatMap((season) =>
+    season.episodes.map((episode) => ({
+      detail: episode.title || "",
+      isDone: Boolean(episode.watched),
+      isSpecial: hasSpecials && season.season === 0,
       label: seLabel(
         {
-          episode: e.episode,
+          episode: episode.episode,
           multiSeason: data.multiSeason,
-          season: s.season,
+          season: season.season,
         },
         unit,
       ),
-      ratingKey: e.ratingKey
+      ratingKey: episode.ratingKey
         ? plexServer
-          ? `server:${plexServer}:rk:${e.ratingKey}`
-          : String(e.ratingKey)
+          ? `server:${plexServer}:rk:${episode.ratingKey}`
+          : String(episode.ratingKey)
         : null,
-      season: data.multiSeason ? s.season : null,
+      season: data.multiSeason ? season.season : null,
     })),
   )
 }
@@ -174,8 +158,8 @@ export function MembersModal() {
   const { membersModal: entry } = useOverlays()
   const { reg } = useStore()
   const vocab = vocabForSet(reg?.sets, entry?.setId)
-  const t = useCallback(
-    (s: string) => applyVocab(s, vocab),
+  const translate = useCallback(
+    (text: string) => applyVocab(text, vocab),
     [vocab],
   )
   const item = entry?.item ?? null
@@ -232,11 +216,11 @@ export function MembersModal() {
 
   skippedRef.current =
     entry?.memberDraft?.skipped ??
-    reg?.sets.find((s) => s.id === setId)?.skipped ??
+    reg?.sets.find((set) => set.id === setId)?.skipped ??
     []
   includedSpecialsRef.current =
     entry?.memberDraft?.includedSpecials ??
-    reg?.sets.find((s) => s.id === setId)
+    reg?.sets.find((set) => set.id === setId)
       ?.included_specials ??
     []
   collectionOrderRef.current = collectionOrder
@@ -282,9 +266,9 @@ export function MembersModal() {
             : undefined,
         }))
         .sort(
-          (a, b) =>
-            (a.rank ?? order.length + a.plexIndex) -
-            (b.rank ?? order.length + b.plexIndex),
+          (left, right) =>
+            (left.rank ?? order.length + left.plexIndex) -
+            (right.rank ?? order.length + right.plexIndex),
         )
         .map(({ row }) => row)
     },
@@ -320,7 +304,7 @@ export function MembersModal() {
     ]
       .filter(Boolean)
       .join("&")
-    const q = qs ? `?${qs}` : ""
+    const querySuffix = qs ? `?${qs}` : ""
 
     const load = async () => {
       if (isCollection) {
@@ -328,15 +312,15 @@ export function MembersModal() {
           children: CollectionChild[]
         }>(
           "GET",
-          `/api/collection/${ratingKey}/children${q}`,
+          `/api/collection/${ratingKey}/children${querySuffix}`,
         )
 
-        return toMemberRows(res.children || [], t)
+        return toMemberRows(res.children || [], translate)
       }
 
       const res = await api<ShowEpisodes>(
         "GET",
-        `/api/show/${ratingKey}/episodes${q}`,
+        `/api/show/${ratingKey}/episodes${querySuffix}`,
       )
 
       return toEpisodeRows(
@@ -374,16 +358,19 @@ export function MembersModal() {
           isChanged?: boolean
         }>(
           "GET",
-          `/api/collection/${ratingKey}/children${q ? `${q}&` : "?"}fresh=1`,
+          `/api/collection/${ratingKey}/children${querySuffix ? `${querySuffix}&` : "?"}fresh=1`,
         )
 
         if (isStale) return
 
-        const next = toMemberRows(res.children || [], t)
+        const next = toMemberRows(
+          res.children || [],
+          translate,
+        )
         const owned = new Set(
           next
-            .map((r) => r.ratingKey)
-            .filter((k): k is string => Boolean(k)),
+            .map((row) => row.ratingKey)
+            .filter((key): key is string => Boolean(key)),
         )
 
         setPlexRows(next)
@@ -397,9 +384,11 @@ export function MembersModal() {
         // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
         // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
         setSkips((prev) => {
-          const kept = [...prev].filter((k) => owned.has(k))
+          const kept = [...prev].filter((key) =>
+            owned.has(key),
+          )
           const added = skippedRef.current.filter(
-            (k) => owned.has(k) && !prev.has(k),
+            (key) => owned.has(key) && !prev.has(key),
           )
 
           return new Set([...kept, ...added])
@@ -427,33 +416,35 @@ export function MembersModal() {
         // on `skippedRef` — the boxes read their seed on the render the rows arrive in.
         const owned = new Set(
           next
-            .map((r) => r.ratingKey)
-            .filter((k): k is string => Boolean(k)),
+            .map((row) => row.ratingKey)
+            .filter((key): key is string => Boolean(key)),
         )
 
         setPlexRows(next)
         setRows(applyCollectionOrder(next, storedOrder))
         setSkips(
           new Set(
-            skippedRef.current.filter((k) => owned.has(k)),
+            skippedRef.current.filter((key) =>
+              owned.has(key),
+            ),
           ),
         )
         setIncludedSpecials(
           new Set(
-            includedSpecialsRef.current.filter((k) =>
-              owned.has(k),
+            includedSpecialsRef.current.filter((key) =>
+              owned.has(key),
             ),
           ),
         )
 
         return recheckAgainstPlex()
       })
-      .catch((e: Error) => {
+      .catch((error: Error) => {
         if (isStale) return
 
         setRows([])
         setNote(
-          `Could not read what is inside this entry: ${e.message}`,
+          `Could not read what is inside this entry: ${error.message}`,
         )
       })
 
@@ -480,8 +471,8 @@ export function MembersModal() {
   if (!entry || !item) return null
 
   const managed = (rows || [])
-    .map((r) => r.ratingKey)
-    .filter((k): k is string => Boolean(k))
+    .map((row) => row.ratingKey)
+    .filter((key): key is string => Boolean(key))
   const managedSpecials = (rows || [])
     .filter((row) => row.isSpecial)
     .map((row) => row.ratingKey)
@@ -503,7 +494,9 @@ export function MembersModal() {
     ? managed.length === 1
       ? "item"
       : "items"
-    : t(managed.length === 1 ? "episode" : "episodes")
+    : translate(
+        managed.length === 1 ? "episode" : "episodes",
+      )
 
   const onSave = () => {
     if (isSaving || !rows) return
@@ -578,7 +571,7 @@ export function MembersModal() {
       // `#queue` — it is portalled to `document.body`, so it cannot inherit the
       // `data-provider` the view sets and has to be told.
       dataProvider={
-        reg?.sets.find((s) => s.id === setId)
+        reg?.sets.find((set) => set.id === setId)
           ?.provider_kind || undefined
       }
       id="membersmodal"
@@ -592,7 +585,7 @@ export function MembersModal() {
       }
       titleId="membersmodal-title"
     >
-      <p className="subhint">{t(HINT)}</p>
+      <p className="subhint">{translate(HINT)}</p>
 
       {rows === null ? (
         <p className="idnote">Loading…</p>
@@ -645,9 +638,9 @@ export function MembersModal() {
             id="memberlist"
             ref={listRef}
           >
-            {rows.map((row, i) => (
+            {rows.map((row, index) => (
               <MemberListRow
-                key={row.ratingKey || `row-${i}`}
+                key={row.ratingKey || `row-${index}`}
                 onToggle={(isPlaying) => {
                   const key = row.ratingKey
 
@@ -673,21 +666,24 @@ export function MembersModal() {
                     })
                   }
                 }}
-                previous={rows[i - 1] ?? null}
+                previous={rows[index - 1] ?? null}
                 row={row}
-                position={i + 1}
+                position={index + 1}
                 isCollection={isCollection}
                 onMove={
                   isCollection && row.ratingKey
                     ? (offset) => {
                         const next = [...rows]
-                        const nextIndex = i + offset
+                        const nextIndex = index + offset
                         if (
                           nextIndex < 0 ||
                           nextIndex >= next.length
                         )
                           return
-                        const [moved] = next.splice(i, 1)
+                        const [moved] = next.splice(
+                          index,
+                          1,
+                        )
                         if (!moved) return
                         next.splice(nextIndex, 0, moved)
                         reorderCollection(
@@ -703,7 +699,7 @@ export function MembersModal() {
                     : undefined
                 }
                 seedKey={seedKey}
-                t={t}
+                t={translate}
                 isSkipped={Boolean(
                   row.ratingKey &&
                     (row.isSpecial
@@ -718,7 +714,9 @@ export function MembersModal() {
 
       {rows && !rows.length && !note ? (
         <p className="idnote">
-          {t("Nothing inside this entry to choose from.")}
+          {translate(
+            "Nothing inside this entry to choose from.",
+          )}
         </p>
       ) : null}
 
@@ -726,127 +724,5 @@ export function MembersModal() {
         {note}
       </p>
     </Modal>
-  )
-}
-
-/** One row, plus the season heading that opens its group. */
-function MemberListRow({
-  isCollection,
-  isSkipped,
-  onMove,
-  onToggle,
-  position,
-  previous,
-  row,
-  seedKey,
-  t,
-}: {
-  isCollection: boolean
-  isSkipped: boolean
-  onMove?: (offset: number) => void
-  onToggle: (isPlaying: boolean) => void
-  position: number
-  previous: MemberRow | null
-  row: MemberRow
-  seedKey: string
-  t: (s: string) => string
-}) {
-  const isSeasonHead =
-    row.season != null && row.season !== previous?.season
-
-  return (
-    <>
-      {isSeasonHead ? (
-        // h4: the modal's own title is an `<h3>` (`Modal.tsx`), so a season group opens one
-        // level under it. Nothing on this route sits between them.
-        <li className="memberseason">
-          <h4>
-            {row.isSpecial
-              ? t("Specials")
-              : `${t("Season")} ${row.season}`}
-          </h4>
-        </li>
-      ) : null}
-      <li
-        data-set={isCollection ? row.ratingKey : undefined}
-      >
-        {row.ratingKey ? (
-          <Checkbox
-            description={row.detail || undefined}
-            isChecked={!isSkipped}
-            // Keyed on what re-seeds it from outside the user's own clicks — the rows
-            // landing — and never on `isSkipped`, which changes on their click and would
-            // remount the box under their finger.
-            key={`${seedKey}:${row.ratingKey}`}
-            label={
-              isCollection
-                ? `${position}. ${row.label}`
-                : row.label
-            }
-            onChange={onToggle}
-            size="sm"
-            value={row.ratingKey}
-          />
-        ) : (
-          // No leaf key: this provider cannot skip one item, so the row reads rather than
-          // pretends to be a control.
-          <span className="memberplain">
-            {row.label}
-            {row.detail ? ` · ${row.detail}` : ""}
-          </span>
-        )}
-        {row.isDone ? (
-          <Badge intent="success" size="sm">
-            {t("Watched")}
-          </Badge>
-        ) : null}
-        {isSkipped ? (
-          <Badge intent="neutral" size="sm">
-            {row.isSpecial
-              ? "Skipped by default"
-              : "Skipped"}
-          </Badge>
-        ) : null}
-        {onMove ? (
-          <IconButton
-            appearance="ghost"
-            className="rowdrag"
-            intent="neutral"
-            label={`Drag ${row.label} to reorder. Use the up and down arrow keys to move it.`}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowUp") {
-                event.preventDefault()
-                onMove(-1)
-              } else if (event.key === "ArrowDown") {
-                event.preventDefault()
-                onMove(1)
-              }
-            }}
-            size="sm"
-          >
-            <DragIcon />
-          </IconButton>
-        ) : null}
-      </li>
-    </>
-  )
-}
-
-function DragIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="currentColor"
-      height="18"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <circle cx="9" cy="5" r="1.5" />
-      <circle cx="15" cy="5" r="1.5" />
-      <circle cx="9" cy="12" r="1.5" />
-      <circle cx="15" cy="12" r="1.5" />
-      <circle cx="9" cy="19" r="1.5" />
-      <circle cx="15" cy="19" r="1.5" />
-    </svg>
   )
 }

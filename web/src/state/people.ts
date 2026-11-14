@@ -135,11 +135,11 @@ export async function saveQueuePeople(
         [setId]: saved.members,
       },
     })
-  } catch (e) {
+  } catch (error) {
     setPeople({
       byQueue: { ...snapshot.byQueue, [setId]: previous },
     })
-    throw e
+    throw error
   }
 }
 

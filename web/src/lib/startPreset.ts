@@ -16,9 +16,11 @@ export const pickOptionValue = (
   values: string[],
   want: string | number | null | undefined,
 ): string => {
-  const w = want == null ? null : String(want)
+  const wanted = want == null ? null : String(want)
 
-  return w && values.includes(w) ? w : (values[0] ?? "")
+  return wanted && values.includes(wanted)
+    ? wanted
+    : (values[0] ?? "")
 }
 
 /**
@@ -66,14 +68,18 @@ export function defaultStartPoint(
   preset: StartPoint | null,
 ): { season: string; episode: string } {
   const season = pickOptionValue(
-    data.seasons.map((s) => String(s.season)),
+    data.seasons.map((season) => String(season.season)),
     preset?.season ?? null,
   )
   const row =
-    data.seasons.find((x) => x.season === Number(season)) ??
-    data.seasons[0]
+    data.seasons.find(
+      (seasonGroup) =>
+        seasonGroup.season === Number(season),
+    ) ?? data.seasons[0]
   const episode = pickOptionValue(
-    (row?.episodes ?? []).map((e) => String(e.episode)),
+    (row?.episodes ?? []).map((episodeRow) =>
+      String(episodeRow.episode),
+    ),
     // The episode floor only applies when the preset is for THIS season — a preset
     // season that differs means its episode number belongs to another season.
     preset &&

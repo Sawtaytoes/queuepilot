@@ -1,25 +1,13 @@
 import {
-  Badge,
   Button,
-  Card,
   EmptyState,
   SearchInput,
   Spinner,
 } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 import { ClearIcon } from "../components/ClearIcon"
-import { MarkPlayed } from "../components/MarkPlayed"
-import { Poster } from "../components/Poster"
 import { api } from "../lib/api"
-import {
-  boxArtUrl,
-  filterCollection,
-  knownHowFor,
-  playCountLabel,
-  playerCountLine,
-  playtimeLabel,
-  weightLabel,
-} from "../lib/boardGames"
+import { filterCollection } from "../lib/boardGames"
 import { rosterOrder } from "../lib/tonight"
 import type {
   BoardGameCard,
@@ -28,6 +16,7 @@ import type {
   PeopleResponse,
   Person,
 } from "../lib/types"
+import { GameCard } from "./GameCard"
 
 /**
  * THE COLLECTION — the shelf, and the place to say a game was played when nobody asked the
@@ -89,10 +78,14 @@ export function CollectionView() {
         setPeople(rosterOrder(roster.people ?? []))
         setError(null)
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         if (isCancelled) return
         setGames([])
-        setError(e instanceof Error ? e.message : String(e))
+        setError(
+          error instanceof Error
+            ? error.message
+            : String(error),
+        )
       })
 
     return () => {
@@ -126,7 +119,9 @@ export function CollectionView() {
               className="cfindbox"
               clearIcon={<ClearIcon />}
               id="collection-search"
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
               onClear={() => setQuery("")}
               placeholder="Type part of a name"
               size="lg"
@@ -136,7 +131,7 @@ export function CollectionView() {
           <Button
             id="collection-excluded"
             onClick={() =>
-              setIsExcludedShown((prev) => !prev)
+              setIsExcludedShown((isShown) => !isShown)
             }
             size="sm"
           >
@@ -175,7 +170,9 @@ export function CollectionView() {
                   game={game}
                   knownHow={knownHow}
                   onLogged={() =>
-                    setReloadCount((n) => n + 1)
+                    setReloadCount(
+                      (previousCount) => previousCount + 1,
+                    )
                   }
                   people={people}
                 />
@@ -185,102 +182,5 @@ export function CollectionView() {
         )}
       </section>
     </div>
-  )
-}
-
-/**
- * One title on the shelf.
- *
- * A `Card` with the game's name as its heading, so each one is a named region — which is what
- * lets "the We played this button on Harbour Lantern" be a thing anybody, or any test, can
- * say without counting buttons down the page.
- */
-function GameCard({
-  game,
-  knownHow,
-  onLogged,
-  people,
-}: {
-  game: BoardGameCard
-  knownHow: readonly KnownHowClaim[]
-  onLogged: () => void
-  people: readonly Person[]
-}) {
-  const known = knownHowFor(knownHow, game.id)
-  const nameOf = (id: string) =>
-    people.find((person) => person.id === id)
-      ?.displayName ?? id
-  const playtime = playtimeLabel(game)
-
-  return (
-    <Card
-      className="bgcard"
-      heading={game.name}
-      headingLevel={3}
-      id={`bg-${game.id}`}
-      padding="md"
-      surface="raised"
-    >
-      <div className="bgart">
-        <Poster
-          className="bgartimg"
-          cover={boxArtUrl(game.imagePath)}
-          fallback={
-            <span className="bgartnone">
-              No box photo yet
-            </span>
-          }
-        />
-      </div>
-
-      <p className="bgmeta">{playerCountLine(game)}</p>
-      <p className="bgmeta">
-        {[weightLabel(game.weight), playtime]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
-
-      <div className="bgbadges">
-        <Badge intent="neutral" size="sm">
-          {playCountLabel(game.playCount)}
-        </Badge>
-        {game.isExcluded ? (
-          <Badge
-            appearance="outline"
-            intent="warning"
-            size="sm"
-          >
-            Off the shelf
-          </Badge>
-        ) : null}
-      </div>
-
-      {/* The question the play log exists to answer, on the card. Silent when nobody has
-          been recorded — which is what every historical play looks like. */}
-      {game.playedBy.length > 0 ? (
-        <p className="bgmeta" id={`bg-${game.id}-playedby`}>
-          Played by {game.playedBy.map(nameOf).join(", ")}
-        </p>
-      ) : null}
-
-      {known.length > 0 ? (
-        <p className="bgmeta" id={`bg-${game.id}-knows`}>
-          Knows the rules: {known.map(nameOf).join(", ")}
-        </p>
-      ) : null}
-
-      <MarkPlayed
-        activity="board-games"
-        defaultPersonIds={[]}
-        gameId={game.id}
-        gameName={game.name}
-        idPrefix={`bg-${game.id}`}
-        knownHow={knownHow.filter(
-          (claim) => claim.gameId === game.id,
-        )}
-        onLogged={onLogged}
-        people={people}
-      />
-    </Card>
   )
 }

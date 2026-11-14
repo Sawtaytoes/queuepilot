@@ -82,22 +82,22 @@ export function PlayMenu() {
       set: string
       target: string | undefined
     }) => api("POST", "/api/play", body),
-    onError: (e: Error) => {
-      setStatus(`Play failed: ${e.message}`, "err")
+    onError: (error: Error) => {
+      setStatus(`Play failed: ${error.message}`, "err")
     },
   })
 
   useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const t = e.target as HTMLElement
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
 
       // A click whose target was already detached (a just-removed menu button) is
       // an INSIDE click: the closest() walk can't see its old ancestors.
-      if (!document.contains(t)) return
+      if (!document.contains(target)) return
       if (
-        !t.closest(".playmenu") &&
-        !t.closest(".playbtn") &&
-        !t.closest(".shelfplay")
+        !target.closest(".playmenu") &&
+        !target.closest(".playbtn") &&
+        !target.closest(".shelfplay")
       ) {
         closePlayMenus()
       }
@@ -147,7 +147,7 @@ export function PlayMenu() {
           refreshes the registry every few minutes).
         </p>
       ) : (
-        devices.map((d) => (
+        devices.map((device) => (
           // Charcuterie `Button`, `ghost` (nothing until hover) — the app's own row
           // skin is DELETED per 2026-08-02-adopting-a-component-means-deleting-its-skin;
           // `.qmenu button` keeps only layout. Still a native <button> with the label,
@@ -156,13 +156,13 @@ export function PlayMenu() {
             appearance="ghost"
             intent="neutral"
             isFullWidth
-            key={d.id}
+            key={device.id}
             onClick={() => {
               closePlayMenus()
               setStatus(
                 onlyLabel
-                  ? `Starting ${onlyLabel} on ${d.name}…`
-                  : `Starting on ${d.name}…`,
+                  ? `Starting ${onlyLabel} on ${device.name}…`
+                  : `Starting on ${device.name}…`,
               )
 
               playMutation.mutate({
@@ -170,11 +170,15 @@ export function PlayMenu() {
                 only,
                 profile,
                 set: setId,
-                target: d.default ? undefined : d.id,
+                target: device.default
+                  ? undefined
+                  : device.id,
               })
             }}
           >
-            {d.default ? `${d.name} (default)` : d.name}
+            {device.default
+              ? `${device.name} (default)`
+              : device.name}
           </Button>
         ))
       )}

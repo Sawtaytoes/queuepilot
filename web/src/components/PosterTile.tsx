@@ -1,6 +1,8 @@
 import { Skeleton } from "@charcuterie/ui"
 import type { MouseEvent, ReactNode } from "react"
-
+import { CheckGlyph } from "./CheckGlyph"
+import { LaneGlyph } from "./LaneGlyph"
+import { PlayGlyph } from "./PlayGlyph"
 import { Poster } from "./Poster"
 import { PriorityPositionInput } from "./PriorityPositionInput"
 import { Tip } from "./Tip"
@@ -140,91 +142,6 @@ type Props = {
   isPending?: boolean
 }
 
-/** The ▶, shared by the push button and the pull link so the two cannot drift apart. */
-const PlayGlyph = () => (
-  <svg
-    aria-hidden="true"
-    height="14"
-    viewBox="0 0 14 14"
-    width="14"
-  >
-    <path d="M3 1.5l9 5.5-9 5.5z" fill="currentColor" />
-  </svg>
-)
-
-/**
- * ✓ — the select mark, as an SVG.
- *
- * It was the TEXT character `✓` until 2026-08-26, and it never painted: the rule that turns a
- * selected tile's circle accent (`.tile.selected .check`) is outranked by the one that draws
- * the circle in the first place (`.editable .tile .tilechrome .check`), so the mark stayed
- * `color: transparent` in every state and the control looked identical checked and unchecked.
- * The same reason `.remove` gives for its ×: a font glyph is not a reliable icon here.
- */
-const CheckGlyph = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    height="13"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2.5"
-    viewBox="0 0 14 14"
-    width="13"
-  >
-    <path d="M2.5 7.5l3 3 6-6.5" />
-  </svg>
-)
-
-/**
- * ↑ / ↓ — into the Priority queue, or back out to the Random pool.
- *
- * The arrow points the way the tile MOVES on screen: the Priority lane is drawn above the
- * pool, so up is a promote and down is a demote. It is the same write the drag across the
- * lane divider makes, for a pointer that would rather press a button than drag one
- * (owner, 2026-08-26).
- */
-const LaneGlyph = ({ isUp }: { isUp: boolean }) => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    height="13"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2"
-    viewBox="0 0 14 14"
-    width="13"
-  >
-    {isUp ? (
-      <path d="M7 11.5V2.5M3 6.5l4-4 4 4" />
-    ) : (
-      <path d="M7 2.5v9M3 7.5l4 4 4-4" />
-    )}
-  </svg>
-)
-
-/**
- * Pencil — the Edit affordance in the badge row (QueueView). Exported so the
- * outline pill and this shell cannot drift to different glyphs.
- */
-export const PencilGlyph = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    height="12"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="1.75"
-    viewBox="0 0 24 24"
-    width="12"
-  >
-    <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-  </svg>
-)
-
 export function PosterTile({
   badges,
   className,
@@ -301,10 +218,10 @@ export function PosterTile({
               <button
                 aria-label={playTitle}
                 className="tileplay"
-                onClick={(e) => {
-                  e.stopPropagation()
+                onClick={(event) => {
+                  event.stopPropagation()
                   onPlay(
-                    e.currentTarget.getBoundingClientRect(),
+                    event.currentTarget.getBoundingClientRect(),
                   )
                 }}
                 type="button"
@@ -318,7 +235,7 @@ export function PosterTile({
                 href={playHref}
                 // The click must not also select/open the tile underneath — the same reason
                 // the button above stops propagation.
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
                 rel="noreferrer"
                 // A new tab, so the queue you launched from is still there when you come
                 // back from the reader — matching OpenQueueButton.
@@ -412,7 +329,7 @@ export function PosterTile({
               <a
                 draggable={false}
                 href={titleHref}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
                 rel="noreferrer"
                 // A new tab: the queue you were arranging is still there when you come back,
                 // matching the ▶ link and OpenQueueButton.
@@ -441,12 +358,12 @@ export function PosterTile({
             }
             onKeyDown={
               isStartable
-                ? (e) => {
+                ? (event) => {
                     if (
-                      e.key === "Enter" ||
-                      e.key === " "
+                      event.key === "Enter" ||
+                      event.key === " "
                     ) {
-                      e.preventDefault()
+                      event.preventDefault()
                       next?.onStart?.()
                     }
                   }

@@ -26,8 +26,12 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { MoreIcon } from "./MoreIcon"
+import { PencilIcon } from "./PencilIcon"
+import { RedoIcon } from "./RedoIcon"
 import { schemeIcons } from "./SchemeIcons"
 import { Tip } from "./Tip"
+import { UndoIcon } from "./UndoIcon"
 
 /**
  * The sticky header: back, the heading (which is also the rename field), the status
@@ -115,16 +119,16 @@ export function Header({
   useEffect(() => {
     if (!openMenu) return
 
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
 
-      if (t?.closest(".menu-toggle, .hmenu")) return
+      if (target?.closest(".menu-toggle, .hmenu")) return
 
       setOpenMenu(null)
     }
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenu(null)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null)
     }
 
     document.addEventListener("mousedown", onDown)
@@ -183,9 +187,9 @@ export function Header({
       }
 
       setStatus("Renamed", "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Rename failed: ${(e as Error).message}`,
+        `Rename failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -212,9 +216,9 @@ export function Header({
       // than waiting for that event, which may already have fired while undo was writing.
       refreshData()
       void refreshHistoryButtons()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `${dir} failed: ${(e as Error).message}`,
+        `${dir} failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -246,13 +250,15 @@ export function Header({
                 id="headingedit"
                 maxLength={60}
                 onBlur={() => void finish(true)}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
+                onChange={(event) =>
+                  setDraft(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
                     void finish(true)
-                  } else if (e.key === "Escape") {
-                    e.preventDefault()
+                  } else if (event.key === "Escape") {
+                    event.preventDefault()
                     void finish(false)
                   }
                 }}
@@ -334,8 +340,10 @@ export function Header({
             intent="neutral"
             label="Actions menu"
             onClick={() =>
-              setOpenMenu((m) =>
-                m === "actions" ? null : "actions",
+              setOpenMenu((currentMenu) =>
+                currentMenu === "actions"
+                  ? null
+                  : "actions",
               )
             }
           >
@@ -431,75 +439,5 @@ export function Header({
         ) : null}
       </div>
     </PageFrameHeader>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" />
-    </svg>
-  )
-}
-
-function UndoIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" />
-    </svg>
-  )
-}
-
-function RedoIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <path d="m15 7 5 5-5 5M20 12h-9a6 6 0 0 0-6 6" />
-    </svg>
-  )
-}
-
-function MoreIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="currentColor"
-      height="18"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <circle cx="12" cy="5" r="1.7" />
-      <circle cx="12" cy="12" r="1.7" />
-      <circle cx="12" cy="19" r="1.7" />
-    </svg>
   )
 }

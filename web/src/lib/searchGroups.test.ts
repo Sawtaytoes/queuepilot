@@ -39,12 +39,9 @@ describe("groupHits", () => {
       new Set([5, 15]),
       LABELS,
     )
-    expect(out.map((g) => g.hit.ratingKey)).toEqual([
-      "b",
-      "d",
-      "a",
-      "c",
-    ])
+    expect(
+      out.map((groupedHit) => groupedHit.hit.ratingKey),
+    ).toEqual(["b", "d", "a", "c"])
   })
 
   test("keeps collections leading INSIDE each group, not just overall", () => {
@@ -59,11 +56,9 @@ describe("groupHits", () => {
       new Set([5]),
       LABELS,
     )
-    expect(out.map((g) => g.hit.ratingKey)).toEqual([
-      "coll-in",
-      "item-in",
-      "coll-out",
-    ])
+    expect(
+      out.map((groupedHit) => groupedHit.hit.ratingKey),
+    ).toEqual(["coll-in", "item-in", "coll-out"])
   })
 
   test("is stable, so Plex's own relevance order survives within a group", () => {
@@ -72,11 +67,9 @@ describe("groupHits", () => {
       new Set([5]),
       LABELS,
     )
-    expect(out.map((g) => g.hit.ratingKey)).toEqual([
-      "first",
-      "second",
-      "third",
-    ])
+    expect(
+      out.map((groupedHit) => groupedHit.hit.ratingKey),
+    ).toEqual(["first", "second", "third"])
   })
 
   test("marks only the first row of each group", () => {
@@ -90,7 +83,9 @@ describe("groupHits", () => {
       new Set([5]),
       LABELS,
     )
-    expect(out.map((g) => g.separator)).toEqual([
+    expect(
+      out.map((groupedHit) => groupedHit.separator),
+    ).toEqual([
       "In this pool",
       null,
       "Other libraries",
@@ -104,10 +99,9 @@ describe("groupHits", () => {
       new Set([5]),
       LABELS,
     )
-    expect(out.map((g) => g.separator)).toEqual([
-      null,
-      null,
-    ])
+    expect(
+      out.map((groupedHit) => groupedHit.separator),
+    ).toEqual([null, null])
   })
 
   test("still labels the rest when NOTHING is in the pool, so the reason is on screen", () => {
@@ -116,10 +110,9 @@ describe("groupHits", () => {
       new Set([5]),
       LABELS,
     )
-    expect(out.map((g) => g.separator)).toEqual([
-      "Other libraries",
-      null,
-    ])
+    expect(
+      out.map((groupedHit) => groupedHit.separator),
+    ).toEqual(["Other libraries", null])
   })
 })
 

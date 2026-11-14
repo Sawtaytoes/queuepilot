@@ -47,7 +47,7 @@ const SEGMENTED_MAX = 2
 
 export function ProviderBlock({
   block,
-  canRemove,
+  canRemove: isRemovable,
   index,
   onChange,
   onRemove,
@@ -85,13 +85,15 @@ export function ProviderBlock({
   >(null)
 
   const provider =
-    providers.find((p) => p.id === block.provider) ?? null
+    providers.find(
+      (provider) => provider.id === block.provider,
+    ) ?? null
 
   // Libraries are provider-scoped: the list Plex serves is not the list Kavita serves, and
   // an id means nothing without knowing which provider it belongs to. Refetched whenever
   // the block's provider changes.
   useEffect(() => {
-    let cancelled = false
+    let isCancelled = false
 
     if (!block.provider) return
 
@@ -100,26 +102,29 @@ export function ProviderBlock({
       "GET",
       `/api/providers/${block.provider}/libraries`,
     )
-      .then((r) => {
-        if (!cancelled) setLibraries(r.libraries ?? [])
+      .then((response) => {
+        if (!isCancelled)
+          setLibraries(response.libraries ?? [])
       })
-      .catch((e: unknown) => {
-        if (cancelled) return
+      .catch((error: unknown) => {
+        if (isCancelled) return
         setLibraries([])
         // A provider that is not configured says so here rather than rendering an empty
         // list that looks like "this provider has no libraries".
         setLibError(
-          e instanceof Error ? e.message : String(e),
+          error instanceof Error
+            ? error.message
+            : String(error),
         )
       })
 
     return () => {
-      cancelled = true
+      isCancelled = true
     }
   }, [block.provider])
 
   useEffect(() => {
-    let cancelled = false
+    let isCancelled = false
     setSharedSources(null)
     setSharedError(null)
     if (block.provider !== "plex") return
@@ -128,13 +133,15 @@ export function ProviderBlock({
       `/api/plex-sources?profile=${encodeURIComponent(block.profile)}`,
     )
       .then((result) => {
-        if (!cancelled)
+        if (!isCancelled)
           setSharedSources(
-            result.sources.filter((s) => !s.local),
+            result.sources.filter(
+              (source) => !source.local,
+            ),
           )
       })
       .catch((error: unknown) => {
-        if (!cancelled)
+        if (!isCancelled)
           setSharedError(
             error instanceof Error
               ? error.message
@@ -142,7 +149,7 @@ export function ProviderBlock({
           )
       })
     return () => {
-      cancelled = true
+      isCancelled = true
     }
   }, [block.provider, block.profile])
 
@@ -164,22 +171,24 @@ export function ProviderBlock({
   // (decision `2026-08-17-no-libraries-checked-means-every-library`).
   const isEveryLibrary = block.libraries.length === 0
 
-  const setLibrary = (id: string, on: boolean) => {
+  const setLibrary = (id: string, isSelected: boolean) => {
     onChange({
       ...block,
-      libraries: on
+      libraries: isSelected
         ? [...block.libraries, id]
-        : block.libraries.filter((x) => x !== id),
+        : block.libraries.filter(
+            (library) => library !== id,
+          ),
     })
   }
 
   const setSharedLibrary = (
     server: string,
     id: string,
-    on: boolean,
+    isSelected: boolean,
   ) => {
     const selected = sharedLibraries[server] ?? []
-    const next = on
+    const next = isSelected
       ? [...new Set([...selected, id])]
       : selected.filter((item) => item !== id)
     const scope = { ...sharedLibraries }
@@ -197,7 +206,7 @@ export function ProviderBlock({
             ? ` — ${provider.label}`
             : ""}
         </span>
-        {canRemove ? (
+        {isRemovable ? (
           // `#setmodal .rmblock` painted a small outline chip — transparent, a border, muted
           // text at 0.78rem. That is `appearance="outline"` at `size="sm"`. The rule is
           // scoped to `#setmodal` and this block only ever renders there, so nothing else
@@ -225,19 +234,19 @@ export function ProviderBlock({
           {providers.length <= SEGMENTED_MAX ? (
             <SegmentedControl
               className="fieldseg"
-              items={providers.map((p) => ({
-                isDisabled: !p.configured,
-                label: p.label,
-                value: p.id,
+              items={providers.map((provider) => ({
+                isDisabled: !provider.configured,
+                label: provider.label,
+                value: provider.id,
               }))}
               key={`seg-${index}`}
               label="Source app"
-              onChange={(v) =>
+              onChange={(provider) =>
                 onChange({
                   ...block,
                   libraries: [],
                   profile: "",
-                  provider: v ?? block.provider,
+                  provider: provider ?? block.provider,
                 })
               }
               selectedValue={block.provider}
@@ -248,7 +257,7 @@ export function ProviderBlock({
               id={`block-provider-${index}`}
               key={`lb-${index}`}
               label="Source app"
-              onChange={(v) =>
+              onChange={(provider) =>
                 // Switching provider clears the libraries and profile: both are scoped to
                 // the OLD provider, and carrying a Plex section id onto a Kavita block
                 // would silently point at an unrelated library.
@@ -256,15 +265,15 @@ export function ProviderBlock({
                   ...block,
                   libraries: [],
                   profile: "",
-                  provider: v,
+                  provider: provider,
                 })
               }
-              options={providers.map((p) => ({
-                isDisabled: !p.configured,
-                label: p.configured
-                  ? p.label
-                  : `${p.label} — not connected`,
-                value: p.id,
+              options={providers.map((provider) => ({
+                isDisabled: !provider.configured,
+                label: provider.configured
+                  ? provider.label
+                  : `${provider.label} — not connected`,
+                value: provider.id,
               }))}
               value={block.provider}
             />
@@ -279,8 +288,8 @@ export function ProviderBlock({
           id={`block-profile-${index}`}
           key={`prof-${index}-${block.provider}`}
           label={profileLabel}
-          onChange={(v) =>
-            onChange({ ...block, profile: v })
+          onChange={(profile) =>
+            onChange({ ...block, profile: profile })
           }
           options={profileOptions}
           value={block.profile}
@@ -305,16 +314,18 @@ export function ProviderBlock({
                 source clears `block.libraries` without anyone touching a box, and
                 Charcuterie's Checkbox seeds `isChecked` on mount only. Not keyed on the
                 checked set, which the user's own click writes. */}
-            {libraries.map((l) => (
+            {libraries.map((library) => (
               <Checkbox
-                isChecked={block.libraries.includes(l.id)}
-                key={`${block.provider}:${l.id}`}
-                label={l.title}
+                isChecked={block.libraries.includes(
+                  library.id,
+                )}
+                key={`${block.provider}:${library.id}`}
+                label={library.title}
                 onChange={(isChecked) =>
-                  setLibrary(l.id, isChecked)
+                  setLibrary(library.id, isChecked)
                 }
                 size="sm"
-                value={l.id}
+                value={library.id}
               />
             ))}
           </div>

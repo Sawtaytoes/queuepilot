@@ -197,18 +197,18 @@ const listeners = new Set<() => void>()
 function set(patch: Partial<Overlays>) {
   overlays = { ...overlays, ...patch }
 
-  for (const l of listeners) l()
+  for (const listener of listeners) listener()
 }
 
 export const getOverlays = () => overlays
 
 export const useOverlays = () =>
   useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
+    (listener) => {
+      listeners.add(listener)
 
       return () => {
-        listeners.delete(l)
+        listeners.delete(listener)
       }
     },
     () => overlays,
@@ -231,13 +231,13 @@ export const hasTileMenuActions = (entry: EntryActions) =>
   )
 
 export const openTileMenu = (
-  x: number,
-  y: number,
+  left: number,
+  top: number,
   entry: EntryActions,
 ) => {
   if (!hasTileMenuActions(entry)) return
 
-  set({ tileMenu: { entry, x, y } })
+  set({ tileMenu: { entry, x: left, y: top } })
 }
 
 export const closeTileMenu = () => {

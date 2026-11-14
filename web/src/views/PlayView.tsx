@@ -1,27 +1,19 @@
 import { Button, EmptyState } from "@charcuterie/ui"
 import {
   Fragment,
-  type ReactNode,
   useCallback,
   useMemo,
   useRef,
-  useState,
 } from "react"
 import { Link, useLocation } from "react-router"
 import { AlsoInDivider } from "../components/AlsoInDivider"
 import { LandingFilterBar } from "../components/LandingFilterBar"
-import {
-  isPullSet,
-  OpenQueueButton,
-} from "../components/OpenQueueButton"
 import { PeopleRow } from "../components/PeopleRow"
-import { SelectListbox } from "../components/SelectListbox"
 import {
   spliceOrder,
   useRowReorder,
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
-import { channelAccountLabel } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
 import { queueListNumbers, queueTitle } from "../lib/people"
 import { WATCH_PLAY_PATH } from "../lib/routePaths"
@@ -56,6 +48,8 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { ChannelCard } from "./ChannelCard"
+import { PlayCard } from "./PlayCard"
 
 /**
  * ADMIN — the management landing. Every pool and queue as a posterless card: manage it or
@@ -82,23 +76,6 @@ import {
  */
 
 /**
- * The two kinds, as the card says them out loud.
- *
- * Ordered Queue and Curated Pool were the same object with different default playback —
- * both are hand-picked titles — so they share one badge. Rules queues are the other kind
- * (membership from library/ratings rules). The badge is the ONLY place the page says them;
- * there are no shelf headings left to carry them.
- * (decision `2026-08-23-kind-is-picks-or-rules`; supersedes the three-name split in
- * `2026-08-16-filtered-pools-curated-pools-ordered-queues`)
- */
-type SetKind = "picks" | "rules"
-
-const KIND_WORD: Record<SetKind, string> = {
-  picks: "Picks",
-  rules: "Rules",
-}
-
-/**
  * A Picks card's meta line: how many entries, and which LANE they play in.
  *
  * The lane belongs here rather than on the badge — both lanes are Picks, and a second
@@ -122,302 +99,6 @@ function picksMeta(
   return `${count} entries · ${lane}`
 }
 
-/** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
- * otherwise). */
-function parseTierValue(v: string): {
-  set: string
-  profile?: string
-} {
-  if (v?.startsWith("{")) {
-    try {
-      return JSON.parse(v)
-    } catch {
-      /* fall through */
-    }
-  }
-
-  return { set: v }
-}
-
-function PlayCard({
-  kind,
-  label,
-  meta,
-  onPlay,
-  people,
-  set,
-  tier,
-  to,
-}: {
-  /**
-   * Where this card GOES — a real link target, not an `onClick` that calls `navigate()`.
-   * Middle-click, ⌘/Ctrl-click, "Open in new tab", "Copy link address" and the status-bar
-   * preview all come from the ELEMENT being an anchor; none of them can be added to a
-   * `<button>` by styling it like a link.
-   * (decision `2026-08-15-navigation-is-an-anchor-not-a-button`)
-   *
-   * It is a react-router `<Link>` rather than a bare `<a>` as of 2026-08-16. Under the
-   * hash router a plain `<a href="#/q/1">` needed no handler — setting the hash WAS the
-   * navigation. A path `<a href="/q/1">` is not the same thing: the browser would leave
-   * the page and refetch the whole app. `<Link>` still RENDERS an `<a href>`, so every
-   * affordance above survives; it just intercepts the plain left-click.
-   */
-  to: string
-  kind: SetKind
-  label: string
-  meta: string
-  onPlay: (anchor: DOMRect) => void
-  /**
-   * WHO THIS QUEUE IS FOR — a `PeopleRow`, or null for a card that has no trays.
-   *
-   * The same row the Picks page draws in a shelf heading, and it is here for the reason it
-   * is there: it is the only thing on the card that says a queue apart from its neighbour
-   * once you stop reading the name. A shelf can lean on its posters for that; a landing card
-   * has none, so this row is doing MORE work here, not less
-   * (decision `2026-08-25-a-queue-is-people-plus-an-activity`).
-   *
-   * A RULES card carries one too, as of 2026-08-26. It used to be null here on the argument
-   * that a filtered pool is bound to one provider ACCOUNT and its meta line already names it.
-   * That conflated two facts: the account is which Plex profile the pool signs in as, and the
-   * trays are who the pool is FOR. The owner reported the gap from the other end — there was
-   * no way to put anybody on Shorts or Movies at all
-   * (decision `2026-08-26-a-rules-queue-carries-people-too`).
-   */
-  people?: ReactNode
-  /** The registry entry, for `delivery`, the accent + the start button's words. Absent =
-   * push (pre-provider callers). */
-  set?: Pick<
-    RegistrySet,
-    "id" | "delivery" | "provider_kind" | "vocabulary"
-  >
-  tier?: ReactNode
-}) {
-  return (
-    // Each card wears its own set's colour, so the landing says at a glance which service
-    // each button will talk to — the Kavita card's Open button is Kavita-green beside the
-    // Plex cards' amber. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
-    <li
-      className="playcard"
-      // The id the reorder hook reads off the DOM after a drag — the cards it moves are
-      // nodes, not React state, so the new order has to be legible from the elements.
-      data-set={set?.id}
-      data-kind={kind}
-      data-provider={set?.provider_kind || undefined}
-    >
-      <div className="cardhead">
-        {/* TOUCH ONLY, and CSS decides that — the glyph is `display: none` on a fine pointer,
-            where the whole card is grabbable and this would be an empty gutter indenting
-            every name for a control shown on hover. It survives on a coarse pointer because
-            whole-card touch dragging would cost the page its scroll surface, and because
-            there is no hover there to reveal an affordance with. Hidden from assistive tech:
-            it is a pointer affordance, and reordering is not the only way to get anywhere.
-            (decision `2026-08-19-the-whole-card-is-the-drag-handle-on-a-fine-pointer`) */}
-        <span
-          aria-hidden="true"
-          className="rowdrag"
-          title="Drag to reorder"
-        >
-          ≡
-        </span>
-        <Link className="rowname" to={to}>
-          {label}
-        </Link>
-        {/* Not a `<Badge>`: charcuterie's badge is a status pill with an intent colour,
-            and this is a permanent classification rather than a state that changes. It
-            also has to sit flush against a heading that may wrap to two lines, which the
-            pill's own line-height fights. */}
-        <span className="cardkind">{KIND_WORD[kind]}</span>
-      </div>
-      {/* ITS OWN ROW, above the meta rather than inside it. The faces are 26px tall and the
-          meta is 0.83rem text; sharing a line would set the row's height from the faces and
-          leave the count floating half-way up it. Above the meta and not below, because the
-          two lines answer "whose is this" and then "how big is it" — the order somebody
-          scanning a wall of cards asks them in. */}
-      {people}
-      {/* THE META OWNS A LINE. It used to be the first child of `.cardfoot`, sharing the
-          row with the start button, and `.cardfoot` wraps — so whether the button ended up
-          beside the meta or on a line of its own was decided by how many characters that
-          card's meta happened to have. Three cards in one row of the live grid had three
-          different layouts: "17 entries · random pool" fit, so its button sat right;
-          "Younger Kids · rotation · ratings-filtered" did not, so its button dropped to a
-          second line and (with nothing pushing it over) sat LEFT; "Younger Kids · weighted
-          rewatch" fit again. Same component, same CSS, three shapes.
-
-          Out here the line is unconditional: name, then meta, then the action on the floor,
-          on every card at every width. */}
-      <p className="rowmeta">{meta}</p>
-      <div className="cardfoot">
-        {tier}
-        {isPullSet(set) ? (
-          // Nothing to cast to — the launcher URL is the whole affordance.
-          <OpenQueueButton set={set!} />
-        ) : (
-          <>
-            {/* A Charcuterie `Button`, `intent="accent"` — what `.playbtn`'s solid accent skin
-              painted by hand. The class STAYS as a DOM handle: `PlayMenu` asks
-              `t.closest(".playbtn")` so pressing this does not close the menu it opens. */}
-            <Button
-              className="playbtn"
-              intent="accent"
-              onClick={(e) =>
-                onPlay(
-                  e.currentTarget.getBoundingClientRect(),
-                )
-              }
-            >
-              ▶ Play on ▾
-            </Button>
-          </>
-        )}
-      </div>
-    </li>
-  )
-}
-
-/**
- * One filtered pool's card.
- *
- * **A pool is locked to ONE account, so there is normally no picker here.** The tier dropdown
- * existed because these pools predate being able to switch the Shield's Plex profile from the
- * app: one pool had to carry every tier's binding and you chose at play time. Every pool is
- * single-account now, and a control with one option is not a choice — it is a label wearing a
- * chevron. So the account moves into the card's meta line as TEXT, and the card gets the same
- * shape as a Curated Pool / Ordered Queue card: name, kind, meta, one start button.
- * (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`)
- *
- * The picker is not deleted, only conditional: a pool that still carries two or more bindings
- * (a hand-edit, an older `sets.yaml`) keeps choosing at play time rather than silently playing
- * as whichever binding happens to be first.
- */
-function ChannelCard({
-  channel,
-  duplicateNumber,
-}: {
-  channel: RegistrySet
-  /** The number after the activity when two nameless pools would read identically, or null.
-   *  Ignored outright when the pool has a name of its own. */
-  duplicateNumber: number | null
-}) {
-  const people = usePeople()
-  const isRewatch = channel.behavior === "rewatch"
-  const options = channel.has_explicit_profiles
-    ? (channel.profiles || []).map((b) => ({
-        label: b.plex_user || channel.label,
-        value: JSON.stringify({
-          profile: b.plex_user,
-          set: channel.id,
-        }),
-      }))
-    : [{ label: channel.label, value: channel.id }]
-
-  // Seed to the channel's saved default profile when it names a real binding, so Play
-  // reaches for the right tier without the user re-picking; else the first binding.
-  // (decision `2026-08-07-default-profile-per-channel`)
-  const defaultValue =
-    channel.has_explicit_profiles && channel.default_profile
-      ? (channel.profiles || [])
-          .filter(
-            (b) => b.plex_user === channel.default_profile,
-          )
-          .map((b) =>
-            JSON.stringify({
-              profile: b.plex_user,
-              set: channel.id,
-            }),
-          )[0]
-      : undefined
-
-  const [tierValue, setTierValue] = useState(
-    defaultValue ?? options[0]?.value ?? channel.id,
-  )
-
-  const hasChoice = options.length > 1
-  // `tierValue` is local state seeded ONCE, and the options are not: another tab (or a
-  // hand-edit picked up over SSE) can delete the binding this card is still holding. Falling
-  // back to the current default rather than trusting the stale value is what stops the card
-  // from quietly playing as an account the pool no longer has.
-  const value = options.some((o) => o.value === tierValue)
-    ? tierValue
-    : (defaultValue ?? options[0]?.value ?? channel.id)
-  // The account this pool is locked to, for the meta line. Null when the tier picker is on
-  // screen — the card is asking rather than telling.
-  //
-  // This used to gate on `has_explicit_profiles`, on the belief that a legacy flat set's
-  // SYNTHESIZED binding reports the channel's own label and would read as "Shows · Shows".
-  // The server does not do that — the synthesized binding carries the real `plex_user` — so
-  // the gate was dropping the account from every legacy pool. It only ever looked right
-  // against the live `sets.yaml`, where those pools are NAMED after the accounts they play
-  // as. `channelAccountLabel` compares the two instead, which is the check that claim was
-  // reaching for. (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen…`)
-  const boundAccount = hasChoice
-    ? null
-    : channelAccountLabel(channel)
-  // It is ALWAYS said now. It used to be dropped while you stood inside that account's own
-  // group, where it was the heading repeated — but there is no group page to stand in any
-  // more, so `accountInGroup` had one caller and one answer and is gone with the chips
-  // (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
-  const onlyAccount = boundAccount
-  const behaviour = isRewatch
-    ? "weighted rewatch"
-    : "rotation · ratings-filtered"
-
-  return (
-    <PlayCard
-      kind="rules"
-      // Its own name when it has one — "Shorts", "Movies" — and its ACTIVITY when it has
-      // not. A rules pool is as much a `watching` thing as a curated queue is, so the same
-      // rule applies to both cards on this grid
-      // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
-      label={queueTitle(channel, duplicateNumber)}
-      set={channel}
-      // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
-      // until you know one is Younger Kids and the other Older Kids, and that used to be
-      // readable only off the dropdown this card no longer has.
-      meta={
-        onlyAccount
-          ? `${onlyAccount} · ${behaviour}`
-          : behaviour
-      }
-      // A rules pool has trays now, so it wears the same row of faces a picks card does.
-      // The account in the meta line beside it is a DIFFERENT fact — which Plex profile
-      // this pool signs in as — and the two disagree often enough to be worth showing
-      // together (decision `2026-08-26-a-rules-queue-carries-people-too`).
-      people={
-        <PeopleRow
-          groups={people.groups}
-          members={people.byQueue[channel.id] ?? []}
-          people={people.people}
-        />
-      }
-      to={`/channels/${encodeURIComponent(channel.id)}`}
-      onPlay={(anchor) => {
-        // With one binding the card does not ask — it plays as the account the pool is
-        // configured for, which is what `tierValue` already holds.
-        const t = parseTierValue(value)
-
-        openPlayMenu({
-          anchor,
-          behavior: isRewatch ? "rewatch" : undefined,
-          profile: t.profile,
-          setId: t.set,
-        })
-      }}
-      tier={
-        hasChoice ? (
-          <SelectListbox
-            className="rowtier"
-            label={`Profile for ${channel.label}`}
-            onChange={setTierValue}
-            options={options}
-            size="sm"
-            value={value}
-          />
-        ) : null
-      }
-    />
-  )
-}
-
 /** What one card needs to render, in the order the grid lays them out. */
 type Entry =
   | { kind: "rules"; id: string; set: RegistrySet }
@@ -439,20 +120,22 @@ function buildEntries(
   data: QueuesResponse | null,
 ): Entry[] {
   const rotations = new Set(
-    rotationChannels(reg).map((s) => s.id),
+    rotationChannels(reg).map(
+      (rotationChannel) => rotationChannel.id,
+    ),
   )
   const out: Entry[] = []
   const seen = new Set<string>()
 
   const classify = (id: string): Entry | null => {
-    const set = reg?.sets.find((s) => s.id === id)
+    const set = reg?.sets.find((set) => set.id === id)
 
     if (set && rotations.has(id))
       return { id, kind: "rules", set }
 
-    const q = data?.sets[id]
+    const queueSet = data?.sets[id]
 
-    if (q?.source !== "queue") return null
+    if (queueSet?.source !== "queue") return null
 
     // Hand-picked membership — formerly split into Ordered Queue (`movies`) and Curated
     // Pool (`anime`). Both are Picks; stored kind still drives playback until placement
@@ -461,7 +144,9 @@ function buildEntries(
   }
 
   for (const id of [
-    ...(reg?.sets ?? []).map((s) => s.id),
+    ...(reg?.sets ?? []).map(
+      (registrySet) => registrySet.id,
+    ),
     ...(data?.order ?? []),
   ]) {
     if (seen.has(id)) continue
@@ -484,7 +169,8 @@ export function PlayView() {
   const selected = parsePeople(search)
 
   const kindOf = (id: string) =>
-    reg?.sets.find((s) => s.id === id)?.provider_kind ?? ""
+    reg?.sets.find((set) => set.id === id)?.provider_kind ??
+    ""
 
   /**
    * Every set's trays, resolved to what the filter reads.
@@ -538,7 +224,7 @@ export function PlayView() {
       : peopleMatch(membersOf.get(id) ?? [], forPeople)
 
   const labelForKind = (kind: string) =>
-    reg?.sets.find((s) => s.provider_kind === kind)
+    reg?.sets.find((set) => set.provider_kind === kind)
       ?.vocabulary?.name ||
     PLEX_WORDS.name ||
     kind
@@ -586,8 +272,9 @@ export function PlayView() {
     forOnly: readonly string[],
   ) =>
     entries.filter(
-      (e) =>
-        matchOf(e.id, forPeople, forOnly).tier !== "none",
+      (entry) =>
+        matchOf(entry.id, forPeople, forOnly).tier !==
+        "none",
     ).length
   /**
    * Is there a queue that NAMES all of these people? The filter bar's dead-end test.
@@ -601,25 +288,26 @@ export function PlayView() {
     forOnly: readonly string[],
   ) =>
     entries.some(
-      (e) =>
-        (membersOf.get(e.id)?.length ?? 0) > 0 &&
-        matchOf(e.id, forPeople, forOnly).tier !== "none",
+      (entry) =>
+        (membersOf.get(entry.id)?.length ?? 0) > 0 &&
+        matchOf(entry.id, forPeople, forOnly).tier !==
+          "none",
     )
 
   /**
    * The grid in its two tiers. `shown` stays the flat list every other reader of this view
    * wants — the empty state, the reorder — and `tiers.exact.length` is where the rule goes.
    */
-  const tiers = splitByMatch(entries, (e) =>
-    matchOf(e.id, selected, only),
+  const tiers = splitByMatch(entries, (entry) =>
+    matchOf(entry.id, selected, only),
   )
   const shown = [...tiers.exact, ...tiers.also]
   /** WHO the also-in cards still want, in roster order — the divider's own sentence. */
   const alsoNames = (() => {
     const wanted = new Set(
-      tiers.also.flatMap((e) =>
+      tiers.also.flatMap((entry) =>
         missingRequiredPeople(
-          membersOf.get(e.id) ?? [],
+          membersOf.get(entry.id) ?? [],
           selected,
         ),
       ),
@@ -643,7 +331,9 @@ export function PlayView() {
     // amount of dragging, and the alternative is holding whatever `reg` was when the
     // listeners were bound.
     const state = getState()
-    const full = (state.reg?.sets ?? []).map((x) => x.id)
+    const full = (state.reg?.sets ?? []).map(
+      (registrySet) => registrySet.id,
+    )
 
     if (!full.length) return
 
@@ -655,13 +345,15 @@ export function PlayView() {
     // React last rendered it (so React reconciles against a DOM it believes), which means
     // the card visibly snaps BACK until new data arrives. Waiting for `load()` would hold
     // that snap-back for as long as `/api/queues` takes — 7-9 s warm against Plex.
-    const rank = new Map(next.map((id, i) => [id, i]))
-    const byRank = (a: string, b: string) =>
-      (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
+    const rank = new Map(
+      next.map((id, index) => [id, index]),
+    )
+    const byRank = (left: string, right: string) =>
+      (rank.get(left) ?? 0) - (rank.get(right) ?? 0)
 
     if (state.reg) {
-      state.reg.sets = [...state.reg.sets].sort((a, b) =>
-        byRank(a.id, b.id),
+      state.reg.sets = [...state.reg.sets].sort(
+        (left, right) => byRank(left.id, right.id),
       )
     }
 
@@ -672,8 +364,8 @@ export function PlayView() {
     setStatus("Saving order…")
     void api("PATCH", "/api/sets-order", { ids: next })
       .then(() => setStatus("Order saved", "ok"))
-      .catch(async (e: Error) => {
-        setStatus(`Reorder failed: ${e.message}`, "err")
+      .catch(async (error: Error) => {
+        setStatus(`Reorder failed: ${error.message}`, "err")
         // The optimistic order is now a lie; re-read so the page shows what is on disk.
         await load()
       })
@@ -786,7 +478,7 @@ export function PlayView() {
       ) : null}
 
       <ul className="playgrid" id="playgrid" ref={gridRef}>
-        {shown.map((e, index) => {
+        {shown.map((entry, index) => {
           // The rule sits inside the grid, spanning every column — `useRowReorder` permutes
           // this list's children, so a wrapper per tier would stop a drag crossing the line.
           const divider =
@@ -798,13 +490,13 @@ export function PlayView() {
             ) : null
 
           return (
-            <Fragment key={e.id}>
+            <Fragment key={entry.id}>
               {divider}
-              {e.kind === "rules" ? (
+              {entry.kind === "rules" ? (
                 <ChannelCard
-                  channel={e.set}
+                  channel={entry.set}
                   duplicateNumber={
-                    numbers.get(e.id) ?? null
+                    numbers.get(entry.id) ?? null
                   }
                 />
               ) : (
@@ -815,21 +507,23 @@ export function PlayView() {
                   // the id the server falls back to.
                   label={queueTitle(
                     reg?.sets.find(
-                      (x) => x.id === e.id,
+                      (set) => set.id === entry.id,
                     ) ?? {
                       // No registry entry yet — one payload arrived before the other. All
                       // that is known is the queues payload's label, so it is treated as
                       // EXPLICIT: showing it beats showing an activity guessed from nothing.
                       activity: "watching",
                       has_explicit_label: true,
-                      label: data!.sets[e.id]!.label,
+                      label: data!.sets[entry.id]!.label,
                     },
-                    numbers.get(e.id) ?? null,
+                    numbers.get(entry.id) ?? null,
                   )}
                   // The registry entry, so a Plex Picks card and a Plex Rules card two
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.
-                  set={reg?.sets.find((x) => x.id === e.id)}
+                  set={reg?.sets.find(
+                    (set) => set.id === entry.id,
+                  )}
                   // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
                   // `usePeople` is a store slice of its own and is loaded once at start-up,
                   // so this costs the landing no extra request and no extra render on a
@@ -837,18 +531,24 @@ export function PlayView() {
                   people={
                     <PeopleRow
                       groups={people.groups}
-                      members={people.byQueue[e.id] ?? []}
+                      members={
+                        people.byQueue[entry.id] ?? []
+                      }
                       people={people.people}
                     />
                   }
                   meta={picksMeta(
-                    data!.sets[e.id]!.items.length,
-                    reg?.sets.find((x) => x.id === e.id) ??
-                      data!.sets[e.id],
+                    data!.sets[entry.id]!.items.length,
+                    reg?.sets.find(
+                      (set) => set.id === entry.id,
+                    ) ?? data!.sets[entry.id],
                   )}
-                  to={`/q/${e.id}`}
+                  to={`/q/${entry.id}`}
                   onPlay={(anchor) =>
-                    openPlayMenu({ anchor, setId: e.id })
+                    openPlayMenu({
+                      anchor,
+                      setId: entry.id,
+                    })
                   }
                 />
               )}

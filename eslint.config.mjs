@@ -1,8 +1,4 @@
-import {
-  createAppConfig,
-  createStoryOverrides,
-  MULTI_COMPONENT_FILE_GLOBS,
-} from "@charcuterie/eslint-config"
+import { createAppConfig } from "@charcuterie/eslint-config"
 import { defineConfig } from "eslint/config"
 
 // The house rules, from the fleet's shared preset. Biome covers
@@ -45,41 +41,26 @@ export default defineConfig(
 
   // ── The staged backlog ─────────────────────────────────────
   //
-  // This repo adopted ESLint after the code, on 2026-11-13. Three
-  // house rules found more than a sweep in the same change could
-  // review safely:
+  // This repo adopted ESLint after the code, on 2026-11-13. The
+  // sweep has returned `id-length` and `react/no-multi-comp` to
+  // the preset's `error`. One rule is left:
   //
-  //   - `id-length`: 549, all in web. `server/` and `shared/`
-  //     are swept.
-  //   - `@typescript-eslint/naming-convention`: 268 (202 type
-  //     properties in server, 66 in web). Many are wire and YAML
-  //     fields, such as `ok`, `done`, `enabled`, and
+  //   - `@typescript-eslint/naming-convention`: 244 boolean type
+  //     properties (202 in server, 42 in web). Many are wire and
+  //     YAML fields, such as `ok`, `done`, `enabled`, and
   //     `keep_completed`, which a rename would break. Each needs a
   //     decision.
-  //   - `react/no-multi-comp`: 65, all in web
   //
-  // They are `warn`, not `off`, so each one stays visible. Only
-  // the severity changes here; the preset's options still apply.
-  // The root `lint` script passes `--max-warnings`, so a new
-  // finding fails the run instead of joining the count. Lower that
-  // number as the sweep removes findings, and return each rule to
-  // the preset's `error` when its count reaches zero.
+  // It is `warn`, not `off`, so each one stays visible. Only the
+  // severity changes here; the preset's options still apply. The
+  // root `lint` script passes `--max-warnings`, so a new finding
+  // fails the run instead of joining the count. Lower that number
+  // as the sweep removes findings, and return the rule to the
+  // preset's `error` when its count reaches zero.
   {
     files: ["**/*.{ts,tsx}"],
     rules: {
-      "id-length": "warn",
       "@typescript-eslint/naming-convention": "warn",
     },
   },
-  {
-    files: ["web/**/*.{ts,tsx}"],
-    rules: {
-      "react/no-multi-comp": "warn",
-    },
-  },
-  // Again after the block above, so files that may declare several
-  // components (tests, stories, icon modules) stay exempt.
-  createStoryOverrides({
-    files: MULTI_COMPONENT_FILE_GLOBS,
-  }),
 )

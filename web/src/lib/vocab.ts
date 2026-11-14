@@ -25,8 +25,8 @@ function memberPlural(member: string): string {
   return `${member}s`
 }
 
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+function escapeRe(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /**
@@ -67,7 +67,7 @@ export function replacementTable(
         Boolean(to) &&
         from.toLowerCase() !== to.toLowerCase(),
     )
-    .sort((a, b) => b[0].length - a[0].length)
+    .sort((left, right) => right[0].length - left[0].length)
 }
 
 function transferCase(
@@ -158,7 +158,7 @@ export function vocabForSet(
 ): ProviderVocabulary {
   return (
     (setId &&
-      sets?.find((s) => s.id === setId)?.vocabulary) ||
+      sets?.find((set) => set.id === setId)?.vocabulary) ||
     PLEX_WORDS
   )
 }

@@ -13,20 +13,22 @@ export function normalizeProductKind(
   raw: unknown,
   source?: unknown,
 ): ProductKind {
-  const k = String(raw ?? "")
+  const normalized = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (k === "picks" || k === "rules") return k
+  if (normalized === "picks" || normalized === "rules")
+    return normalized
   const src = String(source ?? "")
     .trim()
     .toLowerCase()
   if (src === "rotation") return "rules"
-  if (k === "cartoons" || k === "cartoon") return "rules"
+  if (normalized === "cartoons" || normalized === "cartoon")
+    return "rules"
   if (
-    k === "movies" ||
-    k === "anime" ||
-    k === "demo" ||
-    k === "movie"
+    normalized === "movies" ||
+    normalized === "anime" ||
+    normalized === "demo" ||
+    normalized === "movie"
   )
     return "picks"
   if (src === "queue" || src === "") return "picks"
@@ -37,10 +39,11 @@ export function normalizeAddAs(
   raw: unknown,
   opts: { kind?: unknown; source?: unknown } = {},
 ): AddAs {
-  const v = String(raw ?? "")
+  const normalized = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (v === "priority" || v === "random") return v
+  if (normalized === "priority" || normalized === "random")
+    return normalized
   const product = normalizeProductKind(
     opts.kind,
     opts.source,
@@ -101,8 +104,10 @@ export const DEFAULT_LEAD_WINDOW = "16h"
  * and rounding it to "a day" is the lie the control exists to stop telling.
  */
 export function leadWindowLabel(raw: string): string {
-  const w = raw.trim().toLowerCase()
-  if (w === "24h" || w === "1d") return "a day"
-  if (w === "7d" || w === "1w") return "a week"
-  return w
+  const normalized = raw.trim().toLowerCase()
+  if (normalized === "24h" || normalized === "1d")
+    return "a day"
+  if (normalized === "7d" || normalized === "1w")
+    return "a week"
+  return normalized
 }
