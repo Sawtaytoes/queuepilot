@@ -71,11 +71,10 @@ import { killServer, spawnServer } from './stubs/server-process.mjs';
 // mqtt client to `server/`, and neither is resolvable from `e2e/` itself.
 const requireBroker = createRequire(new URL('./broker/node_modules/', import.meta.url).pathname);
 const requireClient = createRequire(new URL('../server/node_modules/', import.meta.url).pathname);
-/* eslint-disable @typescript-eslint/no-explicit-any -- see fake-mqtt.ts: hand-writing an aedes
-   surface to type a fake broker would be more machinery than the broker. */
+ 
 const Aedes = requireBroker('aedes') as new () => any;
 const mqtt = requireClient('mqtt') as { connect(opts: unknown): MqttHandle };
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 
 
 interface MqttHandle {
   on(event: 'connect', handler: () => void): void;
@@ -177,17 +176,17 @@ interface StateMessage {
 
 async function main(): Promise<void> {
   // ---- the broker -------------------------------------------------------------------- //
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped aedes */
+   
   const aedes = new Aedes();
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- untyped aedes */
+   
   const broker = net.createServer(aedes.handle);
   /** Every topic the app under test subscribed to, recorded at the broker. */
   const subscribed = new Set<string>();
-  /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+   
   aedes.on('subscribe', (subs: { topic: string }[]) => {
     for (const sub of subs) subscribed.add(sub.topic);
   });
-  /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
+   
   await new Promise<void>((resolve) => broker.listen(BROKER_PORT, resolve));
 
   // ---- the config directory ---------------------------------------------------------- //
@@ -461,7 +460,7 @@ async function main(): Promise<void> {
     client?.end(true);
     if (child) killServer(child);
     broker.close();
-    /* eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+     
     aedes.close();
     await fs.rm(dir, { force: true, recursive: true });
   }

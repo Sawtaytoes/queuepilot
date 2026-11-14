@@ -24,7 +24,7 @@ export default defineConfig(
   ...createAppConfig({
     tsconfigRootDir: import.meta.dirname,
     appDirectories: ["web"],
-    ignores: ["e2e/**", "docs/**", "cast_sidecar/**"],
+    ignores: ["docs/**", "cast_sidecar/**"],
   }),
 
   // `shared/queueTitle.ts` belongs to no tsconfig of its own:

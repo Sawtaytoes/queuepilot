@@ -51,7 +51,9 @@ ok('member Alpha wins (dedup)', buckets.some((bucket) => bucket.show === 'Alpha'
 
 const formatted = preview.formatBuckets(buckets);
 ok('formatBuckets has unwatched + next', formatted.every((bucket) => 'unwatched' in bucket && 'next' in bucket));
-ok('signature is stable', preview.bucketsSignature(formatted) === preview.bucketsSignature(formatted));
+const firstSignature = preview.bucketsSignature(formatted);
+const secondSignature = preview.bucketsSignature(formatted);
+ok('signature is stable', firstSignature === secondSignature);
 ok('signature changes if emptied', preview.bucketsSignature(formatted) !== preview.bucketsSignature([]));
 
 // Library buckets: next is non-deterministic at preview time; item set is the signal.

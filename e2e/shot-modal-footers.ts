@@ -108,7 +108,7 @@ try {
     console.log(`shot: ${file}`);
   };
 
-  const escape = async () => {
+  const pressEscape = async () => {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
   };
@@ -124,7 +124,7 @@ try {
   await page.waitForSelector('#dynmodal[data-open]', { timeout: 15000 });
   await page.waitForTimeout(1200);
   await shot('dynmodal', '#dynmodal .modalbtns');
-  await escape();
+  await pressEscape();
 
   // --- the queue editor, in EDIT mode, from a queue's own page ----------------- //
   await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -134,7 +134,7 @@ try {
   await page.waitForSelector('#setmodal[data-open]', { timeout: 15000 });
   await page.waitForTimeout(1200);
   await shot('setmodal', '#setmodal .modalbtns');
-  await escape();
+  await pressEscape();
 
   // --- a queue tile: right-click opens `#tilemenu`, whose "Start from…" opens the modal.
   //     `#tilemenu` is a CONTEXT menu, so there is no button to press — the same
@@ -160,10 +160,10 @@ try {
     await page.waitForSelector('#startmodal', { timeout: 15000 });
     await page.waitForTimeout(900);
     await shot('startmodal', '#startmodal .modalbtns');
-    await escape();
+    await pressEscape();
   } else {
     console.log(`SKIPPED startmodal — no startable entry offline. Tile menu offered: ${JSON.stringify(rows)}`);
-    await escape();
+    await pressEscape();
   }
 
   // --- the per-entry settings panel: the quiet pencil on a tile ----------------- //

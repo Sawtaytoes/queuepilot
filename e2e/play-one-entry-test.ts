@@ -96,9 +96,9 @@ const client: PlexClient = {
     const search = path.match(/\/library\/sections\/\d+\/all\?(.*)$/);
     if (search) {
       // Same as above for `search[1]`; the inner `[1]` is the query's `title=` capture, whose
-      // `[, '']` fallback makes the read a string in the no-match case too.
+      // `[undefined, '']` fallback makes the read a string in the no-match case too.
       const title = decodeURIComponent(
-        (search[1]!.match(/(?:^|&)title=([^&]*)/) || [, ''])[1]!,
+        (search[1]!.match(/(?:^|&)title=([^&]*)/) || [undefined, ''])[1]!,
       ).replace(/\+/g, ' ');
       if (!EPISODES[title]) return { Metadata: [] };
       return { Metadata: [{ ratingKey: title, title, type: 'show' }] };

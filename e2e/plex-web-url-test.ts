@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { parentIs } from './stubs/module-id.mjs';
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __WEB_LINKS_MID: string | undefined;
 }
 

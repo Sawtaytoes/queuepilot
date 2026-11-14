@@ -36,7 +36,7 @@ import { join } from 'node:path';
 // existed on one machine and CI silently skipped the layer that needed a broker.
 const requireBroker = createRequire(new URL('./broker/node_modules/', import.meta.url).pathname);
 const requireClient = createRequire(new URL('../server/node_modules/', import.meta.url).pathname);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const Aedes = requireBroker('aedes') as new () => any;
 const mqtt = requireClient('mqtt') as {
   connect(url: string): {
