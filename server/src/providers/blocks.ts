@@ -55,7 +55,9 @@ function normalizeLibraries(raw: unknown): string[] {
   // Library ids stay STRINGS and stay bare. A block already says which provider it belongs
   // to, so an id never needs a `plex:` / `kavita:` prefix — and must never grow one, or the
   // provider identity is encoded in two places that can disagree.
-  return list.map((v) => String(v).trim()).filter(Boolean)
+  return list
+    .map((libraryId) => String(libraryId).trim())
+    .filter(Boolean)
 }
 
 function normalizeBlock(
@@ -99,8 +101,8 @@ function normalizeBlock(
 /** `filter(Boolean)`'s typed twin — identical at runtime, since the only falsy value a
  *  normalizeBlock() list can hold is the `null` it returns for a rejected block. */
 const isBlock = (
-  b: ProviderBlock | null,
-): b is ProviderBlock => b != null
+  block: ProviderBlock | null,
+): block is ProviderBlock => block != null
 
 /**
  * Every provider block for a set, normalized.
@@ -116,7 +118,9 @@ export function blocksForSet(
   const raw = cfg.providers
   if (Array.isArray(raw) && raw.length) {
     return raw
-      .map((b, i) => normalizeBlock(b, { index: i }))
+      .map((rawBlock, index) =>
+        normalizeBlock(rawBlock, { index: index }),
+      )
       .filter(isBlock)
   }
   return [
@@ -132,7 +136,7 @@ export function blocksForSet(
 /** True when a set draws from more than one distinct provider. */
 export function isMixed(cfg: BlockSourceCfg = {}): boolean {
   const ids = new Set(
-    blocksForSet(cfg).map((b) => b.provider),
+    blocksForSet(cfg).map((block) => block.provider),
   )
   return ids.size > 1
 }
@@ -146,7 +150,9 @@ export function resolveSingle(
   cfg: BlockSourceCfg = {},
 ): ProviderBlock {
   const blocks = blocksForSet(cfg)
-  const ids = [...new Set(blocks.map((b) => b.provider))]
+  const ids = [
+    ...new Set(blocks.map((block) => block.provider)),
+  ]
   if (ids.length > 1) {
     throw new Error(
       `this queue draws from ${ids.length} providers (${ids.join(", ")}), and what a mixed ` +
@@ -185,12 +191,14 @@ export function validateBlocks(
     }
   }
   const blocks = ((raw || []) as unknown[])
-    .map((b, i) => normalizeBlock(b, { index: i }))
+    .map((rawBlock, index) =>
+      normalizeBlock(rawBlock, { index: index }),
+    )
     .filter(isBlock)
-  blocks.forEach((b, i) => {
-    if (!definitionFor(b.provider)) {
+  blocks.forEach((block, index) => {
+    if (!definitionFor(block.provider)) {
       errors.push(
-        `block #${i + 1}: unknown provider '${b.provider}'`,
+        `block #${index + 1}: unknown provider '${block.provider}'`,
       )
     }
   })
@@ -200,7 +208,9 @@ export function validateBlocks(
   // `delivery: push` and then behaves as Plex everywhere, silently ignoring the other
   // provider's libraries. That is how the live "Manga & Webtoons" channel came to hold a
   // Kavita block that nothing ever read. Failing at save makes it visible immediately.
-  const ids = [...new Set(blocks.map((b) => b.provider))]
+  const ids = [
+    ...new Set(blocks.map((block) => block.provider)),
+  ]
   if (ids.length > 1) {
     errors.push(
       `a queue draws from one app, but these sources name ${ids.length} (${ids.join(", ")}) — ` +

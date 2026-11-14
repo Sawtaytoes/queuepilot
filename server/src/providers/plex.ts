@@ -103,12 +103,12 @@ function pickRewatch(
   title: string | null
 } | null {
   const candidates: [string | number, number][] = []
-  for (const [rk, n] of counts) {
+  for (const [rk, playCount] of counts) {
     if (excludes.has(String(rk))) continue
     if (excludeRk && String(rk) === String(excludeRk))
       continue
-    if (n < 1) continue
-    candidates.push([rk, n])
+    if (playCount < 1) continue
+    candidates.push([rk, playCount])
   }
   if (!candidates.length) return null
   // The channel's `weights:` map MULTIPLIES the 1/n² least-watched bias rather than replacing
@@ -116,18 +116,24 @@ function pickRewatch(
   // once still beats the same film seen three times. There is no round to take slots in here —
   // the card plays exactly one movie — so this is the one place a weight is odds, not slots.
   const odds = candidates.map(
-    ([rk, n]) => toWeight(weights[String(rk)]) / (n * n),
+    ([rk, candidate]) =>
+      toWeight(weights[String(rk)]) /
+      (candidate * candidate),
   )
   let total = 0
-  for (const w of odds) total += w
-  let r = Math.random() * total
-  for (let i = 0; i < candidates.length; i += 1) {
+  for (const odd of odds) total += odd
+  let remaining = Math.random() * total
+  for (
+    let index = 0;
+    index < candidates.length;
+    index += 1
+  ) {
     // Both index reads are in-bounds by the loop bound; `odds` is built one-for-one off
     // `candidates`. The assertions are what `noUncheckedIndexedAccess` costs, not a change.
-    r -= odds[i] as number
-    if (r <= 0) {
+    remaining -= odds[index] as number
+    if (remaining <= 0) {
       const rk = (
-        candidates[i] as [string | number, number]
+        candidates[index] as [string | number, number]
       )[0]
       return {
         ratingKey: rk,
@@ -143,11 +149,17 @@ function pickRewatch(
 }
 
 function defaultShuffle(arr: unknown[]): void {
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const a = arr[i]
-    arr[i] = arr[j]
-    arr[j] = a
+  for (
+    let iteration = arr.length - 1;
+    iteration > 0;
+    iteration -= 1
+  ) {
+    const swapIndex = Math.floor(
+      Math.random() * (iteration + 1),
+    )
+    const held = arr[iteration]
+    arr[iteration] = arr[swapIndex]
+    arr[swapIndex] = held
   }
 }
 
@@ -168,7 +180,7 @@ export function plexProvider({
   clientForServer,
   resolveProfileUser = profileUser,
 }: PlexProviderOptions = {}): Provider {
-  const c: PlexClient = client || liveClient()
+  const plexClient: PlexClient = client || liveClient()
 
   return {
     id: def?.id || "plex",
@@ -208,16 +220,18 @@ export function plexProvider({
       const secs = await plexSections()
       return (
         secs
-          .filter((l) => l.video)
+          .filter((sec) => sec.video)
           // `title as string`: a Plex section's title is optional on the wire shape, while
           // ProviderLibrary declares `title: string`. Asserted rather than defaulted to '' —
           // a blank-titled library in the editor's picker is worse than the untyped status quo,
           // and this maps a LIVE `/library/sections` row, which always carries one.
-          .map((l) => ({
-            id: String(l.id),
-            title: l.title as string,
+          .map((sec) => ({
+            id: String(sec.id),
+            title: sec.title as string,
           }))
-          .sort((a, b) => a.title.localeCompare(b.title))
+          .sort((left, right) =>
+            left.title.localeCompare(right.title),
+          )
       )
     },
 
@@ -226,7 +240,7 @@ export function plexProvider({
      * above this line never sees it — it asks for a profile and gets items back.
      */
     profileToken: (userUuid: string | null) =>
-      c.accountToken(userUuid),
+      plexClient.accountToken(userUuid),
 
     /**
      * A CURATED QUEUE has no `profiles[]` and no binding fields — only `requires_profile`,
@@ -279,7 +293,8 @@ export function plexProvider({
       itemId: string,
       {
         uuid = null,
-        includeSpecialChoices = false,
+        includeSpecialChoices:
+          isIncludingSpecialChoices = false,
       }: {
         uuid?: string | null
         includeSpecialChoices?: boolean
@@ -289,7 +304,7 @@ export function plexProvider({
       if (uuid) {
         try {
           scope = {
-            token: await c.accountToken(uuid),
+            token: await plexClient.accountToken(uuid),
             account: uuid,
           }
         } catch {
@@ -299,7 +314,7 @@ export function plexProvider({
       return showEpisodes(
         itemId,
         scope,
-        includeSpecialChoices,
+        isIncludingSpecialChoices,
       )
     },
 
@@ -311,7 +326,7 @@ export function plexProvider({
       cfg,
       binding,
     }: PlexBucketsContext): Promise<Set<string>> =>
-      select.watchedForSet(c, cfg, binding),
+      select.watchedForSet(plexClient, cfg, binding),
 
     /**
      * The ordered lineup for one set under one profile.
@@ -333,7 +348,7 @@ export function plexProvider({
     }: PlexBucketsContext): Promise<BucketsResult> {
       if (cfg.source === "queue") {
         let entries = resolve.loadEntries(setName)
-        let queueClient = c
+        let queueClient = plexClient
         const sharedClients = new Map<
           string,
           Promise<PlexClient | null>
@@ -366,13 +381,15 @@ export function plexProvider({
         // would have got when the queue reached it on its own. A one-entry queue IS the
         // normal path with a shorter list.
         if (only) {
-          entries = entries.filter((e) => e.key === only)
+          entries = entries.filter(
+            (entry) => entry.key === only,
+          )
           if (!entries.length)
             return { play: [], unknownEntry: only }
         }
         if (cfg.reel)
           return resolve.buildReel(
-            c,
+            plexClient,
             setName,
             cfg,
             entries,
@@ -381,12 +398,12 @@ export function plexProvider({
             clientForEntry,
           )
         const watched = await select.watchedForSet(
-          c,
+          plexClient,
           cfg,
           binding,
         )
         queueClient = await queueMetadataClient(
-          c,
+          plexClient,
           entries,
           token,
         )
@@ -437,7 +454,7 @@ export function plexProvider({
       if (mode === "rewatch") {
         const { counts, titles } =
           await select.rewatchCounts(
-            c,
+            plexClient,
             routing.rewatchSections(cfg),
             binding.movie_ratings,
             // `?? null`, not `|| null`: `token` is optional on the context and select.js's
@@ -452,7 +469,7 @@ export function plexProvider({
         )
         const rewatchWeights =
           await rotation.mergeManualMoviesIntoRewatch(
-            c,
+            plexClient,
             cfg,
             binding,
             counts,
@@ -473,7 +490,11 @@ export function plexProvider({
         const want = initialQueueSize(playbackLength(cfg))
         const play: PlexPlayItem[] = []
 
-        for (let i = 0; i < want; i += 1) {
+        for (
+          let iteration = 0;
+          iteration < want;
+          iteration += 1
+        ) {
           // The exclusion of the previously-played film is SESSION state, threaded in by the
           // caller — a provider is stateless across starts and must not hold it.
           const pick = pickRewatch(
@@ -507,7 +528,7 @@ export function plexProvider({
       // because every item is a Plex round trip on a card someone just tapped. Top-up carries
       // the rest, and derives itself from this same number.
       const queue = await rotation.buildRotation(
-        c,
+        plexClient,
         cfg,
         binding,
         initialQueueSize(playbackLength(cfg)),
@@ -558,14 +579,14 @@ export function plexProvider({
     async handoff(
       artifact: PlexArtifact,
       {
-        useFsm = false,
+        useFsm: isFsmUsed = false,
         requiredProfile = null,
         device = null,
         cancel = null,
         setLabel = null,
       }: HandoffOptions = {},
     ): Promise<PushResult> {
-      if (useFsm) {
+      if (isFsmUsed) {
         return driver.driveToPlaying({
           items: artifact.items,
           ratingKeys: artifact.ratingKeys,

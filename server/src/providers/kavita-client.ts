@@ -312,8 +312,8 @@ export function kavitaClient({
     // Collapse concurrent misses onto one exchange — a rotation start fans out per series.
     if (!inflight) {
       inflight = authenticate()
-        .then((r) => {
-          jwt = r.token
+        .then((auth) => {
+          jwt = auth.token
           jwtAt = Date.now()
           return jwt
         })
@@ -333,12 +333,12 @@ export function kavitaClient({
     path: string,
     {
       body = null,
-      retryOn401 = true,
+      retryOn401: isRetryAllowed = true,
     }: { body?: unknown; retryOn401?: boolean } = {},
   ): Promise<T | null> {
-    const t = await token()
+    const bearer = await token()
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${t}`,
+      Authorization: `Bearer ${bearer}`,
     }
     if (body != null)
       headers["Content-Type"] = "application/json"
@@ -350,7 +350,7 @@ export function kavitaClient({
         : {}),
       signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS),
     })
-    if (res.status === 401 && retryOn401) {
+    if (res.status === 401 && isRetryAllowed) {
       // The cached JWT expired mid-flight. Re-mint once, then give up rather than looping.
       jwt = null
       jwtAt = 0
@@ -379,10 +379,10 @@ export function kavitaClient({
 
     /** Who this API key belongs to. §6: lists must be built as the reading user, not admin. */
     async whoami() {
-      const r = await authenticate()
-      jwt = r.token
+      const auth = await authenticate()
+      jwt = auth.token
       jwtAt = Date.now()
-      return r.username
+      return auth.username
     },
 
     libraries: () =>
@@ -427,10 +427,10 @@ export function kavitaClient({
      * only `series` is of interest here, and `includeChapterAndFiles=false` keeps the
      * response from carrying file paths we have no use for.
      */
-    search: (q) =>
+    search: (query) =>
       req<KavitaSearchResultDto>(
         "GET",
-        `/api/Search/search?queryString=${encodeURIComponent(q)}&includeChapterAndFiles=false`,
+        `/api/Search/search?queryString=${encodeURIComponent(query)}&includeChapterAndFiles=false`,
       ),
 
     /** One series' metadata, for resolving a stored member id back to a name. */
@@ -584,15 +584,20 @@ export function kavitaClient({
      */
     updateList: (
       readingListId,
-      { title, summary, promoted, coverImageLocked },
+      {
+        title,
+        summary,
+        promoted: isPromoted,
+        coverImageLocked: isCoverImageLocked,
+      },
     ) =>
       req<unknown>("POST", "/api/ReadingList/update", {
         body: {
           readingListId,
           title,
           summary,
-          promoted,
-          coverImageLocked,
+          promoted: isPromoted,
+          coverImageLocked: isCoverImageLocked,
         },
       }),
 

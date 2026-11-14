@@ -238,8 +238,9 @@ export const groupBoxes = (
   // Pass 1 — standalones become games, SHORTEST name first, so a base game is already
   // registered by the time an edition of it comes looking for one to attach to.
   const byLengthAsc = [...standalones].sort(
-    (a, b) =>
-      normalize(a.name).length - normalize(b.name).length,
+    (left, right) =>
+      normalize(left.name).length -
+      normalize(right.name).length,
   )
 
   /** Every game id handed out, so two titles cannot share one. */

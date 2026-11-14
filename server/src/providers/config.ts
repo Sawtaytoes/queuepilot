@@ -244,7 +244,7 @@ const envKeysForKind = (
 ): string[] | undefined => ENV_TOKEN_KEYS[kind ?? ""]
 
 function readYaml(
-  p: string,
+  filePath: string,
   what: string,
 ): Record<string, unknown> {
   try {
@@ -252,18 +252,18 @@ function readYaml(
     // empty case and the cast covers the rest — every reader below re-checks the field it
     // wants, so a wrong-shaped file degrades to "no providers" rather than throwing.
     return (
-      (parse(fs.readFileSync(p, "utf8")) as Record<
+      (parse(fs.readFileSync(filePath, "utf8")) as Record<
         string,
         unknown
       > | null) || {}
     )
-  } catch (e) {
+  } catch (error) {
     // Missing is the normal cold-start case: no providers configured yet. Anything else is
     // worth a line in the log but must never crash boot — this process also serves the web
     // UI, and losing the editor because of a stray comma is the worse failure.
-    if (!isNodeError(e) || e.code !== "ENOENT")
+    if (!isNodeError(error) || error.code !== "ENOENT")
       console.log(
-        `[providers] could not read ${what}: ${errMessage(e)}`,
+        `[providers] could not read ${what}: ${errMessage(error)}`,
       )
     return {}
   }
@@ -356,22 +356,23 @@ export function definitions(): ProviderDefinition[] {
     ? doc.providers
     : []
   const byId = new Map<string, ProviderDefinition>()
-  for (const d of implicitDefinitions()) byId.set(d.id, d)
-  listed.forEach((raw, i) => {
-    const d = normalizeDefinition(raw, i)
-    if (!d) return
+  for (const implicitDefinition of implicitDefinitions())
+    byId.set(implicitDefinition.id, implicitDefinition)
+  listed.forEach((raw, index) => {
+    const definition = normalizeDefinition(raw, index)
+    if (!definition) return
     // A file entry wins over the implicit one, but only field by field: a definition that
     // omits base_url should not blank out the env-derived default.
-    const prior = byId.get(d.id)
+    const prior = byId.get(definition.id)
     byId.set(
-      d.id,
+      definition.id,
       prior
         ? {
             ...prior,
-            ...d,
-            base_url: d.base_url || prior.base_url,
+            ...definition,
+            base_url: definition.base_url || prior.base_url,
           }
-        : d,
+        : definition,
     )
   })
   return [...byId.values()]
@@ -380,7 +381,9 @@ export function definitions(): ProviderDefinition[] {
 export const definitionFor = (
   id: string,
 ): ProviderDefinition | null =>
-  definitions().find((d) => d.id === id) || null
+  definitions().find(
+    (definition) => definition.id === id,
+  ) || null
 
 // --- tokens (the secrets file) ------------------------------------------------ //
 
@@ -396,8 +399,11 @@ function secretsMap(): Map<string, string> {
       ? doc.tokens
       : doc
   const out = new Map<string, string>()
-  for (const [k, v] of Object.entries(src || {})) {
-    if (typeof v === "string" && v) out.set(k, v)
+  for (const [providerId, token] of Object.entries(
+    src || {},
+  )) {
+    if (typeof token === "string" && token)
+      out.set(providerId, token)
   }
   return out
 }
@@ -415,9 +421,9 @@ export function tokenFor(
     ...(envKeysForKind(kind) || []),
     envTokenKeyFor(id),
   ]
-  for (const k of keys) {
-    const v = process.env[k]
-    if (v) return { token: v, source: `env:${k}` }
+  for (const key of keys) {
+    const token = process.env[key]
+    if (token) return { token: token, source: `env:${key}` }
   }
   const fromFile = secretsMap().get(id)
   if (fromFile) return { token: fromFile, source: "file" }

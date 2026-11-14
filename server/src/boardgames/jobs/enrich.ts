@@ -180,7 +180,7 @@ export async function runEnrich(
           )
 
       let imageUrl = item.imageUrl
-      let usedEdition = false
+      let hasUsedEdition = false
 
       if (matched) {
         try {
@@ -196,7 +196,7 @@ export async function runEnrich(
           )
           if (versionItem?.imageUrl) {
             imageUrl = versionItem.imageUrl
-            usedEdition = true
+            hasUsedEdition = true
           }
         } catch (error) {
           onProgress(
@@ -210,7 +210,7 @@ export async function runEnrich(
           const stored = await storeSquareImage(imageUrl)
           writeCoverPath(game.id, game.bggId, stored.path)
           withArt += 1
-          if (usedEdition) matchedEdition += 1
+          if (hasUsedEdition) matchedEdition += 1
         } catch (error) {
           onProgress(
             `  ✗ ${game.name} art: ${error instanceof Error ? error.message : String(error)}`,

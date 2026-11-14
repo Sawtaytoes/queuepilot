@@ -51,11 +51,11 @@ interface Book {
 /** The tie-break, said as a function because it is the only judgement in this file. */
 const pickOne = (books: Book[]): Book | undefined =>
   [...books].sort(
-    (a, b) =>
-      Number(b.confidence === "exact") -
-        Number(a.confidence === "exact") ||
-      a.name.length - b.name.length ||
-      a.id - b.id,
+    (left, right) =>
+      Number(right.confidence === "exact") -
+        Number(left.confidence === "exact") ||
+      left.name.length - right.name.length ||
+      left.id - right.id,
   )[0]
 
 export async function runLinkRulebooks(
