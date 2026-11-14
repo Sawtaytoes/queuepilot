@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build",
     "install-playwright-browser": "pnpm --filter queuepilot-e2e run playwright install chromium --with-deps",
-    "lint": "biome check && eslint . --max-warnings 244",
+    "lint": "biome check && eslint .",
     "lint:fix": "biome check --write && eslint . --fix",
     "test": "pnpm --filter queuepilot-web run test && pnpm --filter queuepilot-server run test",
     "test:smoke": "pnpm --filter queuepilot-e2e run test:smoke",
