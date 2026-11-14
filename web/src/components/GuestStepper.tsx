@@ -54,9 +54,9 @@ export function GuestStepper({
           label="Guests"
           max={MAX_GUESTS}
           min={0}
-          onChange={(e) =>
+          onChange={(event) =>
             onChange(
-              clamp(Number(e.currentTarget.value) || 0),
+              clamp(Number(event.currentTarget.value) || 0),
             )
           }
           type="number"

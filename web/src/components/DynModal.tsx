@@ -97,47 +97,52 @@ type BindingDraft = {
 let nextUid = 1
 
 const toDraft = (
-  b: Binding,
+  binding: Binding,
   known: string[],
 ): BindingDraft => ({
   accountId:
-    b.account_id != null ? String(b.account_id) : "",
+    binding.account_id != null
+      ? String(binding.account_id)
+      : "",
   isAdvancedOpen: false,
-  movieChecked: b.movie_ratings || [],
-  movieExcludes: b.movie_excludes || [],
-  movieOptions: ratingOptions(known, b.movie_ratings || []),
-  plexUser: b.plex_user || "",
-  showChecked: b.allowed_ratings || [],
+  movieChecked: binding.movie_ratings || [],
+  movieExcludes: binding.movie_excludes || [],
+  movieOptions: ratingOptions(
+    known,
+    binding.movie_ratings || [],
+  ),
+  plexUser: binding.plex_user || "",
+  showChecked: binding.allowed_ratings || [],
   showOptions: ratingOptions(
     known,
-    b.allowed_ratings || [],
+    binding.allowed_ratings || [],
   ),
   uid: nextUid++,
-  userUuid: b.user_uuid || "",
+  userUuid: binding.user_uuid || "",
 })
 
-const readBinding = (d: BindingDraft): Binding => ({
-  account_id: d.accountId.trim()
-    ? Number(d.accountId.trim())
+const readBinding = (draft: BindingDraft): Binding => ({
+  account_id: draft.accountId.trim()
+    ? Number(draft.accountId.trim())
     : null,
-  allowed_ratings: d.showChecked,
+  allowed_ratings: draft.showChecked,
   // Round-tripped, never edited here — see BindingDraft.movieExcludes.
-  movie_excludes: d.movieExcludes,
-  movie_ratings: d.movieChecked,
-  plex_user: d.plexUser.trim() || null,
-  user_uuid: d.userUuid.trim() || null,
-  watch_count_accounts: d.accountId.trim()
-    ? [Number(d.accountId.trim())]
+  movie_excludes: draft.movieExcludes,
+  movie_ratings: draft.movieChecked,
+  plex_user: draft.plexUser.trim() || null,
+  user_uuid: draft.userUuid.trim() || null,
+  watch_count_accounts: draft.accountId.trim()
+    ? [Number(draft.accountId.trim())]
     : [],
 })
 
-const hasData = (b: Binding) =>
+const hasData = (binding: Binding) =>
   Boolean(
-    b.plex_user ||
-      b.account_id != null ||
-      b.user_uuid ||
-      b.allowed_ratings.length ||
-      b.movie_ratings.length,
+    binding.plex_user ||
+      binding.account_id != null ||
+      binding.user_uuid ||
+      binding.allowed_ratings.length ||
+      binding.movie_ratings.length,
   )
 
 export function DynModal() {
@@ -149,7 +154,8 @@ export function DynModal() {
   const editing = useMemo(
     () =>
       setId
-        ? (reg?.sets.find((s) => s.id === setId) ?? null)
+        ? (reg?.sets.find((set) => set.id === setId) ??
+          null)
         : null,
     [reg, setId],
   )
@@ -171,9 +177,9 @@ export function DynModal() {
 
     try {
       await saveQueuePeople(setId, next)
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not move them: ${(e as Error).message}`,
+        `Could not move them: ${(error as Error).message}`,
         "err",
       )
     }
@@ -230,7 +236,8 @@ export function DynModal() {
   const showLibs = useMemo(
     () =>
       (reg?.libraries ?? []).filter(
-        (l) => l.video && l.type === "show",
+        (library) =>
+          library.video && library.type === "show",
       ),
     [reg],
   )
@@ -239,14 +246,20 @@ export function DynModal() {
   const movieLibs = useMemo(
     () =>
       (reg?.libraries ?? []).filter(
-        (l) => l.video && l.type === "movie" && !l.other,
+        (library) =>
+          library.video &&
+          library.type === "movie" &&
+          !library.other,
       ),
     [reg],
   )
   const otherLibs = useMemo(
     () =>
       (reg?.libraries ?? []).filter(
-        (l) => l.video && l.type === "movie" && l.other,
+        (library) =>
+          library.video &&
+          library.type === "movie" &&
+          library.other,
       ),
     [reg],
   )
@@ -322,7 +335,9 @@ export function DynModal() {
         ? editing.profiles
         : [{} as Binding]
 
-      setBindings(list.map((b) => toDraft(b, known)))
+      setBindings(
+        list.map((binding) => toDraft(binding, known)),
+      )
     }
 
     void run()
@@ -340,20 +355,20 @@ export function DynModal() {
       const ratings = await fetchScopedRatings(uuid)
 
       setBindings((prev) =>
-        prev.map((d) =>
-          d.uid === uid
+        prev.map((draft) =>
+          draft.uid === uid
             ? {
-                ...d,
+                ...draft,
                 movieOptions: ratingOptions(
                   ratings,
-                  d.movieChecked,
+                  draft.movieChecked,
                 ),
                 showOptions: ratingOptions(
                   ratings,
-                  d.showChecked,
+                  draft.showChecked,
                 ),
               }
-            : d,
+            : draft,
         ),
       )
     },
@@ -365,8 +380,8 @@ export function DynModal() {
     patch: Partial<BindingDraft>,
   ) =>
     setBindings((prev) =>
-      prev.map((d) =>
-        d.uid === uid ? { ...d, ...patch } : d,
+      prev.map((draft) =>
+        draft.uid === uid ? { ...draft, ...patch } : draft,
       ),
     )
 
@@ -430,7 +445,7 @@ export function DynModal() {
     // Only persist a default that still names one of the saved bindings; anything else
     // (blank, or a since-renamed profile) clears it so the dropdowns fall back to the first.
     const named = collected
-      .map((b) => b.plex_user)
+      .map((binding) => binding.plex_user)
       .filter(Boolean)
 
     body.default_profile =
@@ -466,7 +481,7 @@ export function DynModal() {
     if (!setId) return
 
     const ch: RegistrySet | undefined = reg?.sets.find(
-      (s) => s.id === setId,
+      (set) => set.id === setId,
     )
     const name = ch ? ch.label : setId
 
@@ -492,23 +507,26 @@ export function DynModal() {
       setStatus("Rules queue deleted", "ok")
       await load()
       navigate("/channels")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Delete failed: ${(e as Error).message}`,
+        `Delete failed: ${(error as Error).message}`,
         "err",
       )
     }
   }
 
   const libOptions = (libs: typeof showLibs) =>
-    libs.map((l) => ({ label: l.title, value: l.id }))
+    libs.map((library) => ({
+      label: library.title,
+      value: library.id,
+    }))
 
   // The bindings the default-profile picker can point at — a default is only meaningful
   // once a channel binds more than one named profile.
   const namedProfiles = [
     ...new Set(
       bindings
-        .map((d) => d.plexUser.trim())
+        .map((binding) => binding.plexUser.trim())
         .filter(Boolean),
     ),
   ]
@@ -575,7 +593,7 @@ export function DynModal() {
         <input
           id="dyn-label"
           maxLength={60}
-          onChange={(e) => setLabel(e.target.value)}
+          onChange={(event) => setLabel(event.target.value)}
           placeholder="Movies & Shows"
           type="text"
           value={label}
@@ -594,8 +612,8 @@ export function DynModal() {
           id="dyn-behavior"
           key={modalKey}
           label="Behavior"
-          onChange={(v) =>
-            setBehavior(v as "progress" | "rewatch")
+          onChange={(value) =>
+            setBehavior(value as "progress" | "rewatch")
           }
           options={[
             {
@@ -617,7 +635,7 @@ export function DynModal() {
         <input
           id="dyn-kind"
           maxLength={30}
-          onChange={(e) => setKind(e.target.value)}
+          onChange={(event) => setKind(event.target.value)}
           placeholder="cartoons"
           type="text"
           value={kind}
@@ -660,11 +678,14 @@ export function DynModal() {
           <CheckboxGroup
             checked={showSections}
             id="dyn-showlibs"
-            onToggle={(v, isChecked) => {
+            onToggle={(sectionId, isChecked) => {
               setShowSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (checkedId) =>
+                        checkedId !== sectionId,
+                    ),
               )
             }}
             options={libOptions(showLibs)}
@@ -676,11 +697,14 @@ export function DynModal() {
           <CheckboxGroup
             checked={itemSections}
             id="dyn-movielibs"
-            onToggle={(v, isChecked) => {
+            onToggle={(sectionId, isChecked) => {
               setItemSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (checkedId) =>
+                        checkedId !== sectionId,
+                    ),
               )
             }}
             options={libOptions(movieLibs)}
@@ -696,11 +720,14 @@ export function DynModal() {
           <CheckboxGroup
             checked={itemSections}
             id="dyn-otherlibs"
-            onToggle={(v, isChecked) => {
+            onToggle={(sectionId, isChecked) => {
               setItemSections((prev) =>
                 isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
+                  ? [...prev, sectionId]
+                  : prev.filter(
+                      (checkedId) =>
+                        checkedId !== sectionId,
+                    ),
               )
             }}
             options={libOptions(otherLibs)}
@@ -924,8 +951,8 @@ export function DynModal() {
           queues with extra profile cards remain editable.
         </p>
         <div id="dyn-bindings">
-          {bindings.map((d) => (
-            <div className="binding" key={d.uid}>
+          {bindings.map((binding) => (
+            <div className="binding" key={binding.uid}>
               <div className="binding-head">
                 <label className="subfield bprof">
                   Plex profile
@@ -940,26 +967,32 @@ export function DynModal() {
                     className="b-profile"
                     key={profiles.length}
                     label="Plex profile"
-                    onChange={(v) => {
-                      const p = profiles.find(
-                        (x) => profileValue(x) === v,
+                    onChange={(value) => {
+                      const profile = profiles.find(
+                        (candidate) =>
+                          profileValue(candidate) === value,
                       )
 
-                      if (!p) return
+                      if (!profile) return
 
-                      patchBinding(d.uid, {
+                      patchBinding(binding.uid, {
                         accountId:
-                          p.id != null ? String(p.id) : "",
-                        plexUser: p.name || "",
-                        userUuid: p.uuid || "",
+                          profile.id != null
+                            ? String(profile.id)
+                            : "",
+                        plexUser: profile.name || "",
+                        userUuid: profile.uuid || "",
                       })
-                      void scopeCard(d.uid, p.uuid || "")
+                      void scopeCard(
+                        binding.uid,
+                        profile.uuid || "",
+                      )
                     }}
-                    options={profiles.map((p) => ({
-                      label: p.admin
-                        ? `${p.name} (admin)`
-                        : p.name,
-                      value: profileValue(p),
+                    options={profiles.map((profile) => ({
+                      label: profile.admin
+                        ? `${profile.name} (admin)`
+                        : profile.name,
+                      value: profileValue(profile),
                     }))}
                     /* Was a real `<option value="">` the user could re-pick, which
                        did nothing (`if (!p) return`). `placeholder` renders it
@@ -972,20 +1005,25 @@ export function DynModal() {
                     }
                     value={
                       profiles.find(
-                        (p) =>
-                          (d.userUuid &&
-                            p.uuid === d.userUuid) ||
-                          (d.accountId &&
-                            p.id === Number(d.accountId)),
+                        (profile) =>
+                          (binding.userUuid &&
+                            profile.uuid ===
+                              binding.userUuid) ||
+                          (binding.accountId &&
+                            profile.id ===
+                              Number(binding.accountId)),
                       )
                         ? profileValue(
                             profiles.find(
-                              (p) =>
-                                (d.userUuid &&
-                                  p.uuid === d.userUuid) ||
-                                (d.accountId &&
-                                  p.id ===
-                                    Number(d.accountId)),
+                              (profile) =>
+                                (binding.userUuid &&
+                                  profile.uuid ===
+                                    binding.userUuid) ||
+                                (binding.accountId &&
+                                  profile.id ===
+                                    Number(
+                                      binding.accountId,
+                                    )),
                             )!,
                           )
                         : ""
@@ -1007,7 +1045,10 @@ export function DynModal() {
                   intent="neutral"
                   onClick={() =>
                     setBindings((prev) =>
-                      prev.filter((x) => x.uid !== d.uid),
+                      prev.filter(
+                        (otherDraft) =>
+                          otherDraft.uid !== binding.uid,
+                      ),
                     )
                   }
                   size="sm"
@@ -1031,18 +1072,20 @@ export function DynModal() {
               <Accordion
                 className="advanced b-advanced"
                 expandedKeys={
-                  d.isAdvancedOpen ||
+                  binding.isAdvancedOpen ||
                   (!profiles.some(
-                    (p) =>
-                      (d.userUuid &&
-                        p.uuid === d.userUuid) ||
-                      (d.accountId &&
-                        p.id === Number(d.accountId)),
+                    (profile) =>
+                      (binding.userUuid &&
+                        profile.uuid ===
+                          binding.userUuid) ||
+                      (binding.accountId &&
+                        profile.id ===
+                          Number(binding.accountId)),
                   ) &&
                     Boolean(
-                      d.plexUser ||
-                        d.accountId ||
-                        d.userUuid,
+                      binding.plexUser ||
+                        binding.accountId ||
+                        binding.userUuid,
                     ))
                     ? ["advanced"]
                     : []
@@ -1056,14 +1099,15 @@ export function DynModal() {
                           Plex user
                           <input
                             className="b-plexuser"
-                            onChange={(e) =>
-                              patchBinding(d.uid, {
-                                plexUser: e.target.value,
+                            onChange={(event) =>
+                              patchBinding(binding.uid, {
+                                plexUser:
+                                  event.target.value,
                               })
                             }
                             placeholder="e.g. Older Kids"
                             type="text"
-                            value={d.plexUser}
+                            value={binding.plexUser}
                           />
                         </label>
                         <label className="subfield">
@@ -1071,28 +1115,30 @@ export function DynModal() {
                           <input
                             className="b-accountid"
                             inputMode="numeric"
-                            onChange={(e) =>
-                              patchBinding(d.uid, {
-                                accountId: e.target.value,
+                            onChange={(event) =>
+                              patchBinding(binding.uid, {
+                                accountId:
+                                  event.target.value,
                               })
                             }
                             placeholder="e.g. 22222222"
                             type="text"
-                            value={d.accountId}
+                            value={binding.accountId}
                           />
                         </label>
                         <label className="subfield">
                           User uuid
                           <input
                             className="b-useruuid"
-                            onChange={(e) =>
-                              patchBinding(d.uid, {
-                                userUuid: e.target.value,
+                            onChange={(event) =>
+                              patchBinding(binding.uid, {
+                                userUuid:
+                                  event.target.value,
                               })
                             }
                             placeholder="e.g. 2222222222222222"
                             type="text"
-                            value={d.userUuid}
+                            value={binding.userUuid}
                           />
                         </label>
                       </>
@@ -1104,7 +1150,7 @@ export function DynModal() {
                 ]}
                 key={profiles.length}
                 onChange={(keys) =>
-                  patchBinding(d.uid, {
+                  patchBinding(binding.uid, {
                     isAdvancedOpen:
                       keys.includes("advanced"),
                   })
@@ -1117,22 +1163,29 @@ export function DynModal() {
                       profile or the channel's libraries change — a second writer the user
                       never touched. Not keyed on the checked set, which their own click
                       writes. */}
-                  {d.showOptions.map((r) => (
+                  {binding.showOptions.map((showOption) => (
                     <Checkbox
-                      isChecked={d.showChecked.includes(r)}
-                      key={`${d.uid}:${r}`}
-                      label={r}
+                      isChecked={binding.showChecked.includes(
+                        showOption,
+                      )}
+                      key={`${binding.uid}:${showOption}`}
+                      label={showOption}
                       onChange={(isChecked) =>
-                        patchBinding(d.uid, {
+                        patchBinding(binding.uid, {
                           showChecked: isChecked
-                            ? [...d.showChecked, r]
-                            : d.showChecked.filter(
-                                (x) => x !== r,
+                            ? [
+                                ...binding.showChecked,
+                                showOption,
+                              ]
+                            : binding.showChecked.filter(
+                                (checkedRating) =>
+                                  checkedRating !==
+                                  showOption,
                               ),
                         })
                       }
                       size="sm"
-                      value={r}
+                      value={showOption}
                     />
                   ))}
                 </div>
@@ -1144,24 +1197,33 @@ export function DynModal() {
                       profile or the channel's libraries change — a second writer the user
                       never touched. Not keyed on the checked set, which their own click
                       writes. */}
-                  {d.movieOptions.map((r) => (
-                    <Checkbox
-                      isChecked={d.movieChecked.includes(r)}
-                      key={`${d.uid}:${r}`}
-                      label={r}
-                      onChange={(isChecked) =>
-                        patchBinding(d.uid, {
-                          movieChecked: isChecked
-                            ? [...d.movieChecked, r]
-                            : d.movieChecked.filter(
-                                (x) => x !== r,
-                              ),
-                        })
-                      }
-                      size="sm"
-                      value={r}
-                    />
-                  ))}
+                  {binding.movieOptions.map(
+                    (movieOption) => (
+                      <Checkbox
+                        isChecked={binding.movieChecked.includes(
+                          movieOption,
+                        )}
+                        key={`${binding.uid}:${movieOption}`}
+                        label={movieOption}
+                        onChange={(isChecked) =>
+                          patchBinding(binding.uid, {
+                            movieChecked: isChecked
+                              ? [
+                                  ...binding.movieChecked,
+                                  movieOption,
+                                ]
+                              : binding.movieChecked.filter(
+                                  (checkedRating) =>
+                                    checkedRating !==
+                                    movieOption,
+                                ),
+                          })
+                        }
+                        size="sm"
+                        value={movieOption}
+                      />
+                    ),
+                  )}
                 </div>
               </fieldset>
             </div>
@@ -1183,9 +1245,9 @@ export function DynModal() {
             key={modalKey}
             label="Default profile"
             onChange={setDefaultProfile}
-            options={namedProfiles.map((p) => ({
-              label: p,
-              value: p,
+            options={namedProfiles.map((namedProfile) => ({
+              label: namedProfile,
+              value: namedProfile,
             }))}
             placeholder="— first profile —"
             value={
@@ -1206,7 +1268,7 @@ export function DynModal() {
         <input
           id="dyn-audio"
           maxLength={8}
-          onChange={(e) => setAudio(e.target.value)}
+          onChange={(event) => setAudio(event.target.value)}
           placeholder="e.g. jpn, eng — blank = default"
           type="text"
           value={audio}

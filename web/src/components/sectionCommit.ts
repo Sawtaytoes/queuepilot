@@ -152,8 +152,11 @@ export async function commitSection(
         : "Section cleared — plays the whole item",
       "ok",
     )
-  } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(
+      `Save failed: ${(error as Error).message}`,
+      "err",
+    )
   }
 
   entry.refresh()

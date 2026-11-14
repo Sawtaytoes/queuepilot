@@ -301,10 +301,10 @@ export function PosterTile({
               <button
                 aria-label={playTitle}
                 className="tileplay"
-                onClick={(e) => {
-                  e.stopPropagation()
+                onClick={(event) => {
+                  event.stopPropagation()
                   onPlay(
-                    e.currentTarget.getBoundingClientRect(),
+                    event.currentTarget.getBoundingClientRect(),
                   )
                 }}
                 type="button"
@@ -318,7 +318,7 @@ export function PosterTile({
                 href={playHref}
                 // The click must not also select/open the tile underneath — the same reason
                 // the button above stops propagation.
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
                 rel="noreferrer"
                 // A new tab, so the queue you launched from is still there when you come
                 // back from the reader — matching OpenQueueButton.
@@ -412,7 +412,7 @@ export function PosterTile({
               <a
                 draggable={false}
                 href={titleHref}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
                 rel="noreferrer"
                 // A new tab: the queue you were arranging is still there when you come back,
                 // matching the ▶ link and OpenQueueButton.
@@ -441,12 +441,12 @@ export function PosterTile({
             }
             onKeyDown={
               isStartable
-                ? (e) => {
+                ? (event) => {
                     if (
-                      e.key === "Enter" ||
-                      e.key === " "
+                      event.key === "Enter" ||
+                      event.key === " "
                     ) {
-                      e.preventDefault()
+                      event.preventDefault()
                       next?.onStart?.()
                     }
                   }

@@ -114,12 +114,12 @@ export function QueueActionsMenu({
   // Each row asks its OWN question. `canRemove` implies `canReset`, so the only disabled row
   // that is ever reachable is "Remove all completed" — but both are written out, because the
   // day the two endpoints stop agreeing this code should still read correctly.
-  const canRemove = doneCount > 0
-  const canReset = doneCount > 0 || historyCount > 0
+  const isRemovable = doneCount > 0
+  const isResettable = doneCount > 0 || historyCount > 0
 
   // NO row available ⇒ no menu at all. A trigger that opens a panel of dead rows is worse than
   // no trigger, which is what the superseded rule was protecting.
-  if (!canRemove && !canReset) return null
+  if (!isRemovable && !isResettable) return null
 
   const close = () => {
     setPending(null)
@@ -150,9 +150,9 @@ export function QueueActionsMenu({
         "ok",
       )
       await load()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Mark unwatched failed: ${(e as Error).message}`,
+        `Mark unwatched failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -172,9 +172,9 @@ export function QueueActionsMenu({
         "ok",
       )
       await load()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Remove failed: ${(e as Error).message}`,
+        `Remove failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -190,17 +190,17 @@ export function QueueActionsMenu({
   */
   const menuItems: MenuItem[] = [
     {
-      isDisabled: !canReset,
+      isDisabled: !isResettable,
       key: "reset",
-      label: canReset
+      label: isResettable
         ? "Mark all unwatched"
         : "Mark all unwatched — nothing is watched yet",
       onSelect: () => setPending("reset"),
     },
     {
-      isDisabled: !canRemove,
+      isDisabled: !isRemovable,
       key: "remove",
-      label: canRemove
+      label: isRemovable
         ? "Remove all completed"
         : "Remove all completed — no entry is completed yet",
       onSelect: () => setPending("remove"),
@@ -268,7 +268,11 @@ export function QueueActionsMenu({
             }
             id="qactions"
             intent="neutral"
-            onClick={() => setIsOpen((cur) => !cur)}
+            onClick={() =>
+              setIsOpen(
+                (isCurrentlyOpen) => !isCurrentlyOpen,
+              )
+            }
           >
             Actions
           </Button>

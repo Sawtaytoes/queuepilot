@@ -157,8 +157,9 @@ export function Toolbar() {
       ids.every((id) => collapsed.has(id)))
 
   const libTitle = (sectionId: number) =>
-    (reg?.libraries || []).find((x) => x.id === sectionId)
-      ?.title ?? `Library ${sectionId}`
+    (reg?.libraries || []).find(
+      (library) => library.id === sectionId,
+    )?.title ?? `Library ${sectionId}`
 
   return (
     // F2: `compact` density takes the 44px MIN_TOUCH_TARGET floor down over
@@ -169,12 +170,12 @@ export function Toolbar() {
     <div data-density="compact" id="tools">
       <div className="gsearch-wrap">
         <SearchDropdown<SearchHit>
-          doSearch={async (q) => {
+          doSearch={async (query) => {
             const { results } = await api<{
               results: SearchHit[]
             }>(
               "GET",
-              `/api/search?q=${encodeURIComponent(q)}&collections=1`,
+              `/api/search?q=${encodeURIComponent(query)}&collections=1`,
             )
 
             return results
@@ -186,40 +187,44 @@ export function Toolbar() {
           rowFor={(hit, index) => {
             const isCollection = hit.type === "collection"
             const compatible = (reg?.sets ?? []).filter(
-              (s) =>
-                s.source === "queue" &&
-                s.sections.includes(hit.sectionId),
+              (registrySet) =>
+                registrySet.source === "queue" &&
+                registrySet.sections.includes(
+                  hit.sectionId,
+                ),
             )
 
-            const addToQueue = async (s: RegistrySet) => {
-              setStatus(`Adding to ${s.label}…`)
+            const addToQueue = async (
+              registrySet: RegistrySet,
+            ) => {
+              setStatus(`Adding to ${registrySet.label}…`)
 
               try {
-                const { added, key } = await api<{
+                const { added: isAdded, key } = await api<{
                   added?: boolean
                   key?: string
                 }>(
                   "POST",
-                  `/api/queues/${s.id}/items`,
+                  `/api/queues/${registrySet.id}/items`,
                   // New titles lead the queue. Collections use the same explicit typed
                   // payload as the queue page, so the server stores `{collection: <name>}`
                   // rather than treating the collection's rating key as an ordinary item.
                   queueItemAddBody(hit),
                 )
                 const start = starts[hit.ratingKey]
-                if (added !== false && key && start) {
+                if (isAdded !== false && key && start) {
                   await api(
                     "PATCH",
-                    `/api/queues/${s.id}/items/${encodeURIComponent(key)}/start`,
+                    `/api/queues/${registrySet.id}/items/${encodeURIComponent(key)}/start`,
                     { start },
                   )
                 }
                 setStatus(
-                  added === false
-                    ? `“${hit.title}” is already in ${s.label}`
+                  isAdded === false
+                    ? `“${hit.title}” is already in ${registrySet.label}`
                     : start
-                      ? `Added “${hit.title}” to ${s.label}, starting at ${startLabel(start).replace(/^Start /, "")}`
-                      : `Added “${hit.title}” to ${s.label}`,
+                      ? `Added “${hit.title}” to ${registrySet.label}, starting at ${startLabel(start).replace(/^Start /, "")}`
+                      : `Added “${hit.title}” to ${registrySet.label}`,
                   "ok",
                 )
                 // Background: update the shelves but keep the results open for the
@@ -249,24 +254,27 @@ export function Toolbar() {
                       onSelect: () => {},
                     },
                   ]
-                : compatible.map((s) => ({
-                    key: s.id,
+                : compatible.map((registrySet) => ({
+                    key: registrySet.id,
                     // The queue's name, then WHO it is for. Every queue is called after its
                     // activity now, so four rows read "Movies & Shows" and the add lands
                     // wherever you guessed (owner, 2026-08-26).
                     label: (
                       <>
-                        {s.label}
+                        {registrySet.label}
                         <QueuePeopleBadge
                           groups={people.groups}
                           members={
-                            people.byQueue[s.id] ?? []
+                            people.byQueue[
+                              registrySet.id
+                            ] ?? []
                           }
                           people={people.people}
                         />
                       </>
                     ),
-                    onSelect: () => void addToQueue(s),
+                    onSelect: () =>
+                      void addToQueue(registrySet),
                   }))
 
             return {
@@ -335,8 +343,8 @@ export function Toolbar() {
                           <span aria-hidden="true">▾</span>
                         }
                         intent="accent"
-                        onClick={(e) => {
-                          e.stopPropagation()
+                        onClick={(event) => {
+                          event.stopPropagation()
                           setOpenMenu((cur) =>
                             cur === index ? null : index,
                           )
@@ -357,8 +365,8 @@ export function Toolbar() {
                           ? "accent"
                           : "neutral"
                       }
-                      onClick={(e) => {
-                        e.stopPropagation()
+                      onClick={(event) => {
+                        event.stopPropagation()
                         openStartModal({
                           item: asPreQueueStartEntry(
                             hit,
@@ -414,7 +422,9 @@ export function Toolbar() {
         className="queue-filter"
         clearIcon={<ClearIcon />}
         id="qfilter"
-        onChange={(e) => setFilter(e.target.value.trim())}
+        onChange={(event) =>
+          setFilter(event.target.value.trim())
+        }
         onClear={() => setFilter("")}
         placeholder="Filter queues…"
         size="lg"

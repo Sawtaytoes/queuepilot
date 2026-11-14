@@ -112,7 +112,7 @@ export function NowPlayingBar() {
     if (!isLive || isPaused) return
 
     const id = window.setInterval(() => {
-      setTick((n) => n + 1)
+      setTick((previousTick) => previousTick + 1)
     }, 1_000)
 
     return () => {
@@ -163,9 +163,9 @@ export function NowPlayingBar() {
         offset,
         target: payload.deviceId,
       })
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `${action} failed: ${(e as Error).message}`,
+        `${action} failed: ${(error as Error).message}`,
         "err",
       )
     } finally {

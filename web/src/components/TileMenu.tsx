@@ -42,7 +42,8 @@ export function TileMenu() {
     reg?.sets,
     tileMenu?.entry.setId,
   )
-  const t = (s: string) => applyVocab(s, vocab)
+  const translate = (text: string) =>
+    applyVocab(text, vocab)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{
     left: number
@@ -59,21 +60,21 @@ export function TileMenu() {
       return
     }
 
-    const r = ref.current.getBoundingClientRect()
+    const rect = ref.current.getBoundingClientRect()
 
     setPos({
       left: Math.max(
         4,
         Math.min(
           tileMenu.x,
-          window.innerWidth - r.width - 4,
+          window.innerWidth - rect.width - 4,
         ),
       ),
       top: Math.max(
         4,
         Math.min(
           tileMenu.y,
-          window.innerHeight - r.height - 4,
+          window.innerHeight - rect.height - 4,
         ),
       ),
     })
@@ -89,12 +90,14 @@ export function TileMenu() {
   }, [tileMenu])
 
   useEffect(() => {
-    const onPointerDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest("#tilemenu"))
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        !(event.target as HTMLElement).closest("#tilemenu")
+      )
         closeTileMenu()
     }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeTileMenu()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeTileMenu()
     }
 
     document.addEventListener(
@@ -113,10 +116,10 @@ export function TileMenu() {
     // strip) has no position to compare, so any scroll from one still closes.
     // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
     const at = { x: window.scrollX, y: window.scrollY }
-    const onScroll = (e: Event) => {
+    const onScroll = (event: Event) => {
       const isPage =
-        e.target === document ||
-        e.target === document.scrollingElement
+        event.target === document ||
+        event.target === document.scrollingElement
 
       if (
         isPage &&
@@ -214,8 +217,8 @@ export function TileMenu() {
           onClick={() => openStartModal(entry)}
         >
           {item.start
-            ? t("Change start episode…")
-            : t("Start from an episode…")}
+            ? translate("Change start episode…")
+            : translate("Start from an episode…")}
         </Button>
       ) : null}
       {entry && item && isStartable(item) && item.start ? (
@@ -246,7 +249,7 @@ export function TileMenu() {
         >
           {item?.type === "collection"
             ? "Choose what plays…"
-            : t("Choose which episodes play…")}
+            : translate("Choose which episodes play…")}
         </Button>
       ) : null}
       {/* SKIP — "not this one", which is a different ask from "not this show". It drops the

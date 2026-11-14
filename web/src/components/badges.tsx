@@ -151,11 +151,11 @@ export function EditionChip({ face }: { face: TileFace }) {
  * "N watch(es)" instead, kept muted like the other badges.
  */
 export function WatchesBadge({ count }: { count: number }) {
-  const n = Number(count) || 0
+  const watchCount = Number(count) || 0
 
   return (
     <Tip
-      label={`Watched ${n} ${n === 1 ? "time" : "times"}`}
+      label={`Watched ${watchCount} ${watchCount === 1 ? "time" : "times"}`}
     >
       <Badge
         appearance="outline"
@@ -176,7 +176,7 @@ export function WatchesBadge({ count }: { count: number }) {
         intent="neutral"
         size="sm"
       >
-        {`${n} ${n === 1 ? "watch" : "watches"}`}
+        {`${watchCount} ${watchCount === 1 ? "watch" : "watches"}`}
       </Badge>
     </Tip>
   )

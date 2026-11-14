@@ -162,9 +162,9 @@ function NameRow({
     try {
       await onSave(trimmed)
       setStatus(`Renamed to ${trimmed}`, "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not rename: ${(e as Error).message}`,
+        `Could not rename: ${(error as Error).message}`,
         "err",
       )
       // Back to what the server still believes, rather than leaving the field showing a name
@@ -187,16 +187,16 @@ function NameRow({
           className="peoplename"
           id={`peoplename-${id}`}
           maxLength={60}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              e.stopPropagation()
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              event.stopPropagation()
               void save()
             }
-            if (e.key === "Escape") {
-              e.preventDefault()
-              e.stopPropagation()
+            if (event.key === "Escape") {
+              event.preventDefault()
+              event.stopPropagation()
               setDraft(name)
             }
           }}
@@ -243,11 +243,16 @@ function PersonRow({
     const queues = Object.values(byQueue).filter(
       (members) =>
         (members as { kind?: string; id?: string }[]).some(
-          (m) => m.kind === "person" && m.id === person.id,
+          (member) =>
+            member.kind === "person" &&
+            member.id === person.id,
         ),
     ).length
     const inGroups = groups.filter((group) =>
-      group.roster.some((m) => m.personId === person.id),
+      group.roster.some(
+        (rosterMember) =>
+          rosterMember.personId === person.id,
+      ),
     ).length
     return { inGroups, queues }
   }, [byQueue, groups, person.id])
@@ -257,9 +262,9 @@ function PersonRow({
     try {
       await removePerson(person.id)
       setStatus(`${person.displayName} removed`, "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not remove: ${(e as Error).message}`,
+        `Could not remove: ${(error as Error).message}`,
         "err",
       )
       setIsRemoving(false)
@@ -270,8 +275,8 @@ function PersonRow({
 
   // Said in words, and pluralised properly. "3 group(s)" is the shape that leaks out of a
   // template, and this sentence is the last thing read before a destructive click.
-  const count = (n: number, word: string) =>
-    `${n} ${word}${n === 1 ? "" : "s"}`
+  const count = (amount: number, word: string) =>
+    `${amount} ${word}${amount === 1 ? "" : "s"}`
   const where = [
     filed.queues ? count(filed.queues, "queue") : null,
     filed.inGroups ? count(filed.inGroups, "group") : null,
@@ -441,9 +446,9 @@ function PersonPhotoPanel({
         "ok",
       )
       setPending(null)
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not save the photo: ${(e as Error).message}`,
+        `Could not save the photo: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -459,9 +464,9 @@ function PersonPhotoPanel({
         `Photo removed for ${person.displayName}`,
         "ok",
       )
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not remove the photo: ${(e as Error).message}`,
+        `Could not remove the photo: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -561,9 +566,9 @@ function AddPerson() {
       await createPerson(trimmed)
       setStatus(`${trimmed} added`, "ok")
       setName("")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not add: ${(e as Error).message}`,
+        `Could not add: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -578,11 +583,11 @@ function AddPerson() {
         <input
           id="peopleadd-name"
           maxLength={60}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              e.stopPropagation()
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              event.stopPropagation()
               void add()
             }
           }}

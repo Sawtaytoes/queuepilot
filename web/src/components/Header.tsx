@@ -115,16 +115,16 @@ export function Header({
   useEffect(() => {
     if (!openMenu) return
 
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
 
-      if (t?.closest(".menu-toggle, .hmenu")) return
+      if (target?.closest(".menu-toggle, .hmenu")) return
 
       setOpenMenu(null)
     }
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenu(null)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null)
     }
 
     document.addEventListener("mousedown", onDown)
@@ -183,9 +183,9 @@ export function Header({
       }
 
       setStatus("Renamed", "ok")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Rename failed: ${(e as Error).message}`,
+        `Rename failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -212,9 +212,9 @@ export function Header({
       // than waiting for that event, which may already have fired while undo was writing.
       refreshData()
       void refreshHistoryButtons()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `${dir} failed: ${(e as Error).message}`,
+        `${dir} failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -246,13 +246,15 @@ export function Header({
                 id="headingedit"
                 maxLength={60}
                 onBlur={() => void finish(true)}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
+                onChange={(event) =>
+                  setDraft(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
                     void finish(true)
-                  } else if (e.key === "Escape") {
-                    e.preventDefault()
+                  } else if (event.key === "Escape") {
+                    event.preventDefault()
                     void finish(false)
                   }
                 }}
@@ -334,8 +336,10 @@ export function Header({
             intent="neutral"
             label="Actions menu"
             onClick={() =>
-              setOpenMenu((m) =>
-                m === "actions" ? null : "actions",
+              setOpenMenu((currentMenu) =>
+                currentMenu === "actions"
+                  ? null
+                  : "actions",
               )
             }
           >

@@ -70,10 +70,13 @@ export function usePageChrome({
       "name-editable",
     ]
 
-    for (const c of all) document.body.classList.remove(c)
+    for (const className of all)
+      document.body.classList.remove(className)
 
-    for (const c of bodyClass.split(" ").filter(Boolean))
-      document.body.classList.add(c)
+    for (const className of bodyClass
+      .split(" ")
+      .filter(Boolean))
+      document.body.classList.add(className)
 
     if (isNameEditable)
       document.body.classList.add("name-editable")
@@ -122,7 +125,7 @@ export function Page({
             appearance="outline"
             label="Open navigation"
             onClick={() =>
-              setIsNavVisible((value) => !value)
+              setIsNavVisible((isVisible) => !isVisible)
             }
           >
             <MenuIcon />

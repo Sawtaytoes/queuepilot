@@ -129,10 +129,10 @@ export function SearchDropdown<T>({
   const onInput = (next: string) => {
     if (timerRef.current) clearTimeout(timerRef.current)
 
-    const q = next.trim()
+    const trimmed = next.trim()
     const requestKey = searchKey
 
-    if (q.length < 2) {
+    if (trimmed.length < 2) {
       setIsOpen(false)
       setHits([])
       setNoMatch(null)
@@ -142,20 +142,21 @@ export function SearchDropdown<T>({
 
     timerRef.current = setTimeout(async () => {
       try {
-        const found = await doSearch(q)
+        const found = await doSearch(trimmed)
 
         // Stale — the user kept typing. Read the LIVE input, not `value`: this
         // closure captured the text as it was 250 ms ago.
-        if (inputRef.current?.value.trim() !== q) return
+        if (inputRef.current?.value.trim() !== trimmed)
+          return
         if (searchKeyRef.current !== requestKey) return
 
         setHits(found.slice(0, 30))
-        setNoMatch(found.length ? null : q)
+        setNoMatch(found.length ? null : trimmed)
         setActiveIndex(-1)
         setIsOpen(true)
-      } catch (e) {
+      } catch (error) {
         setStatus(
-          `Search failed: ${(e as Error).message}`,
+          `Search failed: ${(error as Error).message}`,
           "err",
         )
       }
@@ -188,14 +189,14 @@ export function SearchDropdown<T>({
     return () => el.removeEventListener("input", listener)
   }, [])
 
-  const rows = hits.map((hit, i) =>
-    rowFor(hit, i, clearInput),
+  const rows = hits.map((hit, index) =>
+    rowFor(hit, index, clearInput),
   )
 
   const onKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>,
+    event: React.KeyboardEvent<HTMLInputElement>,
   ) => {
-    if (e.key === "Escape") {
+    if (event.key === "Escape") {
       close()
 
       return
@@ -203,11 +204,14 @@ export function SearchDropdown<T>({
 
     if (!rows.length) return
 
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault()
+    if (
+      event.key === "ArrowDown" ||
+      event.key === "ArrowUp"
+    ) {
+      event.preventDefault()
 
       const next =
-        e.key === "ArrowDown"
+        event.key === "ArrowDown"
           ? (activeIndex + 1) % rows.length
           : (activeIndex - 1 + rows.length) % rows.length
 
@@ -218,17 +222,17 @@ export function SearchDropdown<T>({
           ?.querySelectorAll("li")
           [next]?.scrollIntoView({ block: "nearest" })
       })
-    } else if (e.key === "Enter") {
-      e.preventDefault()
+    } else if (event.key === "Enter") {
+      event.preventDefault()
       rows[activeIndex >= 0 ? activeIndex : 0]?.pick()
     }
   }
 
   // Delegated pick — see (2) above.
   const onListClick = (
-    e: React.MouseEvent<HTMLUListElement>,
+    event: React.MouseEvent<HTMLUListElement>,
   ) => {
-    const li = (e.target as HTMLElement).closest("li")
+    const li = (event.target as HTMLElement).closest("li")
 
     if (!li || !listRef.current) return
 
@@ -238,7 +242,9 @@ export function SearchDropdown<T>({
     if (!row) return
     if (
       row.ignoreSelector &&
-      (e.target as HTMLElement).closest(row.ignoreSelector)
+      (event.target as HTMLElement).closest(
+        row.ignoreSelector,
+      )
     ) {
       return
     }
@@ -288,12 +294,12 @@ export function SearchDropdown<T>({
         {noMatch ? (
           <li className="noresults">{`No matches for “${noMatch}”.`}</li>
         ) : (
-          rows.map((row, i) => (
+          rows.map((row, index) => (
             <li
               className={
                 [
                   row.className,
-                  i === activeIndex ? "active" : null,
+                  index === activeIndex ? "active" : null,
                 ]
                   .filter(Boolean)
                   .join(" ") || undefined
@@ -302,7 +308,7 @@ export function SearchDropdown<T>({
               // never persist across searches, and a ratingKey key would make
               // React reuse a row for a different hit at the same index.
               // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the identity here — see above.
-              key={i}
+              key={index}
             >
               {row.separator ? (
                 <span className="resultsplit">

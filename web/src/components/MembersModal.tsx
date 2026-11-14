@@ -90,7 +90,7 @@ const HINT =
  *  duplicate members differ by, then the runtime, then a show's progress. */
 function memberDetail(
   child: CollectionChild,
-  t: (s: string) => string,
+  translate: (s: string) => string,
 ): string {
   const parts: string[] = []
 
@@ -103,7 +103,7 @@ function memberDetail(
 
   if (child.type === "show" && child.leafCount) {
     parts.push(
-      `${child.viewedLeafCount || 0}/${child.leafCount} ${t("watched")}`,
+      `${child.viewedLeafCount || 0}/${child.leafCount} ${translate("watched")}`,
     )
   }
 
@@ -112,10 +112,10 @@ function memberDetail(
 
 function toMemberRows(
   children: CollectionChild[],
-  t: (s: string) => string,
+  translate: (s: string) => string,
 ): MemberRow[] {
   return children.map((child) => ({
-    detail: memberDetail(child, t),
+    detail: memberDetail(child, translate),
     isDone:
       child.type === "show"
         ? Boolean(
@@ -137,25 +137,25 @@ function toEpisodeRows(
   hasSpecials: boolean,
   plexServer: string | null = null,
 ): MemberRow[] {
-  return data.seasons.flatMap((s) =>
-    s.episodes.map((e) => ({
-      detail: e.title || "",
-      isDone: Boolean(e.watched),
-      isSpecial: hasSpecials && s.season === 0,
+  return data.seasons.flatMap((season) =>
+    season.episodes.map((episode) => ({
+      detail: episode.title || "",
+      isDone: Boolean(episode.watched),
+      isSpecial: hasSpecials && season.season === 0,
       label: seLabel(
         {
-          episode: e.episode,
+          episode: episode.episode,
           multiSeason: data.multiSeason,
-          season: s.season,
+          season: season.season,
         },
         unit,
       ),
-      ratingKey: e.ratingKey
+      ratingKey: episode.ratingKey
         ? plexServer
-          ? `server:${plexServer}:rk:${e.ratingKey}`
-          : String(e.ratingKey)
+          ? `server:${plexServer}:rk:${episode.ratingKey}`
+          : String(episode.ratingKey)
         : null,
-      season: data.multiSeason ? s.season : null,
+      season: data.multiSeason ? season.season : null,
     })),
   )
 }
@@ -174,8 +174,8 @@ export function MembersModal() {
   const { membersModal: entry } = useOverlays()
   const { reg } = useStore()
   const vocab = vocabForSet(reg?.sets, entry?.setId)
-  const t = useCallback(
-    (s: string) => applyVocab(s, vocab),
+  const translate = useCallback(
+    (text: string) => applyVocab(text, vocab),
     [vocab],
   )
   const item = entry?.item ?? null
@@ -232,11 +232,11 @@ export function MembersModal() {
 
   skippedRef.current =
     entry?.memberDraft?.skipped ??
-    reg?.sets.find((s) => s.id === setId)?.skipped ??
+    reg?.sets.find((set) => set.id === setId)?.skipped ??
     []
   includedSpecialsRef.current =
     entry?.memberDraft?.includedSpecials ??
-    reg?.sets.find((s) => s.id === setId)
+    reg?.sets.find((set) => set.id === setId)
       ?.included_specials ??
     []
   collectionOrderRef.current = collectionOrder
@@ -282,9 +282,9 @@ export function MembersModal() {
             : undefined,
         }))
         .sort(
-          (a, b) =>
-            (a.rank ?? order.length + a.plexIndex) -
-            (b.rank ?? order.length + b.plexIndex),
+          (left, right) =>
+            (left.rank ?? order.length + left.plexIndex) -
+            (right.rank ?? order.length + right.plexIndex),
         )
         .map(({ row }) => row)
     },
@@ -320,7 +320,7 @@ export function MembersModal() {
     ]
       .filter(Boolean)
       .join("&")
-    const q = qs ? `?${qs}` : ""
+    const querySuffix = qs ? `?${qs}` : ""
 
     const load = async () => {
       if (isCollection) {
@@ -328,15 +328,15 @@ export function MembersModal() {
           children: CollectionChild[]
         }>(
           "GET",
-          `/api/collection/${ratingKey}/children${q}`,
+          `/api/collection/${ratingKey}/children${querySuffix}`,
         )
 
-        return toMemberRows(res.children || [], t)
+        return toMemberRows(res.children || [], translate)
       }
 
       const res = await api<ShowEpisodes>(
         "GET",
-        `/api/show/${ratingKey}/episodes${q}`,
+        `/api/show/${ratingKey}/episodes${querySuffix}`,
       )
 
       return toEpisodeRows(
@@ -374,16 +374,19 @@ export function MembersModal() {
           isChanged?: boolean
         }>(
           "GET",
-          `/api/collection/${ratingKey}/children${q ? `${q}&` : "?"}fresh=1`,
+          `/api/collection/${ratingKey}/children${querySuffix ? `${querySuffix}&` : "?"}fresh=1`,
         )
 
         if (isStale) return
 
-        const next = toMemberRows(res.children || [], t)
+        const next = toMemberRows(
+          res.children || [],
+          translate,
+        )
         const owned = new Set(
           next
-            .map((r) => r.ratingKey)
-            .filter((k): k is string => Boolean(k)),
+            .map((row) => row.ratingKey)
+            .filter((key): key is string => Boolean(key)),
         )
 
         setPlexRows(next)
@@ -397,9 +400,11 @@ export function MembersModal() {
         // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
         // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
         setSkips((prev) => {
-          const kept = [...prev].filter((k) => owned.has(k))
+          const kept = [...prev].filter((key) =>
+            owned.has(key),
+          )
           const added = skippedRef.current.filter(
-            (k) => owned.has(k) && !prev.has(k),
+            (key) => owned.has(key) && !prev.has(key),
           )
 
           return new Set([...kept, ...added])
@@ -427,33 +432,35 @@ export function MembersModal() {
         // on `skippedRef` — the boxes read their seed on the render the rows arrive in.
         const owned = new Set(
           next
-            .map((r) => r.ratingKey)
-            .filter((k): k is string => Boolean(k)),
+            .map((row) => row.ratingKey)
+            .filter((key): key is string => Boolean(key)),
         )
 
         setPlexRows(next)
         setRows(applyCollectionOrder(next, storedOrder))
         setSkips(
           new Set(
-            skippedRef.current.filter((k) => owned.has(k)),
+            skippedRef.current.filter((key) =>
+              owned.has(key),
+            ),
           ),
         )
         setIncludedSpecials(
           new Set(
-            includedSpecialsRef.current.filter((k) =>
-              owned.has(k),
+            includedSpecialsRef.current.filter((key) =>
+              owned.has(key),
             ),
           ),
         )
 
         return recheckAgainstPlex()
       })
-      .catch((e: Error) => {
+      .catch((error: Error) => {
         if (isStale) return
 
         setRows([])
         setNote(
-          `Could not read what is inside this entry: ${e.message}`,
+          `Could not read what is inside this entry: ${error.message}`,
         )
       })
 
@@ -480,8 +487,8 @@ export function MembersModal() {
   if (!entry || !item) return null
 
   const managed = (rows || [])
-    .map((r) => r.ratingKey)
-    .filter((k): k is string => Boolean(k))
+    .map((row) => row.ratingKey)
+    .filter((key): key is string => Boolean(key))
   const managedSpecials = (rows || [])
     .filter((row) => row.isSpecial)
     .map((row) => row.ratingKey)
@@ -503,7 +510,9 @@ export function MembersModal() {
     ? managed.length === 1
       ? "item"
       : "items"
-    : t(managed.length === 1 ? "episode" : "episodes")
+    : translate(
+        managed.length === 1 ? "episode" : "episodes",
+      )
 
   const onSave = () => {
     if (isSaving || !rows) return
@@ -578,7 +587,7 @@ export function MembersModal() {
       // `#queue` — it is portalled to `document.body`, so it cannot inherit the
       // `data-provider` the view sets and has to be told.
       dataProvider={
-        reg?.sets.find((s) => s.id === setId)
+        reg?.sets.find((set) => set.id === setId)
           ?.provider_kind || undefined
       }
       id="membersmodal"
@@ -592,7 +601,7 @@ export function MembersModal() {
       }
       titleId="membersmodal-title"
     >
-      <p className="subhint">{t(HINT)}</p>
+      <p className="subhint">{translate(HINT)}</p>
 
       {rows === null ? (
         <p className="idnote">Loading…</p>
@@ -645,9 +654,9 @@ export function MembersModal() {
             id="memberlist"
             ref={listRef}
           >
-            {rows.map((row, i) => (
+            {rows.map((row, index) => (
               <MemberListRow
-                key={row.ratingKey || `row-${i}`}
+                key={row.ratingKey || `row-${index}`}
                 onToggle={(isPlaying) => {
                   const key = row.ratingKey
 
@@ -673,21 +682,24 @@ export function MembersModal() {
                     })
                   }
                 }}
-                previous={rows[i - 1] ?? null}
+                previous={rows[index - 1] ?? null}
                 row={row}
-                position={i + 1}
+                position={index + 1}
                 isCollection={isCollection}
                 onMove={
                   isCollection && row.ratingKey
                     ? (offset) => {
                         const next = [...rows]
-                        const nextIndex = i + offset
+                        const nextIndex = index + offset
                         if (
                           nextIndex < 0 ||
                           nextIndex >= next.length
                         )
                           return
-                        const [moved] = next.splice(i, 1)
+                        const [moved] = next.splice(
+                          index,
+                          1,
+                        )
                         if (!moved) return
                         next.splice(nextIndex, 0, moved)
                         reorderCollection(
@@ -703,7 +715,7 @@ export function MembersModal() {
                     : undefined
                 }
                 seedKey={seedKey}
-                t={t}
+                t={translate}
                 isSkipped={Boolean(
                   row.ratingKey &&
                     (row.isSpecial
@@ -718,7 +730,9 @@ export function MembersModal() {
 
       {rows && !rows.length && !note ? (
         <p className="idnote">
-          {t("Nothing inside this entry to choose from.")}
+          {translate(
+            "Nothing inside this entry to choose from.",
+          )}
         </p>
       ) : null}
 

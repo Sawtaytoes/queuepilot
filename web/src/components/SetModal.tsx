@@ -102,7 +102,8 @@ export function SetModal() {
   const editing = useMemo(
     () =>
       setId
-        ? (reg?.sets.find((s) => s.id === setId) ?? null)
+        ? (reg?.sets.find((set) => set.id === setId) ??
+          null)
         : null,
     [reg, setId],
   )
@@ -246,9 +247,9 @@ export function SetModal() {
     if (!setId) return
     try {
       await saveQueuePeople(setId, next)
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not move them: ${(e as Error).message}`,
+        `Could not move them: ${(error as Error).message}`,
         "err",
       )
     }
@@ -334,10 +335,10 @@ export function SetModal() {
     // provider, so creating a queue is exactly as many clicks as it was before.
     setBlocks(
       editing?.providers?.length
-        ? editing.providers.map((b) => ({
-            libraries: [...b.libraries],
-            profile: b.profile ?? "",
-            provider: b.provider,
+        ? editing.providers.map((provider) => ({
+            libraries: [...provider.libraries],
+            profile: provider.profile ?? "",
+            provider: provider.provider,
             uid: newUid(),
           }))
         : [
@@ -357,18 +358,22 @@ export function SetModal() {
       "GET",
       "/api/providers",
     )
-      .then((r) => {
-        const list = (r.providers ?? []).filter(
-          (p) => p.supported && p.configured,
+      .then((response) => {
+        const list = (response.providers ?? []).filter(
+          (provider) =>
+            provider.supported && provider.configured,
         )
         setProviders(list)
         // A new set has no provider yet; default it to the first configured one rather
         // than leaving an empty block that cannot fetch libraries.
         setBlocks((prev) =>
-          prev.map((b) =>
-            b.provider
-              ? b
-              : { ...b, provider: list[0]?.id ?? "plex" },
+          prev.map((block) =>
+            block.provider
+              ? block
+              : {
+                  ...block,
+                  provider: list[0]?.id ?? "plex",
+                },
           ),
         )
       })
@@ -399,14 +404,20 @@ export function SetModal() {
   const profileOptions = useMemo(() => {
     const opts = [
       { label: "Any — no profile lock", value: "" },
-      ...profiles.map((p) => ({
-        label: p.admin ? `${p.name} (owner)` : p.name,
-        value: p.admin ? p.username || p.name : p.name,
+      ...profiles.map((profile) => ({
+        label: profile.admin
+          ? `${profile.name} (owner)`
+          : profile.name,
+        value: profile.admin
+          ? profile.username || profile.name
+          : profile.name,
       })),
     ]
     if (
       requiresProfile &&
-      !opts.some((o) => o.value === requiresProfile)
+      !opts.some(
+        (option) => option.value === requiresProfile,
+      )
     ) {
       opts.push({
         label: `${requiresProfile} (current)`,
@@ -425,12 +436,14 @@ export function SetModal() {
    * driven off `delivery`, never off the provider's name.
    */
   const profileOptionsFor = (providerId: string) => {
-    const p = providers.find((x) => x.id === providerId)
+    const provider = providers.find(
+      (providerInfo) => providerInfo.id === providerId,
+    )
 
-    if (p && p.delivery === "pull") {
+    if (provider && provider.delivery === "pull") {
       return [
         {
-          label: `The ${p.label} account this app is connected as`,
+          label: `The ${provider.label} account this app is connected as`,
           value: "",
         },
       ]
@@ -443,9 +456,10 @@ export function SetModal() {
   // `delivery` rather than the provider id, so a future push backend behaves correctly
   // without another edit here.
   const hasPlexSource = blocks.some(
-    (b) =>
-      providers.find((p) => p.id === b.provider)
-        ?.delivery !== "pull",
+    (block) =>
+      providers.find(
+        (provider) => provider.id === block.provider,
+      )?.delivery !== "pull",
   )
 
   // The words this queue's medium is described in, taken from the block being edited rather
@@ -453,8 +467,9 @@ export function SetModal() {
   // anything is written. Plex's words are the fallback, which is what every queue said before
   // providers carried a vocabulary at all.
   const vocab = (blocks[0]
-    ? providers.find((p) => p.id === blocks[0].provider)
-        ?.vocabulary
+    ? providers.find(
+        (provider) => provider.id === blocks[0].provider,
+      )?.vocabulary
     : null) ?? {
     done: "watched",
     member: "show",
@@ -509,8 +524,12 @@ export function SetModal() {
         : [
             ...new Set(
               blocks
-                .filter((b) => b.provider === "plex")
-                .flatMap((b) => b.libraries.map(Number)),
+                .filter(
+                  (block) => block.provider === "plex",
+                )
+                .flatMap((block) =>
+                  block.libraries.map(Number),
+                ),
             ),
           ],
       requires_profile: isLegacyShape
@@ -555,7 +574,7 @@ export function SetModal() {
       // stays on the legacy shape above.
       providers: isLegacyShape
         ? []
-        : blocks.map(({ uid: _uid, ...b }) => b),
+        : blocks.map(({ uid: _uid, ...block }) => block),
     }
 
     try {
@@ -599,11 +618,12 @@ export function SetModal() {
   const onDelete = async () => {
     if (!editing || !setId) return
 
-    const n = (data?.sets[setId]?.items || []).length
+    const itemCount = (data?.sets[setId]?.items || [])
+      .length
 
     if (
       !confirm(
-        `Delete “${queueTitle(editing, null)}”${n ? ` and its ${n} entries` : ""}? This cannot be undone.`,
+        `Delete “${queueTitle(editing, null)}”${itemCount ? ` and its ${itemCount} entries` : ""}? This cannot be undone.`,
       )
     ) {
       return
@@ -614,9 +634,9 @@ export function SetModal() {
       closeSetModal()
       setStatus("Queue deleted", "ok")
       await load()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Delete failed: ${(e as Error).message}`,
+        `Delete failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -671,7 +691,8 @@ export function SetModal() {
       dataProvider={
         (blocks[0]
           ? providers.find(
-              (p) => p.id === blocks[0].provider,
+              (provider) =>
+                provider.id === blocks[0].provider,
             )?.kind
           : null) || undefined
       }
@@ -706,7 +727,7 @@ export function SetModal() {
         <input
           id="set-label"
           maxLength={60}
-          onChange={(e) => setLabel(e.target.value)}
+          onChange={(event) => setLabel(event.target.value)}
           placeholder="Movies & Shows"
           type="text"
           value={label}
@@ -732,8 +753,10 @@ export function SetModal() {
           id="set-kind"
           key={modalKey}
           label="Type"
-          onChange={(v) =>
-            setAddAs(v === "random" ? "random" : "priority")
+          onChange={(kind) =>
+            setAddAs(
+              kind === "random" ? "random" : "priority",
+            )
           }
           options={[
             {
@@ -792,7 +815,9 @@ export function SetModal() {
           id="set-activity"
           key={modalKey}
           label="Activity"
-          onChange={(v) => setActivity(v as Activity)}
+          onChange={(activityValue) =>
+            setActivity(activityValue as Activity)
+          }
           options={(
             Object.keys(ACTIVITY_LABELS) as Activity[]
           ).map((value) => ({
@@ -810,52 +835,60 @@ export function SetModal() {
           playlist/reel/TTL sit below as advanced options so a normal edit doesn't scroll
           past them. (decision `2026-08-13-provider-block-repeats-and-picks-its-control`) */}
       <div id="set-blocks">
-        {blocks.map((b, i) => (
+        {blocks.map((block, index) => (
           <ProviderBlock
-            block={b}
+            block={block}
             canRemove={blocks.length > 1}
-            index={i}
-            key={b.uid}
+            index={index}
+            key={block.uid}
             onChange={(next) => {
               if (
-                next.provider !== b.provider ||
-                next.profile !== b.profile
+                next.provider !== block.provider ||
+                next.profile !== block.profile
               ) {
                 setSharedLibraries({})
               }
               setBlocks((prev) => {
-                const changedProvider =
-                  next.provider !== prev[i].provider
+                const hasProviderChanged =
+                  next.provider !== prev[index].provider
 
-                return prev.map((x, j) => {
-                  // Carry the uid across: ProviderBlock speaks the WIRE shape and knows
-                  // nothing about this component's identity bookkeeping.
-                  if (j === i)
-                    return { ...next, uid: x.uid }
+                return prev.map(
+                  (editableBlock, position) => {
+                    // Carry the uid across: ProviderBlock speaks the WIRE shape and knows
+                    // nothing about this component's identity bookkeeping.
+                    if (position === index)
+                      return {
+                        ...next,
+                        uid: editableBlock.uid,
+                      }
 
-                  // A QUEUE DRAWS FROM EXACTLY ONE PROVIDER (decision
-                  // 2026-08-13-a-queue-draws-from-exactly-one-provider), so switching the
-                  // provider on one block switches them all. Without this the editor happily
-                  // builds a mixed queue that then behaves as Plex everywhere and silently
-                  // ignores its Kavita libraries — which is exactly how the live
-                  // "Manga & Webtoons" channel ended up half-configured.
-                  //
-                  // The other blocks' libraries and profiles are scoped to the OLD provider,
-                  // so they are cleared rather than reinterpreted against the new one.
-                  if (!changedProvider) return x
+                    // A QUEUE DRAWS FROM EXACTLY ONE PROVIDER (decision
+                    // 2026-08-13-a-queue-draws-from-exactly-one-provider), so switching the
+                    // provider on one block switches them all. Without this the editor happily
+                    // builds a mixed queue that then behaves as Plex everywhere and silently
+                    // ignores its Kavita libraries — which is exactly how the live
+                    // "Manga & Webtoons" channel ended up half-configured.
+                    //
+                    // The other blocks' libraries and profiles are scoped to the OLD provider,
+                    // so they are cleared rather than reinterpreted against the new one.
+                    if (!hasProviderChanged)
+                      return editableBlock
 
-                  return {
-                    ...x,
-                    libraries: [],
-                    profile: "",
-                    provider: next.provider,
-                  }
-                })
+                    return {
+                      ...editableBlock,
+                      libraries: [],
+                      profile: "",
+                      provider: next.provider,
+                    }
+                  },
+                )
               })
             }}
             onRemove={() =>
               setBlocks((prev) =>
-                prev.filter((_, j) => j !== i),
+                prev.filter(
+                  (_, position) => position !== index,
+                ),
               )
             }
             profileOptionsFor={profileOptionsFor}
@@ -1056,8 +1089,8 @@ export function SetModal() {
           Remove finished entries after
           <input
             id="set-remove-after"
-            onChange={(e) =>
-              setRemoveCompletedAfter(e.target.value)
+            onChange={(event) =>
+              setRemoveCompletedAfter(event.target.value)
             }
             placeholder="e.g. 24h — blank = keep forever"
             type="text"
@@ -1136,8 +1169,8 @@ export function SetModal() {
           A promoted entry leads again after
           <input
             id="set-promote-window"
-            onChange={(e) =>
-              setPromoteWindow(e.target.value)
+            onChange={(event) =>
+              setPromoteWindow(event.target.value)
             }
             placeholder="e.g. 20h — blank = 16h"
             type="text"

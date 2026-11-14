@@ -292,8 +292,11 @@ async function patchEntry(
       bumpRevision()
     }
     setStatus("Saved", "ok")
-  } catch (e) {
-    setStatus(`Save failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(
+      `Save failed: ${(error as Error).message}`,
+      "err",
+    )
     refreshData()
   }
 }
@@ -305,7 +308,7 @@ export const setEntryVolumes = (
 ) =>
   patchEntry(setId, item, "volumes", { volumes }, (hit) => {
     const setDefault =
-      getState().reg?.sets.find((s) => s.id === setId)
+      getState().reg?.sets.find((set) => set.id === setId)
         ?.volumes ?? 1
     hit.volumes = volumes === setDefault ? null : volumes
   })
@@ -322,7 +325,7 @@ export const setEntryEpisodes = (
     { episodes },
     (hit) => {
       const setDefault =
-        getState().reg?.sets.find((s) => s.id === setId)
+        getState().reg?.sets.find((set) => set.id === setId)
           ?.episodes ?? 1
       hit.episodes =
         episodes === setDefault ? null : episodes
@@ -442,7 +445,7 @@ export const setEntryWatchHistory = (
           ? value
           : null
       const queueDefault =
-        getState().reg?.sets.find((s) => s.id === setId)
+        getState().reg?.sets.find((set) => set.id === setId)
           ?.watch_history ?? "provider"
       hit.effective_watch_history =
         hit.watch_history ?? queueDefault
@@ -459,9 +462,9 @@ async function changeQueueHistory(
     await api(method, path, body)
     setStatus("Watch history updated", "ok")
     refreshData()
-  } catch (e) {
+  } catch (error) {
     setStatus(
-      `Watch history failed: ${(e as Error).message}`,
+      `Watch history failed: ${(error as Error).message}`,
       "err",
     )
   }
@@ -497,7 +500,7 @@ export function EntryEditor({
     : undefined
   // The queue's own words, so this panel does not ask a reading queue about episodes.
   const setInfo = setId
-    ? reg?.sets.find((s) => s.id === setId)
+    ? reg?.sets.find((set) => set.id === setId)
     : undefined
   const vocab = setInfo?.vocabulary ?? PLEX_WORDS
   // Can this queue's backend play PART of an item? A reading queue and a board-game queue
@@ -520,7 +523,7 @@ export function EntryEditor({
   const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
-  const canShuffleItems =
+  const isShufflable =
     isSeries &&
     (item.unit == null || item.unit === "episode")
 
@@ -720,10 +723,10 @@ export function EntryEditor({
                   : `${vocab.units} queued per turn`
               }
               max={EPISODES_MAX}
-              onChange={(n) =>
+              onChange={(perTurn) =>
                 void (isVolume
-                  ? setEntryVolumes(setId, item, n)
-                  : setEntryEpisodes(setId, item, n))
+                  ? setEntryVolumes(setId, item, perTurn)
+                  : setEntryEpisodes(setId, item, perTurn))
               }
               value={isVolume ? volumes : episodes}
             />
@@ -736,7 +739,7 @@ export function EntryEditor({
           </div>
         ) : null}
 
-        {canShuffleItems ? (
+        {isShufflable ? (
           <div className="field">
             <span className="fieldlabel">
               {item.type === "show"
@@ -783,8 +786,8 @@ export function EntryEditor({
           </span>
           <SelectListbox
             label="Which lane this entry is in"
-            onChange={(v) =>
-              void setEntryPlacement(setId, item, v)
+            onChange={(placement) =>
+              void setEntryPlacement(setId, item, placement)
             }
             options={[
               {
@@ -814,8 +817,9 @@ export function EntryEditor({
             </span>
             <SelectListbox
               label="How often this entry leads"
-              onChange={(v) => {
-                const [lead = "", win = ""] = v.split(":")
+              onChange={(leadRatio) => {
+                const [lead = "", win = ""] =
+                  leadRatio.split(":")
                 void setEntryLead(setId, item, lead, win)
               }}
               options={[
@@ -827,9 +831,9 @@ export function EntryEditor({
                   label: "Every sitting",
                   value: "always",
                 },
-                ...leadWindows.map((w) => ({
-                  label: `Once every ${leadWindowLabel(w)}, then yield`,
-                  value: `once:${w}`,
+                ...leadWindows.map((leadWindow) => ({
+                  label: `Once every ${leadWindowLabel(leadWindow)}, then yield`,
+                  value: `once:${leadWindow}`,
                 })),
               ]}
               value={leadValue}
@@ -870,8 +874,8 @@ export function EntryEditor({
             defaultValue={1}
             label="Weight"
             max={WEIGHT_MAX}
-            onChange={(n) =>
-              void setEntryWeight(setId, item, n)
+            onChange={(weight) =>
+              void setEntryWeight(setId, item, weight)
             }
             unit="x"
             value={item.weight ?? 1}
@@ -894,8 +898,12 @@ export function EntryEditor({
             </span>
             <SelectListbox
               label="Where this batch may stop"
-              onChange={(v) =>
-                void setEntryBatchStop(setId, item, v)
+              onChange={(batchStop) =>
+                void setEntryBatchStop(
+                  setId,
+                  item,
+                  batchStop,
+                )
               }
               options={[
                 { label: "Follow the set", value: "" },

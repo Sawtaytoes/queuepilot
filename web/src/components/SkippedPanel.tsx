@@ -35,7 +35,7 @@ export function SkippedPanel({
   setId: string
 }) {
   const { reg } = useStore()
-  const set = reg?.sets.find((s) => s.id === setId)
+  const set = reg?.sets.find((set) => set.id === setId)
   const keys = set?.skipped || []
   const [items, setItems] = useState<SkippedItem[] | null>(
     null,

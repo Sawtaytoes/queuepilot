@@ -136,9 +136,9 @@ export function MarkPlayed({
           : `Logged ${gameName}. Nobody named.`,
       )
       await onLogged()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not log the play: ${(e as Error).message}`,
+        `Could not log the play: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -157,9 +157,9 @@ export function MarkPlayed({
         `Undone — nobody's "${label.toLowerCase()}" changed.`,
       )
       setCreated([])
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not undo that: ${(e as Error).message}`,
+        `Could not undo that: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -278,9 +278,9 @@ export function MarkPlayed({
                   : prev.filter((id) => id !== value),
               )
               void setClaim(value, isChecked).catch(
-                (e: unknown) =>
+                (error: unknown) =>
                   setStatus(
-                    `Could not save that: ${(e as Error).message}`,
+                    `Could not save that: ${(error as Error).message}`,
                     "err",
                   ),
               )
