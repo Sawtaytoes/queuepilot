@@ -122,8 +122,10 @@ export interface ShreddedRow extends RowComments {
 export interface Presentation {
   b?: string
   c?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field stored in SQLite
   f?: true
   t?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field stored in SQLite
   s?: true
 }
 

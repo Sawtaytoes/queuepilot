@@ -287,6 +287,7 @@ export function PendingView() {
       */
       const isCollection = item.type === "collection"
       const { added: isAdded, key } = await api<{
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${set.id}/items`, {

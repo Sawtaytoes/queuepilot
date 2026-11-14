@@ -70,6 +70,7 @@ import * as watchedReset from "./watchedReset.js"
 type Publish = (
   topic: string,
   payload: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- an mqtt.js publish option
   opts?: { qos?: 0 | 1 | 2; retain?: boolean },
 ) => void
 
@@ -142,6 +143,7 @@ const chooser = createChooser({
 })
 
 function publishState(extra: StateExtra = {}): void {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   const state: PublishedSessionState & { boot?: boolean } =
     {
       ...session.SESSION.asDict(),

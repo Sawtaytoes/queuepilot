@@ -22,6 +22,7 @@ import { setStatus } from "../state/store"
 /** `{ok: false, error}` — what a REFUSED write answers with, at HTTP 200. */
 type WriteResult = {
   error?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   ok?: boolean
 }
 

@@ -60,6 +60,7 @@ export interface Change {
    * whose title nothing answers to. It is named on every run — it is still broken — but there
    * is nothing to rewrite about it, which is why a file that holds one is still idempotent.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a CLI prints this result as JSON
   rewritten: boolean
   /** Why an entry could not be resolved, in one line. */
   why?: string

@@ -113,9 +113,11 @@ export interface KavitaReadingListDto {
    * rebuilds on every launch means the artwork is a different interior page every time. The
    * flag is what tells `materialize()` whether the cover is already ours to leave alone.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   coverImageLocked?: boolean
   /** Echoed back on a rename — `update` applies every field it is given. */
   summary?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   promoted?: boolean
   [field: string]: unknown
 }
@@ -199,7 +201,9 @@ export interface KavitaHttpClient {
     patch: {
       title: string
       summary: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
       promoted: boolean
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
       coverImageLocked: boolean
     },
   ): Promise<unknown>

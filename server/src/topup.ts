@@ -47,6 +47,7 @@ import type { PlexPlayItem } from "./types.js"
 
 /** What a tick did, for the `resp/topup` reply and the log. `added: 0` is a normal answer. */
 export interface TopupResult {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   ok: boolean
   /** Why nothing happened, when nothing happened. Absent on a real top-up. */
   reason?: string

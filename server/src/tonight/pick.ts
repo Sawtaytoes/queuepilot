@@ -142,6 +142,7 @@ export interface CandidateSet {
   label: string
   /** Whether a name was TYPED. Absent on a hand-built fixture, which reads as "no name". */
   has_explicit_label?: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   enabled: boolean
   /** The SEASON WINDOW, `MM-DD` / `MM-DD`. Optional here for the same reason
    *  `has_explicit_label` is: a hand-built fixture that omits them is a queue with no window,

@@ -237,6 +237,7 @@ export function boardGamesProvider({
      */
     async logProgress(
       gameId: string,
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
     ): Promise<{ ok: boolean; remaining?: number }> {
       const play = await collectionClient.logPlay(gameId)
       if (!play) return { ok: false }

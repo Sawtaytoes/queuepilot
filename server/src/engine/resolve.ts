@@ -202,6 +202,7 @@ export interface EntryDescriptor {
   /** Custom collection member order. Empty means follow Plex. */
   collectionOrder: string[]
   weight: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML `done` key
   done: boolean
   /**
    * The epoch-seconds stamp `markDone` writes beside `done: true`. Its ABSENCE (null) marks
@@ -268,6 +269,7 @@ export interface ResolvedItem {
   /** Internal attribution for queue-owned progress. Never sent to Plex. */
   queueEntryKey?: string
   /** True when completion belongs to QueuePilot's private ledger, not provider history. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
   queueOwnHistory?: boolean
   /** Queue-owned resume point in milliseconds. It outranks the shared provider offset. */
   queueResumeOffset?: number
@@ -293,6 +295,7 @@ export interface ResolvedMember {
   type: "collection" | "movie" | "show"
   ratingKey?: string
   items: ResolvedItem[]
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML-style `multi_season` field, which an e2e golden file records
   multi_season?: boolean
   weight: number
 }

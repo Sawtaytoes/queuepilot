@@ -1420,6 +1420,7 @@ export function kavitaProvider({
       at: number
       build: () => Promise<KavitaPlayItem[]>
     }): Promise<{
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- copied into the MQTT `resp/topup` answer
       ok: boolean
       reason?: string
       added?: number

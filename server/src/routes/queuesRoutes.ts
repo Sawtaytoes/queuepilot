@@ -242,6 +242,7 @@ function queueTile(
 type FinishableTile = ReturnType<typeof queueTile> & {
   type?: string | null
   ratingKey?: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched?: boolean
   viewOffset?: number
   duration?: number

@@ -231,6 +231,7 @@ export function startLiveUpdates() {
       awaiting?: string
       playback?: {
         client?: string
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
         played?: boolean
         error?: string
       }

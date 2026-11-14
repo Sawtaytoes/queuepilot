@@ -49,6 +49,7 @@ import { ensureImported } from "./yaml.js"
 
 /** What one run did. Reported rather than logged only, so a test can assert on it. */
 export interface QueuePeopleSeedReport {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- named by a string key in an `Omit<>` type
   seeded: boolean
   reason: string
   /** Set ids that gained members, and how many each got. */

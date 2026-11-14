@@ -62,7 +62,9 @@ export interface ProviderPublicView {
   kind: string
   label: string
   base_url: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   supported: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   configured: boolean
   delivery: Delivery
   /**
@@ -70,6 +72,7 @@ export interface ProviderPublicView {
    * control rather than offer one the backend would ignore — the same rule `delivery` follows,
    * and the reason neither is a `kind` check at the call site.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   plays_sections: boolean
   vocabulary: ProviderVocabulary
 }

@@ -324,11 +324,13 @@ export function startWatch({
     | ObservedSession
     | null
     | Promise<ObservedSession | null>
+  /* eslint-disable @typescript-eslint/naming-convention -- matches the seek result that test mocks build without types */
   seek: (
     ms: number,
   ) =>
     | { seeked?: boolean; error?: string }
     | Promise<{ seeked?: boolean; error?: string }>
+  /* eslint-enable @typescript-eslint/naming-convention */
   /**
    * Where the player is in the LIVE playQueue — `playback.readPlayQueue()`.
    *
@@ -350,11 +352,13 @@ export function startWatch({
    * `topup.ts` names that as the thing to avoid, and it would be a hiccup on screen where a
    * section wants a cut.
    */
+  /* eslint-disable @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types */
   advance?:
     | (() =>
         | { ok?: boolean; error?: string }
         | Promise<{ ok?: boolean; error?: string }>)
     | null
+  /* eslint-enable @typescript-eslint/naming-convention */
   subscribePush?: PushSubscriber | null
   intervalMs?: number
   retryMs?: number

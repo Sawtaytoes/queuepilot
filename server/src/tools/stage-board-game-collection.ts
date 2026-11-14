@@ -118,8 +118,10 @@ const DIRECTORIES: readonly {
 
 interface Options {
   isApplying: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- read by string key through the directory names
   cache: boolean
   from: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- read by string key through the directory names
   images: boolean
   to: string
 }

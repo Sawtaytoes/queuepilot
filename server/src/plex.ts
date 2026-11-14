@@ -151,7 +151,9 @@ export interface SectionInfo {
   id: number
   title: string | undefined
   type: string | undefined
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   video: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   other: boolean
 }
 
@@ -171,7 +173,9 @@ export interface HomeUser {
   username: string | null
   id: number | null
   uuid: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   admin: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   restricted: boolean
 }
 
@@ -182,7 +186,9 @@ interface PlexTvHomeUser {
   friendlyName?: string
   id?: number | string
   uuid?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   admin?: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   restricted?: boolean
 }
 
@@ -227,6 +233,7 @@ export interface CollectionChild {
    */
   editionTitle: string | null
   /** Movies/standalones only — a SHOW reports progress via leafCount instead. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   watched: boolean
   viewOffset: number
   duration: number
@@ -257,6 +264,7 @@ export interface ShowEpisodeRow {
   ratingKey: string
   episode: number | null
   title: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   watched: boolean
 }
 
@@ -266,6 +274,7 @@ export interface ShowSeason {
 }
 
 export interface ShowEpisodes {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   multiSeason: boolean
   seasons: ShowSeason[]
 }

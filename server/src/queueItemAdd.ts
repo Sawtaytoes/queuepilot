@@ -27,6 +27,7 @@ export class QueueAddError extends Error {
 }
 
 export interface QueueAddResult {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   added: boolean
   key: string
   duplicateOf?: string

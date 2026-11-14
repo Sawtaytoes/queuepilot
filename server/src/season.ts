@@ -39,6 +39,7 @@
  * an absent `enabled:` line has always meant on disk.
  */
 export interface SeasonGated {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   enabled?: boolean | null
   season_start?: string | null
   season_end?: string | null

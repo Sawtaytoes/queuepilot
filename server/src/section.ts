@@ -55,6 +55,7 @@ export interface SectionCandidate extends SectionFields {
   /** Which queue LINE this item came from — see `EntryExtras.id` / `queues.entryKey()`. */
   queueEntryKey?: string | undefined
   /** True when completion belongs to QueuePilot's private ledger, not the provider's. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
   queueOwnHistory?: boolean | undefined
 }
 

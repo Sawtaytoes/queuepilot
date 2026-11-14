@@ -430,6 +430,7 @@ export interface GroupWrite {
 /** Create a group. Returns its generated (immutable) id. */
 export async function createGroup(
   body: GroupWrite,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; id: string }> {
   const label = String(body.label ?? "").trim()
   if (!label) throw new Error("a group needs a label")
@@ -476,6 +477,7 @@ export async function createGroup(
 export async function updateGroup(
   id: string,
   body: GroupWrite,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; id: string }> {
   const doc = await readDoc()
   const { seq, index } = nodeFor(doc, id)
@@ -559,6 +561,7 @@ export async function fileSetIntoGroup(
 
 export async function deleteGroup(
   id: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; deleted: boolean }> {
   const doc = await readDoc()
   let isFound = false
@@ -581,6 +584,7 @@ export async function deleteGroup(
  */
 export async function reorderGroups(
   ids: string[],
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; order: string[] }> {
   const doc = await readDoc()
   const seq = groupsSeq(doc)

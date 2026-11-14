@@ -200,6 +200,7 @@ export function Header({
 
     try {
       const out = await api<{
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
         ok?: boolean
         error?: string
       }>("POST", `/api/${dir}`)

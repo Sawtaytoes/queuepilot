@@ -266,6 +266,7 @@ export function isSelfTitled(
  * still keys off `done` alone.
  */
 export const isCompleted = (item: {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the HTTP `done` field
   done?: boolean
   isFinished?: boolean
   isRevived?: boolean

@@ -128,9 +128,13 @@ interface RawSet extends RawBinding {
   shared_libraries?: unknown
   providers?: unknown[]
   max_items?: unknown
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   enabled?: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   keep_completed?: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   reel?: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   restart_when_exhausted?: boolean
   remove_completed_after?: string | null
   /** THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither.
@@ -1575,6 +1579,7 @@ export async function createSet(
 export async function updateSet(
   id: string,
   patch: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true }> {
   return withLock(async () => {
     const doc = await readDoc()
@@ -2312,6 +2317,7 @@ export async function updateSet(
 // breaks — the web UI's confirm dialog warns before deleting. See the superseding decision.
 export async function deleteSet(
   id: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ deleted: boolean }> {
   return withLock(async () => {
     const doc = await readDoc()
@@ -2337,8 +2343,10 @@ export async function deleteSet(
 // so the new channels get NEW ids and the cards' set:"auto" routing repoints in
 // queue_builder/config.channel_for (2026-07-21-sets-registry-immutable-ids).
 export async function migrateLegacyTiers(): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a CLI prints this result as JSON
   | { migrated: false; reason: string }
   | {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a CLI prints this result as JSON
       migrated: true
       channels: string[]
       bindings: unknown[]
@@ -2445,6 +2453,7 @@ export async function migrateLegacyTiers(): Promise<
 // order at the end (same forgiving rule as a queue reorder).
 export async function reorderSets(
   ids: string[],
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ reordered: boolean }> {
   return withLock(async () => {
     const doc = await readDoc()

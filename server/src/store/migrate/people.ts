@@ -118,6 +118,7 @@ export interface MappingGroup {
 
 export interface PeopleMapping {
   /** ABSENT BY DEFAULT. The whole gate. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   confirmed?: boolean
   version?: number
   people?: MappingPerson[]

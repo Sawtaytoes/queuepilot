@@ -491,6 +491,7 @@ export function QueueView({
 
     try {
       const added = await api<{
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${setId}/items`, {

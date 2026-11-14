@@ -79,6 +79,7 @@ interface SessionQueueItem {
   season?: number | null | undefined
   episode?: number | null | undefined
   queueEntryKey?: string | undefined
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
   queueOwnHistory?: boolean | undefined
   queueProviderViewCount?: number | undefined
 }
@@ -154,9 +155,11 @@ export type PublishLastPlayed = (
  * verbatim (which is how a cancelled/failed play propagates without being re-wrapped).
  */
 export type SessionResult =
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- one arm of a result whose other arm is the MQTT `playback` payload
   | { cancelled: true }
   | { error: string }
   | {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- one arm of a result whose other arm is the MQTT `playback` payload
       ok: true
       playback: HandoffResult
       set: string
@@ -599,6 +602,7 @@ async function startSessionOnDevice(
   await Promise.all(
     playItems.map(async (item) => {
       const it = item as PlexPlayItem & {
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
         queueOwnHistory?: boolean
         queueProviderViewCount?: number
       }
@@ -656,9 +660,10 @@ async function startSessionOnDevice(
       queueEntryKey: (
         it as PlexPlayItem & { queueEntryKey?: string }
       ).queueEntryKey,
-      queueOwnHistory: (
-        it as PlexPlayItem & { queueOwnHistory?: boolean }
-      ).queueOwnHistory,
+      queueOwnHistory:
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
+        (it as PlexPlayItem & { queueOwnHistory?: boolean })
+          .queueOwnHistory,
       queueProviderViewCount: (
         it as PlexPlayItem & {
           queueProviderViewCount?: number
@@ -860,6 +865,7 @@ async function startSessionOnDevice(
   // `cancelled` is a PUSH-result field (a pull handoff has no device to cancel), so the read
   // below is total over both members of `HandoffResult` without widening either.
   if (isSuperseded()) return { cancelled: true }
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- one arm of a result whose other arm is the MQTT `playback` payload
   let result: HandoffResult & { cancelled?: boolean }
   if (PLAYBACK_FSM) {
     result = await provider.handoff(artifact, {

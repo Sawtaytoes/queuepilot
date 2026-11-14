@@ -44,6 +44,7 @@ vi.mock("./nativeAccess.js", () => ({
   // The real one is `nativeAccess.queuePlayAs`; history only needs "who can read this queue".
   queuePlayAs: (
     cfg: { requires_profile?: string },
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a test stand-in for the Plex home user `admin` field
     users: { name: string; admin: boolean }[],
   ) =>
     cfg.requires_profile
