@@ -15,12 +15,14 @@ import { defineConfig } from "eslint/config"
 // `server/`, `shared/`, and `e2e/` (which `e2e/tsconfig.json`
 // types).
 //
-// Every rule is at the preset's level, and an unused disable
-// comment is an error (below). A name that something outside TypeScript fixes (an
+// Every rule is at the preset's level, `lint` passes
+// `--max-warnings 0`, and an unused disable comment is an error
+// (below). A name that something outside TypeScript fixes (an
 // HTTP, YAML, SQLite, MQTT, Plex, or Kavita field, or a field an
 // untyped e2e stub reads) keeps its name, with an
 // `eslint-disable-next-line` and a reason on that line. See
-// `docs/decisions/2026-11-14-every-lint-rule-is-at-the-preset-level.md`.
+// `docs/decisions/2026-11-14-every-lint-rule-is-at-the-preset-level.md`
+// and `docs/decisions/2026-11-14-lint-warnings-fail-ci.md`.
 export default defineConfig(
   ...createAppConfig({
     tsconfigRootDir: import.meta.dirname,
@@ -29,9 +31,9 @@ export default defineConfig(
   }),
 
   // The preset reports an unused `eslint-disable` comment as a
-  // warning, and `lint` passes no `--max-warnings`. As an error,
-  // a suppression that no longer covers a finding fails the run
-  // instead of staying behind.
+  // warning. `--max-warnings 0` would fail on it too, but as an
+  // error it also fails a bare `eslint .`, so a suppression that
+  // no longer covers a finding never stays behind.
   {
     linterOptions: {
       reportUnusedDisableDirectives: "error",
