@@ -1,10 +1,9 @@
 import { daylight } from "@charcuterie/tokens"
+import { buildFirstPaintScriptBody } from "@charcuterie/vite-config/first-paint"
 import { expect, test } from "vitest"
-
 // Read through Vite's `?raw` rather than `node:fs`, so this file stays inside the
 // browser program and the tsconfig can keep `"types": []`.
 import indexHtml from "../index.html?raw"
-import { firstPaintScriptBody } from "../vite/firstPaint"
 
 /**
  * The trap gallery-downloader's port fell into, guarded — now for the DYNAMIC
@@ -12,14 +11,14 @@ import { firstPaintScriptBody } from "../vite/firstPaint"
  *
  * The app follows the OS light/dark scheme, so `data-scheme` and the anti-flash
  * background are no longer static in `index.html`: they are set before first paint
- * by the inline snippet the `firstPaint` Vite plugin injects
+ * by the inline snippet Charcuterie's `createFirstPaintPlugin` injects
  * (`@charcuterie/tokens`' `buildFirstPaintScript(daylight)`). These tests pin the
  * two properties that a wrong port silently loses — the anti-flash literal must be a
  * `var()` FALLBACK (never a raw colour that outranks the token and pins the canvas),
  * and both surface hexes must come from the `daylight` token source.
  */
 
-const script = firstPaintScriptBody()
+const script = buildFirstPaintScriptBody()
 
 test("the anti-flash background is a var() fallback, never a raw pinned colour", () => {
   // The one form that is safe: the literal applies only while

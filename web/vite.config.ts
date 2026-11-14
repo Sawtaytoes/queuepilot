@@ -1,5 +1,6 @@
 import { precompressAssets } from "@charcuterie/server/vite"
 import { createViteConfig } from "@charcuterie/vite-config"
+import { createFirstPaintPlugin } from "@charcuterie/vite-config/first-paint"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import type { Plugin } from "vite"
@@ -53,8 +54,6 @@ const preloadBodyFont = (): Plugin => ({
     order: "post",
   },
 })
-
-import { firstPaint } from "./vite/firstPaint.ts"
 
 /**
  * One entry: the editor is a single-page app routed on real paths
@@ -158,7 +157,7 @@ export default createViteConfig({
     // Sets `<html data-scheme>` + the anti-flash background from the persisted/OS
     // choice before first paint. Must precede the token stylesheet, so it is
     // injected head-prepend.
-    firstPaint(),
+    createFirstPaintPlugin(),
     preloadBodyFont(),
     /**
      * Emits the `.br`/`.gz` siblings the server's static handler
