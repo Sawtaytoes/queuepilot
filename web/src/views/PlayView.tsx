@@ -6,6 +6,7 @@ import {
   useRef,
 } from "react"
 import { Link, useLocation } from "react-router"
+import { defined } from "../../../shared/defined"
 import { AlsoInDivider } from "../components/AlsoInDivider"
 import { LandingFilterBar } from "../components/LandingFilterBar"
 import { PeopleRow } from "../components/PeopleRow"
@@ -488,6 +489,14 @@ export function PlayView() {
                 <AlsoInDivider names={alsoNames} />
               </li>
             ) : null
+          // `buildEntries` makes a picks entry only for a set the queues payload holds.
+          const picksQueue =
+            entry.kind === "picks"
+              ? defined(
+                  data?.sets[entry.id],
+                  `queue ${entry.id}`,
+                )
+              : null
 
           return (
             <Fragment key={entry.id}>
@@ -499,7 +508,7 @@ export function PlayView() {
                     numbers.get(entry.id) ?? null
                   }
                 />
-              ) : (
+              ) : picksQueue ? (
                 <PlayCard
                   kind="picks"
                   // The REGISTRY's label, not the queues payload's: only the registry carries
@@ -514,7 +523,7 @@ export function PlayView() {
                       // EXPLICIT: showing it beats showing an activity guessed from nothing.
                       activity: "watching",
                       has_explicit_label: true,
-                      label: data!.sets[entry.id]!.label,
+                      label: picksQueue.label,
                     },
                     numbers.get(entry.id) ?? null,
                   )}
@@ -538,10 +547,10 @@ export function PlayView() {
                     />
                   }
                   meta={picksMeta(
-                    data!.sets[entry.id]!.items.length,
+                    picksQueue.items.length,
                     reg?.sets.find(
                       (set) => set.id === entry.id,
-                    ) ?? data!.sets[entry.id],
+                    ) ?? picksQueue,
                   )}
                   to={`/q/${entry.id}`}
                   onPlay={(anchor) =>
@@ -551,7 +560,7 @@ export function PlayView() {
                     })
                   }
                 />
-              )}
+              ) : null}
             </Fragment>
           )
         })}

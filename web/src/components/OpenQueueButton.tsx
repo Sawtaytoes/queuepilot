@@ -59,7 +59,14 @@ export function OpenQueueButton({
   )
 }
 
-/** True when this set starts by handing back a URL rather than by pushing at a device. */
-export const isPullSet = (
-  set: Pick<RegistrySet, "delivery"> | null | undefined,
-) => set?.delivery === "pull"
+/**
+ * True when this set starts by handing back a URL rather than by pushing at a device.
+ *
+ * A type guard, so a caller that branches on it holds a set, not a possible `undefined`.
+ */
+export const isPullSet = <
+  QueueSet extends Pick<RegistrySet, "delivery">,
+>(
+  set: QueueSet | null | undefined,
+): set is QueueSet & { delivery: "pull" } =>
+  set?.delivery === "pull"

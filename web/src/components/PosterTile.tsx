@@ -183,7 +183,6 @@ export function PosterTile({
       data-key={dataKey}
       data-set={dataSet}
       onContextMenu={onContextMenu}
-      tabIndex={0}
     >
       <div className="thumb">
         {/* `aria-hidden` on Skeleton is the component's contract — the LOAD is
@@ -351,29 +350,21 @@ export function PosterTile({
             starts"), which is what a Tooltip is for, and it matches the rest of the
             chrome instead of the OS's slow grey box. */}
         <Tip label={next?.tooltip ?? next?.text}>
-          <span
-            className={`next${next?.isDone ? " done" : ""}${isStartable ? " startable" : ""}`}
-            onClick={
-              isStartable ? next?.onStart : undefined
-            }
-            onKeyDown={
-              isStartable
-                ? (event) => {
-                    if (
-                      event.key === "Enter" ||
-                      event.key === " "
-                    ) {
-                      event.preventDefault()
-                      next?.onStart?.()
-                    }
-                  }
-                : undefined
-            }
-            role={isStartable ? "button" : undefined}
-            tabIndex={isStartable ? 0 : undefined}
-          >
-            {next?.text ?? ""}
-          </span>
+          {isStartable ? (
+            <button
+              className={`next${next?.isDone ? " done" : ""} startable`}
+              onClick={next?.onStart}
+              type="button"
+            >
+              {next?.text ?? ""}
+            </button>
+          ) : (
+            <span
+              className={`next${next?.isDone ? " done" : ""}`}
+            >
+              {next?.text ?? ""}
+            </span>
+          )}
         </Tip>
         {runtime ? (
           <span className="runtime">{runtime}</span>

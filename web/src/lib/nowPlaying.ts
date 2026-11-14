@@ -71,9 +71,10 @@ export function isPlayingItem(
   now: NowState,
   item: TileEntry | null | undefined,
 ): boolean {
-  if (!isNowLive(now) || !item) return false
+  const playing = now.now
 
-  const playing = now.now!
+  if (!playing || !isNowLive(now) || !item) return false
+
   const ctx = playing.context || {}
   if (
     playing.plexServer !== undefined &&

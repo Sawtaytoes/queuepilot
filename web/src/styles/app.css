@@ -250,80 +250,6 @@ body {
    that clearance through `.view.move-mode`, so the body padding only added a second
    document scrollbar and 80px of dead space below the shell. */
 
-/* TASK HOME: two things to start, then five quiet management destinations. */
-#mode-landing:not([hidden]) {
-  display: block;
-  max-width: 1040px;
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 72px 24px 96px;
-  position: relative;
-}
-#mode-landing .mode-landing-scheme {
-  position: absolute;
-  right: 24px;
-  top: 24px;
-}
-#mode-landing .mode-landing-intro {
-  max-width: 720px;
-}
-#mode-landing .mode-landing-intro h1 {
-  font-size: clamp(2.35rem, 5vw, 3.8rem);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  margin: 0;
-}
-#mode-landing .mode-landing-intro p {
-  color: var(--color-content-secondary);
-  font-size: 1.15rem;
-  margin: 14px 0 0;
-}
-#mode-landing .mode-landing-intro .mode-landing-eyebrow {
-  color: var(--color-intent-accent-content);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  margin: 0 0 12px;
-  text-transform: uppercase;
-}
-/* THE LANDING'S TWO TILE SETS ARE `ActionTiles`, so `.mode-primary-action`,
-   `.mode-primary-icon`, `.mode-action-arrow`, `.mode-management-link`,
-   `.mode-management-icon` and `.mode-management-arrow` ARE ALL DELETED — box, hover,
-   focus ring, icon slot, type ramp and column count all come from the library now.
-
-   Deleted rather than trimmed. A leftover rule here would repaint one app's copy of a
-   shape three other apps share, which is the drift the component exists to end
-   (decision `2026-09-03-the-mode-landing-is-two-actiontiles-not-eight-hand-written-links`).
-
-   `.mode-primary-actions` survives as ONE property. `ActionTiles` owns everything
-   inside its own box and nothing outside it, so the gap to the intro above is still
-   this page's to state. */
-.mode-primary-actions {
-  margin-top: 40px;
-}
-.mode-management {
-  border-top: 1px solid var(--color-border-subtle);
-  margin-top: 48px;
-  padding-top: 28px;
-}
-.mode-management-heading {
-  align-items: baseline;
-  display: flex;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.mode-management-heading h2,
-.mode-management-heading p {
-  margin: 0;
-}
-.mode-management-heading h2 {
-  font-size: 1.15rem;
-}
-.mode-management-heading p {
-  color: var(--color-content-muted);
-  font-size: 0.9rem;
-}
 /* THE PAGE HEADER IS `#apphead`, NEVER THE BARE `header` ELEMENT. `<header>` is a landmark
    a COMPONENT may render too: Charcuterie's `Card` puts its heading in one, and this file is
    unlayered, so `header { position: sticky; top: 0; z-index: 10 }` reached every card on the
@@ -379,6 +305,34 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A renameable heading's text is a button (see `Header`). It must paint exactly as the
+   bare text did: it fills the `<h1>`, inherits its font, colour, alignment and cursor, and
+   carries the ellipsis itself, because the `<h1>`'s own ellipsis applies only to inline
+   content and the button is a block. */
+#heading .heading-rename {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Inset, because the `<h1>` clips anything outside the button. */
+#heading .heading-rename:focus-visible {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 
 /* The info line carries the sub help/now-playing text and the status toast, side by
@@ -436,7 +390,6 @@ body {
   }
   /* Everything the popovers absorb comes off the bar in the Narrow View. */
   #apphead #back,
-  #apphead .namepen,
   .chrome {
     display: none;
   }
@@ -531,6 +484,85 @@ body {
   }
 }
 
+/* TASK HOME: two things to start, then five quiet management destinations. */
+#mode-landing:not([hidden]) {
+  display: block;
+  max-width: 1040px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 72px 24px 96px;
+  position: relative;
+}
+#mode-landing .mode-landing-scheme {
+  position: absolute;
+  right: 24px;
+  top: 24px;
+}
+#mode-landing .mode-landing-intro {
+  max-width: 720px;
+}
+/* THE LANDING'S TWO TILE SETS ARE `ActionTiles`, so `.mode-primary-action`,
+   `.mode-primary-icon`, `.mode-action-arrow`, `.mode-management-link`,
+   `.mode-management-icon` and `.mode-management-arrow` ARE ALL DELETED — box, hover,
+   focus ring, icon slot, type ramp and column count all come from the library now.
+
+   Deleted rather than trimmed. A leftover rule here would repaint one app's copy of a
+   shape three other apps share, which is the drift the component exists to end
+   (decision `2026-09-03-the-mode-landing-is-two-actiontiles-not-eight-hand-written-links`).
+
+   `.mode-primary-actions` survives as ONE property. `ActionTiles` owns everything
+   inside its own box and nothing outside it, so the gap to the intro above is still
+   this page's to state. */
+.mode-primary-actions {
+  margin-top: 40px;
+}
+.mode-management {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 48px;
+  padding-top: 28px;
+}
+.mode-management-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.mode-management-heading h2,
+.mode-management-heading p {
+  margin: 0;
+}
+.mode-management-heading h2 {
+  font-size: 1.15rem;
+}
+.mode-management-heading p {
+  color: var(--color-content-muted);
+  font-size: 0.9rem;
+}
+/* The intro's title, lead and eyebrow. Last in this section, and the section after the page
+   header, because the first rule that ends in `h1` and the first that ends in `p` must be the
+   least specific ones (`#apphead h1` and the management heading's `p`). Biome's
+   `noDescendingSpecificity` checks this. */
+#mode-landing .mode-landing-intro h1 {
+  font-size: clamp(2.35rem, 5vw, 3.8rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 0;
+}
+#mode-landing .mode-landing-intro p {
+  color: var(--color-content-secondary);
+  font-size: 1.15rem;
+  margin: 14px 0 0;
+}
+#mode-landing .mode-landing-intro .mode-landing-eyebrow {
+  color: var(--color-intent-accent-content);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
 /* ===================================================================
    Two things Tailwind's preflight takes away that this markup assumed.
 
@@ -620,22 +652,12 @@ button {
   gap: 8px;
   min-inline-size: 0;
 }
-.queue-card-grid > .alsodivide {
-  grid-column: 1 / -1;
-}
 .shelf h2 {
   margin: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px 8px;
-}
-.shelf h2 .qpeople,
-.shelf h2 .livepill {
-  grid-column: 1 / -1;
-}
-.shelf .shelfactions {
-  margin-inline-start: auto;
 }
 .queue-card-meta {
   display: flex;
@@ -692,9 +714,6 @@ button {
 .shelf.collapsed .collapse-toggle {
   transform: rotate(-90deg);
 } /* ▾ down (open) → ► right (collapsed) */
-.shelf.collapsed .strip-wrap {
-  display: none;
-}
 .shelf h2 .open {
   color: var(--color-content-primary);
   font-family: var(--font-display);
@@ -760,6 +779,9 @@ button {
   display: flex;
   gap: 2px;
 }
+.shelf .shelfactions {
+  margin-inline-start: auto;
+}
 .shelf .shelfdrag {
   cursor: grab;
   touch-action: none;
@@ -773,6 +795,9 @@ button {
 
 .strip-wrap {
   position: relative;
+}
+.shelf.collapsed .strip-wrap {
+  display: none;
 }
 ul.strip {
   list-style: none;
@@ -866,9 +891,6 @@ body.hdrag ul.strip {
 }
 .strip-wrap.more-right::after {
   opacity: 1;
-}
-.strip .tile {
-  scroll-snap-align: start;
 }
 .strip-wrap .scroll {
   position: absolute;
@@ -1001,14 +1023,6 @@ ul.grid .empty {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.qppicker > span > .optionbadge {
-  /* `.optionbadge` is `flex: none` for a LIST ROW, where the row is as wide as the panel
-     and the chip must not be squeezed. A trigger is as wide as its container lets it be. */
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* The chevron is a fixed glyph, not text — it must not absorb the shrink. */
 .qppicker > svg {
   flex-shrink: 0;
@@ -1042,6 +1056,15 @@ ul.grid .empty {
    the control, so the association is unchanged. */
 .addlbl {
   flex: 0 0 auto;
+}
+/* The Narrow View's add bar is in the 760px block further down. This one rule is here, ahead
+   of every other rule that ends in `input`, because the first such rule must be the least
+   specific one. */
+@media (max-width: 760px) {
+  .add > input {
+    /* The search box owns its line — it is the point of this bar. */
+    flex-basis: 100%;
+  }
 }
 .results {
   list-style: none;
@@ -1168,9 +1191,16 @@ body.gdrag .dropstrip {
 .tile {
   width: 100%;
 }
+/* The tile is the positioning context for `.tilechrome` (see PosterTile). Only the
+   `posters` density (and the shelf, which has none) actually overlays it; `cards`/`rows`
+   place the stack in a real grid column. */
+.tile {
+  position: relative;
+}
 .strip .tile {
   width: var(--tile);
   flex: 0 0 var(--tile);
+  scroll-snap-align: start;
 }
 /* The loading placeholders in the eligible pool (F3): the SAME geometry as a real tile so
    nothing shifts when data lands, but a distinct class so `#chpool li.tile` (the e2e "pool
@@ -1269,6 +1299,11 @@ body.gdrag .dropstrip {
   );
   text-underline-offset: 3px;
 }
+/*  The play landing's links (see `.playlinks a` below). Here, ahead of the tile title's hover,
+   because the first rule that ends in `a:hover` must be the least specific one.  */
+.playlinks a:hover {
+  color: var(--color-content-default);
+}
 .tile .title a:hover,
 .tile .title a:focus-visible {
   text-decoration-color: currentColor;
@@ -1288,6 +1323,18 @@ body.gdrag .dropstrip {
 }
 .tile .next:empty {
   display: none;
+}
+/* A startable next-up line is a `<button>` (see `PosterTile`), and it must paint exactly as
+   the `<span>` it replaced: full width, start-aligned, with no button chrome. */
+.tile button.next {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: start;
 }
 /* The runtime, on its own quiet line under the next-up line (decision
    2026-08-22-a-tile-names-the-runtime-on-its-own-line). Muted and a size down: it is a fact
@@ -1479,20 +1526,9 @@ body.gdrag .dropstrip {
   font-weight: 600;
   white-space: nowrap;
 }
-
-/* Home shelves: posters are draggable (within + between queues). */
-#shelves .tile .thumb {
-  cursor: grab;
-  transition:
-    transform 0.12s,
-    box-shadow 0.12s;
-}
-#shelves .tile .thumb:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-medium);
-}
-#shelves .tile.dragging .thumb {
-  cursor: grabbing;
+/* In a shelf's heading grid the pill takes a row of its own. */
+.shelf h2 .livepill {
+  grid-column: 1 / -1;
 }
 .shelf.drop-target .strip-wrap {
   outline: 2px solid var(--color-intent-accent-solid);
@@ -1515,12 +1551,6 @@ body.gdrag .dropstrip {
 .tile .check,
 .tile .lanebtn {
   display: none;
-}
-/* The tile is the positioning context for `.tilechrome` (see PosterTile). Only the
-   `posters` density (and the shelf, which has none) actually overlays it; `cards`/`rows`
-   place the stack in a real grid column. */
-.tile {
-  position: relative;
 }
 /* QUIET UNTIL ASKED FOR. Always-on controls per tile turned a wall of posters into a
    wall of buttons, and none of them is something you reach for while browsing. On a mouse
@@ -1704,6 +1734,21 @@ ul.grid.cards .tile .tileplay {
   transform: none;
   box-shadow: none;
 }
+
+/* Home shelves: posters are draggable (within + between queues). */
+#shelves .tile .thumb {
+  cursor: grab;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+#shelves .tile .thumb:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-medium);
+}
+#shelves .tile.dragging .thumb {
+  cursor: grabbing;
+}
 .tile.selected .thumb {
   border-color: var(--color-intent-accent-solid);
 }
@@ -1774,6 +1819,17 @@ body.sdrag .queue-family:not(.dragging) {
 }
 #selbar:not([hidden]) {
   display: flex;
+} /*  The Channels head's labels (see `.chhead` below). Here, ahead of `#selbar label`, because the
+   first rule that ends in `label` must be the least specific one (Biome `noDescendingSpecificity`).  */
+.chhead label {
+  color: var(--color-content-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  /* Without it this flex item refuses to shrink below its min-content, so the picker inside
+     never reaches its own ellipsis and the whole row overflows. `.chhead` wraps, which hides
+     the problem until ONE item is wider than the viewport — which the account chip made it. */
+  min-width: 0;
 } /* the [hidden] attr must win when set */
 #selbar label,
 #selbar .bulkfield {
@@ -1977,16 +2033,6 @@ body.queue-view #tools {
   flex-wrap: wrap;
   margin-bottom: 20px;
 }
-.chhead label {
-  color: var(--color-content-muted);
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  /* Without it this flex item refuses to shrink below its min-content, so the picker inside
-     never reaches its own ellipsis and the whole row overflows. `.chhead` wraps, which hides
-     the problem until ONE item is wider than the viewport — which the account chip made it. */
-  min-width: 0;
-}
 .chnote {
   color: var(--color-content-muted);
   font-size: 0.85rem;
@@ -2133,10 +2179,28 @@ body.queue-view #tools {
   padding: 8px 10px;
   min-inline-size: 0;
 }
+/*  The group editor's legends (see `.grouprule`). Here, ahead of the other `legend` rules,
+   because the first rule that ends in `legend` must be the least specific one.  */
+.grouprule legend,
+.groupmembers legend {
+  padding: 0 6px;
+  color: var(--color-content-secondary);
+  font-size: 0.88rem;
+}
 #chfilters legend {
   color: var(--color-content-muted);
   font-size: 0.85rem;
   padding: 0 6px;
+}
+/*  The Pending page's library row. Here, ahead of the other `.libs` rules, because the first
+   rule that ends in `.libs` must be the least specific one.  */
+/* `CheckboxGroup` ships a bare `.libs` div. This one WRAPS in a row rather than taking the
+   modals' two columns: it sits full-width above the grid, not in a 420px dialog, and eleven
+   library names in two tall columns would push the first tile off the fold. */
+.pendinglibs .libs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
 }
 #chfilters .libs {
   display: grid;
@@ -2377,6 +2441,21 @@ body.queue-view #tools {
   font-size: 0.92rem;
   padding-inline: 2px;
 }
+/* The entry editor's fields (see `#entrymodal .field` and `#entrymodal .fieldhint`, which carry
+   the same values). Here, ahead of every modal's `.field` and `.fieldhint` rule, because the first
+   rule that ends in each must be the least specific one. */
+.entryfields .field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+}
+.entryfields .fieldhint {
+  flex: 1 0 100%;
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
+}
 #setmodal .flags > .field {
   display: flex;
   flex-wrap: wrap;
@@ -2393,6 +2472,15 @@ body.queue-view #tools {
   margin-bottom: 14px;
   color: var(--color-content-muted);
   font-size: 0.92rem;
+}
+/*  The audience editor's field label (see `.audienceeditor`). Here, ahead of the modals'
+   `.fieldlabel` rules, because the first rule that ends in `.fieldlabel` must be the least
+   specific one.  */
+.fieldlabel {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.85;
 }
 /* The section editor's three blocks each carry a label above their control, so the label is
    its own line rather than sitting inline beside it as `#entrymodal`'s does. */
@@ -2857,6 +2945,9 @@ html.modal-open {
   font-size: 0.85rem;
   line-height: 1.4;
 }
+.queue-card-grid > .alsodivide {
+  grid-column: 1 / -1;
+}
 .alsodivide::before,
 .alsodivide::after {
   content: "";
@@ -2918,9 +3009,6 @@ html.modal-open {
 .playlinks a {
   color: var(--color-content-muted);
   font-size: 0.9rem;
-}
-.playlinks a:hover {
-  color: var(--color-content-default);
 }
 /* The create button is a Charcuterie `Button`, and the whole of this rule is now props.
    It is deliberately NOT muted like its neighbours: the three links navigate and this one
@@ -3111,6 +3199,14 @@ body.name-editable .bar:hover .namepen,
 body.name-editable #heading:hover ~ .namepen {
   color: var(--color-intent-accent-content);
   border-color: var(--color-intent-accent-solid);
+}
+/* The Narrow View takes the pen off the bar, as it takes `#back` and `.chrome`; there the
+   heading itself is the rename control. This rule sits here, after the pen's own rules, because
+   the first rule that ends in `.namepen` must be the least specific one. */
+@media (max-width: 760px) {
+  #apphead .namepen {
+    display: none;
+  }
 }
 body.name-editable #apphead h1 {
   cursor: text;
@@ -3389,10 +3485,6 @@ body.name-editable #apphead h1 {
     flex: 1 1 auto;
     width: auto;
   }
-  .add > input {
-    /* The search box owns its line — it is the point of this bar. */
-    flex-basis: 100%;
-  }
 
   /* ---- modal fields: label above, control filling the line ----
 
@@ -3482,6 +3574,14 @@ body.name-editable #apphead h1 {
   flex: none;
   margin-left: 12px;
   vertical-align: middle;
+}
+.qppicker > span > .optionbadge {
+  /* `.optionbadge` is `flex: none` for a LIST ROW, where the row is as wide as the panel
+     and the chip must not be squeezed. A trigger is as wide as its container lets it be. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Right-ALIGNED, not merely trailing: the whole point is skimming a couple of hundred
    Dragon Ball Z rows, and a chip that sits wherever the title happens to end gives the
@@ -3827,8 +3927,7 @@ ul.grid.posters .tile .badges .epstag {
    `#entrymodal` fails to wrap) puts "queued per turn" flush against the
    trigger. Flex + a column-gap is the parent owning the gutter — do not
    put margin on the Picker (decision in charcuterie Picker.mdx). */
-#entrymodal .field,
-.entryfields .field {
+#entrymodal .field {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3841,8 +3940,7 @@ ul.grid.posters .tile .badges .epstag {
   letter-spacing: 0.05em;
   color: var(--color-content-muted);
 }
-#entrymodal .fieldhint,
-.entryfields .fieldhint {
+#entrymodal .fieldhint {
   flex: 1 0 100%;
   font-size: 0.82rem;
   color: var(--color-content-muted);
@@ -4108,14 +4206,6 @@ body.rowdragging {
   align-items: center;
   margin-bottom: 6px;
 }
-/* `CheckboxGroup` ships a bare `.libs` div. This one WRAPS in a row rather than taking the
-   modals' two columns: it sits full-width above the grid, not in a 420px dialog, and eleven
-   library names in two tall columns would push the first tile off the fold. */
-.pendinglibs .libs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-}
 .pendinglibs .libs label {
   display: flex;
   gap: 6px;
@@ -4363,6 +4453,12 @@ body.rowdragging
 #membersmodal .memberlist > li.memberseason:first-child {
   margin-top: 0;
 }
+/*  The people editor's section headings (see `.peoplesec`). Here, ahead of the members list's
+   `h4`, because the first rule that ends in `h4` must be the least specific one.  */
+.peoplesec h4 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
 #membersmodal .memberlist h4 {
   margin: 0;
   font-size: 0.82rem;
@@ -4587,6 +4683,10 @@ body.rowdragging
   flex-wrap: wrap;
   min-inline-size: 0;
 }
+/* In a shelf's heading grid the people row takes a row of its own. */
+.shelf h2 .qpeople {
+  grid-column: 1 / -1;
+}
 .qpeople.none {
   font-size: 0.8rem;
   opacity: 0.6;
@@ -4625,10 +4725,6 @@ body.rowdragging
 }
 .peoplesec {
   margin-block-end: 18px;
-}
-.peoplesec h4 {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
 }
 /* RE-SCOPED, not borrowed. `.field` and its text input are painted under `#startmodal`,
    `#setmodal` and `#dynmodal` only, so the same markup in a new modal renders as a bare UA
@@ -4765,12 +4861,6 @@ body.rowdragging
   flex-direction: column;
   gap: 6px;
   margin: 4px 0 10px;
-}
-.fieldlabel {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  opacity: 0.85;
 }
 /* ---- queue audience (`PeopleTrays.tsx`) ----------------------------------------------- */
 .audienceeditor {
@@ -4984,12 +5074,6 @@ body.rowdragging
   flex-direction: column;
   gap: 6px;
   background: var(--color-surface-sunken);
-}
-.grouprule legend,
-.groupmembers legend {
-  padding: 0 6px;
-  color: var(--color-content-secondary);
-  font-size: 0.88rem;
 }
 .grouprule .qppicker {
   width: 100%;

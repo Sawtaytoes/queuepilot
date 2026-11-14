@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react"
 
+import { defined } from "../../../shared/defined"
 import { isSupersededTier } from "../../../shared/queueTitle"
 import { api, writeCount } from "../lib/api"
 import type {
@@ -384,7 +385,7 @@ export async function load() {
     const [data, reg] = hasPhase1
       ? [
           await api<QueuesResponse>("GET", "/api/queues"),
-          getState().reg!,
+          defined(getState().reg, "the phase-1 registry"),
         ]
       : await fetchAll()
 

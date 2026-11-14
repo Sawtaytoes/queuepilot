@@ -135,7 +135,7 @@ export function PlayCard({
         {tier}
         {isPullSet(set) ? (
           // Nothing to cast to — the launcher URL is the whole affordance.
-          <OpenQueueButton set={set!} />
+          <OpenQueueButton set={set} />
         ) : (
           <>
             {/* A Charcuterie `Button`, `intent="accent"` — what `.playbtn`'s solid accent skin

@@ -15,15 +15,18 @@ export function BlocklistRow({
   entry: string
   onChanged: () => Promise<void>
 }) {
-  const collection = /^\s*collection:\s*(.+)$/i.exec(
+  // `(.+)` always captures on a match, so a name is present exactly when the entry is a
+  // `collection:` line.
+  const collectionName = /^\s*collection:\s*(.+)$/i.exec(
     String(entry),
-  )
+  )?.[1]
+  const isCollection = collectionName !== undefined
   const [title, setTitle] = useState(
-    collection ? collection[1]! : `#${entry}`,
+    collectionName ?? `#${entry}`,
   )
 
   useEffect(() => {
-    if (collection) return
+    if (isCollection) return
 
     let isStale = false
 
@@ -36,13 +39,13 @@ export function BlocklistRow({
     return () => {
       isStale = true
     }
-  }, [collection, entry])
+  }, [isCollection, entry])
 
   return (
     <li>
       <span>
         {title}
-        {collection ? (
+        {isCollection ? (
           <>
             {" "}
             <span className="collbadge">Collection</span>

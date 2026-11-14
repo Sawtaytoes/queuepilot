@@ -95,6 +95,22 @@ type BindingDraft = {
   isAdvancedOpen: boolean
 }
 
+/** The picker value of the profile a binding names, by uuid or by account id; "" for none. */
+const boundProfileValue = (
+  profiles: Profile[],
+  binding: Pick<BindingDraft, "accountId" | "userUuid">,
+) => {
+  const profile = profiles.find(
+    (candidate) =>
+      (binding.userUuid &&
+        candidate.uuid === binding.userUuid) ||
+      (binding.accountId &&
+        candidate.id === Number(binding.accountId)),
+  )
+
+  return profile ? profileValue(profile) : ""
+}
+
 let nextUid = 1
 
 const toDraft = (
@@ -1009,31 +1025,10 @@ export function DynModal() {
                         ? "— pick a profile —"
                         : "— none found (use Advanced) —"
                     }
-                    value={
-                      profiles.find(
-                        (profile) =>
-                          (binding.userUuid &&
-                            profile.uuid ===
-                              binding.userUuid) ||
-                          (binding.accountId &&
-                            profile.id ===
-                              Number(binding.accountId)),
-                      )
-                        ? profileValue(
-                            profiles.find(
-                              (profile) =>
-                                (binding.userUuid &&
-                                  profile.uuid ===
-                                    binding.userUuid) ||
-                                (binding.accountId &&
-                                  profile.id ===
-                                    Number(
-                                      binding.accountId,
-                                    )),
-                            )!,
-                          )
-                        : ""
-                    }
+                    value={boundProfileValue(
+                      profiles,
+                      binding,
+                    )}
                   />
                 </label>
                 {/* `.ghost` is Charcuterie's `outline`; `size="sm"` is what
