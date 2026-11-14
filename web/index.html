@@ -3,11 +3,11 @@
 
      `data-scheme` is NOT hardcoded here any more: the app follows the OS light/dark
      scheme (and a persisted override via `<ColorSchemeSwitcher>`). An inline
-     first-paint script — injected head-prepend by the `firstPaint` Vite plugin from
-     `@charcuterie/tokens`' `buildFirstPaintScript(daylight)` — sets `data-scheme`
+     first-paint script — injected head-prepend by Charcuterie's shared plugin
+     (`createFirstPaintPlugin` from `@charcuterie/vite-config/first-paint`) — sets `data-scheme`
      AND the anti-flash background from the resolved choice before the first frame,
      so there is no flash and no second source of truth to keep in sync. See
-     `vite/firstPaint.ts` and the guard in `src/firstPaintColour.test.ts`.
+     the guard in `src/firstPaintColour.test.ts`.
 
      `data-variant` is omitted deliberately — `daylight` is the default and `:root`
      carries it, so naming it here would be a second place to change if the fleet

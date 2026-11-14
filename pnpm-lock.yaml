@@ -334,8 +334,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       '@charcuterie/vite-config':
-        specifier: ^1.1.0
-        version: 1.1.0(vite@8.2.2)
+        specifier: ^1.2.0
+        version: 1.2.0(vite@8.2.2)
       '@charcuterie/vitest-config':
         specifier: ^2.0.0
         version: 2.0.0(vitest@4.1.11)
@@ -540,8 +540,8 @@ packages:
       react-router:
         optional: true
 
-  '@charcuterie/vite-config@1.1.0':
-    resolution: {integrity: sha512-rPrdgrJIkO0/UqCVIOOHRVWJXyWCJsf1EYNQ1kEwUQCivD9N8b/hBK1eP5aBHd35qaLa3DSYk4RLZ3DNSIbMmg==}
+  '@charcuterie/vite-config@1.2.0':
+    resolution: {integrity: sha512-+14WOrrVRc/iB0SlufvUMy+Mh2D/tpnnSXbpP5BC0PvrOezYHm/YLLGdbmIwEjbbZK2Jm1SfwgBxM77j23WVaQ==}
     peerDependencies:
       vite: '>=5'
 
@@ -3395,8 +3395,9 @@ snapshots:
       - svelte
       - vue
 
-  '@charcuterie/vite-config@1.1.0(vite@8.2.2)':
+  '@charcuterie/vite-config@1.2.0(vite@8.2.2)':
     dependencies:
+      '@charcuterie/tokens': 1.10.2
       vite: 8.2.2
 
   '@charcuterie/vitest-config@2.0.0(playwright@1.62.1)':
