@@ -1,24 +1,12 @@
 import {
-  Badge,
   Button,
   ButtonLink,
-  Card,
   EmptyState,
   Spinner,
 } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 
-import { MarkPlayed } from "../components/MarkPlayed"
-import { Poster } from "../components/Poster"
 import { api } from "../lib/api"
-import {
-  boxArtUrl,
-  knownHowFor,
-  playCountLabel,
-  playerCountLine,
-  playtimeLabel,
-  weightLabel,
-} from "../lib/boardGames"
 import {
   type BoardGamePickSession,
   clearPickSession,
@@ -39,8 +27,9 @@ import type {
   TonightPickResponse,
   TonightPickWire,
 } from "../lib/types"
-import { openPlayMenu } from "../state/overlays"
 import { setStatus } from "../state/store"
+import { QueueCard } from "./QueueCard"
+import { ResultCard } from "./ResultCard"
 
 /**
  * THE RESULT — one answer, and the two things you can do about it.
@@ -486,226 +475,4 @@ async function rerollQueue(
     picks: answer.shortlist,
     savedAt: new Date().toISOString(),
   }
-}
-
-/**
- * ONE QUEUE, as a card.
- *
- * What it says and what it deliberately does not:
- *
- *   - The **queue** is the answer. It is named, and the provider it runs on is a badge
- *     beside it — the one place a provider brand belongs on this surface.
- *   - **Up next** is what would come up, when that could be answered without starting
- *     anything. When it could not, the card says WHY in the same place, because a blank space
- *     where a title should be reads as a bug.
- *   - There is **no Mark played**. A queue records its own progress when it plays; a button
- *     here would be a second writer of the same fact.
- *
- * Go is the queue's own launch, and it is the same two shapes the shelf and the Tonight form
- * already use: a PULL queue is an anchor to `/go/<id>`, a PUSH queue opens the device menu.
- *
- * ⚠️ `.playbtn` is LOAD-BEARING and paints nothing — `PlayMenu`'s outside-click handler asks
- * `t.closest(".playbtn")`, so a control that opens that menu without the class opens a menu
- * that shuts on the same click.
- */
-function QueueCard({
-  idPrefix,
-  pick,
-}: {
-  idPrefix: string
-  pick: TonightPickWire
-}) {
-  return (
-    <Card
-      className="bgcard"
-      heading={pick.setLabel}
-      headingLevel={2}
-      id={`${idPrefix}-queue`}
-      padding="lg"
-      surface="raised"
-    >
-      <div className="bgbadges">
-        {pick.providerLabel ? (
-          <Badge
-            appearance="outline"
-            intent="neutral"
-            size="sm"
-          >
-            {pick.providerLabel}
-          </Badge>
-        ) : null}
-        <Badge intent="neutral" size="sm">
-          {pick.delivery === "pull"
-            ? "Opens on the device you are holding"
-            : "Sent to a device"}
-        </Badge>
-      </div>
-
-      {pick.upNext ? (
-        <p className="bgmeta" id={`${idPrefix}-upnext`}>
-          Up next: {pick.upNext.title}
-          {pick.upNext.detail
-            ? ` · ${pick.upNext.detail}`
-            : ""}
-        </p>
-      ) : (
-        <p className="bgmeta" id={`${idPrefix}-upnext`}>
-          {pick.upNextReason ??
-            "This queue has not said what comes next."}
-        </p>
-      )}
-
-      <p className="bgmeta">
-        The queue chooses what plays when it starts.
-      </p>
-
-      <div className="bglinks">
-        {pick.launchUrl ? (
-          <ButtonLink
-            href={pick.launchUrl}
-            id={`${idPrefix}-go`}
-            intent="accent"
-            isExternal
-            size="lg"
-          >
-            Start it
-          </ButtonLink>
-        ) : (
-          <Button
-            className="playbtn"
-            id={`${idPrefix}-go`}
-            intent="accent"
-            onClick={(event) =>
-              openPlayMenu({
-                anchor:
-                  event.currentTarget.getBoundingClientRect(),
-                setId: pick.setId,
-              })
-            }
-            size="lg"
-          >
-            Start it
-          </Button>
-        )}
-      </div>
-    </Card>
-  )
-}
-
-/** One candidate, as a card. The same shape whether it is the answer or one of the other two. */
-function ResultCard({
-  activity,
-  candidate,
-  guestCount,
-  idPrefix,
-  knownHow,
-  onLogged,
-  people,
-  personIds,
-}: {
-  activity: PickSession["activity"]
-  candidate: PickCandidateWire
-  guestCount: number
-  idPrefix: string
-  knownHow: readonly KnownHowClaim[]
-  onLogged: () => Promise<void>
-  people: readonly Person[]
-  personIds: readonly string[]
-}) {
-  const { game } = candidate
-  const known = knownHowFor(knownHow, game.id)
-  const nameOf = (id: string) =>
-    people.find((person) => person.id === id)
-      ?.displayName ?? id
-  const playtime = playtimeLabel(game)
-  const box =
-    game.boxes.find((one) => one.kind === "standalone") ??
-    game.boxes[0]
-
-  return (
-    <Card
-      className="bgcard"
-      heading={game.name}
-      headingLevel={2}
-      id={`${idPrefix}-game`}
-      padding="lg"
-      surface="raised"
-    >
-      <div className="bgart">
-        <Poster
-          className="bgartimg"
-          cover={boxArtUrl(game.imagePath)}
-          fallback={
-            <span className="bgartnone">
-              No box photo yet
-            </span>
-          }
-        />
-      </div>
-
-      <p className="bgmeta">{playerCountLine(game)}</p>
-      <p className="bgmeta">
-        {[weightLabel(game.weight), playtime]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
-
-      <div className="bgbadges">
-        {candidate.verdict === "best" ? (
-          <Badge intent="success" size="sm">
-            Best at this count
-          </Badge>
-        ) : candidate.verdict === "recommended" ? (
-          <Badge intent="neutral" size="sm">
-            Plays well at this count
-          </Badge>
-        ) : null}
-        <Badge intent="neutral" size="sm">
-          {playCountLabel(game.playCount)}
-        </Badge>
-      </div>
-
-      {/* Where to go and get it. The one thing a card at a shelf is actually for. */}
-      {box?.locationText ? (
-        <p className="bgmeta" id={`${idPrefix}-where`}>
-          {box.label} — {box.locationText}
-        </p>
-      ) : null}
-
-      {game.links.length > 0 ? (
-        <div className="bglinks">
-          {game.links.map((link) => (
-            <ButtonLink
-              href={link.url}
-              isExternal
-              key={link.id}
-              size="sm"
-            >
-              {link.label}
-            </ButtonLink>
-          ))}
-        </div>
-      ) : null}
-
-      {known.length > 0 ? (
-        <p className="bgmeta" id={`${idPrefix}-knows`}>
-          Knows the rules: {known.map(nameOf).join(", ")}
-        </p>
-      ) : null}
-
-      <MarkPlayed
-        activity={activity}
-        defaultPersonIds={personIds}
-        gameId={game.id}
-        gameName={game.name}
-        guestCount={guestCount}
-        idPrefix={idPrefix}
-        knownHow={knownHow.filter(
-          (claim) => claim.gameId === game.id,
-        )}
-        onLogged={onLogged}
-        people={people}
-      />
-    </Card>
-  )
 }

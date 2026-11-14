@@ -1,0 +1,603 @@
+import { getCategoricalIndex } from "@charcuterie/tokens"
+import {
+  Badge,
+  ButtonLink,
+  Card,
+  EmptyState,
+  IconButton,
+} from "@charcuterie/ui"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react"
+import { Link } from "react-router"
+import { TypeBadge } from "../components/badges"
+import { EditionChip } from "../components/EditionChip"
+import { isPullSet } from "../components/OpenQueueButton"
+import { PeopleRow } from "../components/PeopleRow"
+import { PosterTile } from "../components/PosterTile"
+import { SeasonMark } from "../components/SeasonMark"
+import { Tip } from "../components/Tip"
+import { titleWithYear } from "../lib/mediaTitle"
+import { isPlayingItem } from "../lib/nowPlaying"
+import {
+  collectionOrderCount,
+  isCompleted,
+  progressLabel,
+  runtimeLabel,
+  tileFace,
+} from "../lib/tileFace"
+import type {
+  GroupWithRoster,
+  NowState,
+  Person,
+  QueueItem,
+  QueueMember,
+  RegistrySet,
+} from "../lib/types"
+import { PLEX_WORDS } from "../lib/vocab"
+import {
+  openPlayMenu,
+  openSetModal,
+  openTileMenu,
+} from "../state/overlays"
+import {
+  moveEntryLane,
+  queueEntryActions,
+  removeQueueItem,
+  setPriorityPosition,
+} from "../state/queueEntry"
+import { splitLanes } from "../state/queueView"
+import { ChevronDownIcon } from "./ChevronDownIcon"
+import { DragIcon } from "./DragIcon"
+import { PlayIcon } from "./PlayIcon"
+import { SettingsIcon } from "./SettingsIcon"
+
+export function Shelf({
+  groups,
+  isCollapsed,
+  onToggle,
+  filteredFrom,
+  isHiddenByFilter,
+  items,
+  label,
+  members,
+  now,
+  people,
+  playingSet,
+  providerKind,
+  set,
+  setId,
+  setLane,
+}: {
+  setId: string
+  /**
+   * WHAT THIS QUEUE IS CALLED — and since WP-5 that is its ACTIVITY, plus a number when two
+   * cards would otherwise read identically. There is no hand-typed name any more; who the
+   * queue is for is the row of faces below this
+   * (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4).
+   */
+  label: string
+  /** This queue's audience rows. Empty is legal and means "Anybody". */
+  members: readonly QueueMember[]
+  people: readonly Person[]
+  groups: readonly GroupWithRoster[]
+  items: QueueItem[]
+  isCollapsed: boolean
+  onToggle: () => void
+  isHiddenByFilter: boolean
+  now: NowState
+  playingSet: string | null
+  /** `plex` / `kavita` — this shelf's accent. Empty for a queue whose provider this build
+   *  does not recognise, which falls back to the app's neutral accent. */
+  providerKind: string
+  /** The registry row, for HOW this queue starts and what its provider calls that. Null
+   *  while the registry is still loading, which reads as push — the pre-existing default. */
+  set: Pick<
+    RegistrySet,
+    | "id"
+    | "delivery"
+    | "episodes"
+    | "is_in_season"
+    | "season_start"
+    | "vocabulary"
+  > | null
+  /**
+   * The queue this one is a filtered VIEW of, when it is one.
+   *
+   * Present ⇒ the shelf is drawn nested under that queue: indented, badged `Filtered`, and
+   * with neither drag handle — its order is the parent's, and a subset cannot express one
+   * (`lib/filteredQueues.ts`). Null on every ordinary queue.
+   */
+  filteredFrom: { id: string; label: string } | null
+  /**
+   * This queue's OWN default lane — what an entry carrying no `placement` means here.
+   *
+   * Resolved by the caller through `isRandomOrder`, exactly as `QueueView` does it, because
+   * the registry row may carry only a legacy `kind` and there must not be two places that
+   * decide what an un-promoted entry is.
+   */
+  setLane: "priority" | "random"
+}) {
+  const stripRef = useRef<HTMLUListElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const leftRef = useRef<HTMLButtonElement>(null)
+  const rightRef = useRef<HTMLButtonElement>(null)
+
+  /**
+   * An arrow (and its edge shadow) only exists when there is somewhere to scroll in
+   * that direction — the shadow is the always-visible "more items this way" cue,
+   * the arrow appears on hover. Written to the DOM rather than to state because it
+   * fires on every scroll frame and must not re-render the shelf under a drag.
+   * (decision `2026-07-21-shelf-ui-conventions`)
+   */
+  const updateArrows = useCallback(() => {
+    const strip = stripRef.current
+    const wrap = wrapRef.current
+
+    if (!strip || !wrap) return
+
+    const hasMoreLeft = strip.scrollLeft > 2
+    const hasMoreRight =
+      strip.scrollLeft <
+      strip.scrollWidth - strip.clientWidth - 2
+
+    if (leftRef.current)
+      leftRef.current.hidden = !hasMoreLeft
+    if (rightRef.current)
+      rightRef.current.hidden = !hasMoreRight
+
+    wrap.classList.toggle("more-left", hasMoreLeft)
+    wrap.classList.toggle("more-right", hasMoreRight)
+  }, [])
+
+  useLayoutEffect(() => {
+    requestAnimationFrame(updateArrows)
+  })
+
+  useEffect(() => {
+    // A viewport resize changes how much of each strip fits.
+    window.addEventListener("resize", updateArrows)
+
+    return () =>
+      window.removeEventListener("resize", updateArrows)
+  }, [updateArrows])
+
+  const isLive = setId === playingSet
+
+  /**
+   * THE TWO LANES, in the ONE strip.
+   *
+   * A Picks queue is one membership list with a Priority queue and a Random pool
+   * (decision `2026-08-23-kind-is-picks-or-rules`), and until 2026-08-26 this page only ever
+   * drew queues whose entries were all in one of them — the random-lane ones were listed on
+   * the Rules page. They are all here now, so a shelf has to be able to say which lane a
+   * poster is in.
+   *
+   * ONE strip and not two, unlike `/q/<id>`. `useHomeDrags` reads a shelf as a single
+   * `.strip` — it hit-tests one per shelf, and it rebuilds the file order from
+   * `strip.querySelectorAll("li.tile")` — so a second `<ul>` would send a PATCH carrying half
+   * the queue's keys. The lanes are two RUNS inside that one list instead: Priority first,
+   * then a divider `<li>`, then the pool. The divider is not a `li.tile`, so every one of
+   * those queries steps over it.
+   */
+  const lanes = splitLanes(items, setLane)
+  const hasBothLanes = Boolean(
+    lanes.priority.length && lanes.random.length,
+  )
+  /**
+   * The lane clause beside the count.
+   *
+   * A shelf holding one lane still has to say WHICH — the strip's divider can only appear
+   * when there are two runs to divide, so a queue with every entry in the pool would
+   * otherwise be indistinguishable from an ordered one. Same clause `PlayView.picksMeta`
+   * puts on a landing card, so the two pages agree about a queue at a glance.
+   */
+  const laneClause = hasBothLanes
+    ? `${lanes.priority.length} priority · ${lanes.random.length} pool`
+    : items.length === 0
+      ? null
+      : lanes.priority.length
+        ? "priority queue"
+        : "random pool"
+
+  /**
+   * ONE poster, rendered the same in either lane.
+   *
+   * Extracted from the strip's `.map()` when the shelf grew a second run, for the reason
+   * `QueueView.renderTile` gives: the two lanes have to be the same tile, with the same
+   * chrome and the same handlers, and a copy per lane is two places for that to stop being
+   * true. `lane` is the entry's OWN lane — `placement ?? setLane`, already resolved by
+   * `splitLanes` — and it decides only the promote arrow's direction.
+   */
+  const renderTile = (
+    item: QueueItem,
+    lane: "priority" | "random",
+    priorityPosition?: number,
+  ) => {
+    const face = tileFace(item)
+    const isPlaying = isLive && isPlayingItem(now, item)
+
+    return (
+      <PosterTile
+        badges={
+          <>
+            <TypeBadge face={face} item={item} />
+            {/* Which EDITION this is — see QueueView. The shelf shows the same
+                        entries the grid does, so it has the same pair to tell apart. */}
+            <EditionChip face={face} />
+            {/* "In Progress" wins over "Completed": a mid-episode resume point
+                          (Plex viewOffset, unwatched) means the item is being watched, not
+                          finished — the Prison School OAD case must never read "Completed". */}
+            {item.partiallyWatched ? (
+              <Tip
+                label={progressLabel(
+                  item.viewOffset,
+                  item.duration,
+                )}
+              >
+                <Badge
+                  appearance="outline"
+                  className="badge progressbadge"
+                  intent="accent"
+                  size="sm"
+                >
+                  In Progress
+                </Badge>
+              </Tip>
+            ) : isCompleted(item) ? (
+              <Badge
+                appearance="outline"
+                className="badge donebadge"
+                intent="success"
+                size="sm"
+              >
+                Completed
+              </Badge>
+            ) : null}
+            {/* Solid, not outline: this one has to win against the
+                          type and Completed chips beside it. Green rather than
+                          amber so it never reads as the selection outline. */}
+            {isPlaying ? (
+              <Badge
+                appearance="solid"
+                className="badge playingbadge"
+                intent="info"
+                size="sm"
+              >
+                {now.now?.state === "paused"
+                  ? "Paused"
+                  : "Now playing"}
+              </Badge>
+            ) : null}
+          </>
+        }
+        className={[
+          // `pending` is not `unresolved`: the red border means "this
+          // entry names something Plex does not have", and a tile that
+          // simply hasn't been resolved YET has made no such claim.
+          item.resolved || item.pending
+            ? null
+            : "unresolved",
+          isCompleted(item) ? "done" : null,
+          isPlaying ? "playing" : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        dataKey={item.key}
+        dataSet={setId}
+        isPending={item.pending}
+        isPriority={lane === "priority"}
+        key={item.key}
+        // The third control in the tile's chrome stack: into the Priority queue, or
+        // back out to the pool. The queue page's divider drag has no counterpart here
+        // — a shelf is one `.strip` and its drag rebuilds file order, not placement —
+        // so on this page the arrow is the ONLY promote, which is why it is offered on
+        // every shelf rather than only on the mixed ones.
+        onLane={() =>
+          void moveEntryLane(setId, item, setLane)
+        }
+        next={{
+          isDone: face.nextDone,
+          text: face.next,
+          tooltip:
+            face.from && collectionOrderCount(item) != null
+              ? `${face.next} — ${collectionOrderCount(item)} in order`
+              : face.next,
+        }}
+        // The same per-entry menu the queue grid opens. It was already
+        // half-wired here: `useHomeDrags` suppresses the browser's native menu
+        // over a poster so a touch long-press can arm a drag, so a right-click
+        // on a shelf poster did NOTHING at all. It also carries the start-point
+        // actions, which had no shelf route either.
+        onContextMenu={(event) => {
+          event.preventDefault()
+          openTileMenu(
+            event.clientX,
+            event.clientY,
+            queueEntryActions(setId, item),
+          )
+        }}
+        // The ✕. A shelf already REORDERS a title and MOVES it to another queue
+        // (`useHomeDrags`), so "open the queue first" was the only write it
+        // refused — reported 2026-08-21: "From the Ordered Queues view, I can't
+        // remove items either."
+        // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`)
+        onRemove={() => removeQueueItem(setId, item)}
+        posterCover={item.cover}
+        priorityPosition={
+          priorityPosition
+            ? {
+                count: lanes.priority.length,
+                onChange: (position) =>
+                  void setPriorityPosition(
+                    setId,
+                    item,
+                    position,
+                  ),
+                position: priorityPosition,
+              }
+            : undefined
+        }
+        // The runtime line, the same as the queue grid's — the shelf shows the
+        // same entries and answers the same question about them.
+        runtime={
+          item.item_order === "shuffle"
+            ? null
+            : runtimeLabel(
+                item.nextEp?.duration || item.duration,
+                item.episodes ?? set?.episodes ?? 1,
+              )
+        }
+        posterRatingKey={
+          item.resolved ? face.ratingKey : null
+        }
+        title={titleWithYear(face.title, face.year)}
+        // The item's own page in Plex / Kavita — see QueueView.
+        titleHref={item.webUrl}
+        titleHrefLabel={
+          set?.vocabulary?.name || PLEX_WORDS.name
+        }
+        titleTooltip={
+          face.from
+            ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
+            : titleWithYear(face.title, face.year)
+        }
+      />
+    )
+  }
+
+  return (
+    <Card
+      accentEdge={{
+        categorical: getCategoricalIndex(setId),
+      }}
+      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
+      // This shelf's counts, rings and badges are about THIS queue, so they wear its
+      // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
+      // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+      data-provider={providerKind || undefined}
+      data-set={setId}
+      footer={
+        <div className="queue-card-meta">
+          <span className="lanes-sec">
+            {laneClause || "Empty queue"}
+          </span>
+          <span className="shelfactions">
+            {/* HOW this queue starts, never WHICH provider it is — the same rule
+            `OpenQueueButton` follows on the queue's own page. This shelf used to open the
+            device menu unconditionally, so a pull queue offered a Shield and a phone for
+            something none of them can open; with no broker it simply answered "MQTT not
+            connected" (reported 2026-08-17 on a Steam queue, and true for Kavita and the
+            board-game picker since each of those shipped).
+            (decision `2026-08-15-a-provider-carries-its-own-vocabulary`) */}
+            {isPullSet(set) ? (
+              <Tip
+                label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+              >
+                <ButtonLink
+                  appearance="ghost"
+                  aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+                  className="shelfplay"
+                  href={`/go/${encodeURIComponent(setId)}`}
+                  intent="accent"
+                  isExternal
+                  size="sm"
+                >
+                  {set?.vocabulary?.startIcon ||
+                    PLEX_WORDS.startIcon}
+                </ButtonLink>
+              </Tip>
+            ) : (
+              <Tip label="Play this queue on a device">
+                {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
+                `PlayMenu`'s outside-click handler asks `t.closest(".shelfplay")`, so a
+                control that opens that menu and does not wear the class opens a menu that
+                shuts on the same click — measured, and the whole of #173. */}
+                <IconButton
+                  appearance="ghost"
+                  className="shelfplay"
+                  intent="accent"
+                  label="Play this queue on a device"
+                  onClick={(event) =>
+                    openPlayMenu({
+                      anchor:
+                        event.currentTarget.getBoundingClientRect(),
+                      setId,
+                    })
+                  }
+                  size="sm"
+                >
+                  <PlayIcon />
+                </IconButton>
+              </Tip>
+            )}
+            <Tip label="Edit queue">
+              <IconButton
+                appearance="ghost"
+                className="shelfedit"
+                intent="neutral"
+                label="Edit queue"
+                onClick={() => openSetModal(setId)}
+                size="sm"
+              >
+                <SettingsIcon />
+              </IconButton>
+            </Tip>
+            {/* NO DRAG HANDLE on a filtered queue. Its place in the list is not a preference —
+              it is pinned under the queue it views (`lib/filteredQueues.ts`), so a handle
+              would offer a move that the next render undoes. */}
+            {filteredFrom ? null : (
+              <Tip label="Drag to reorder queues">
+                {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
+                `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
+                second. */}
+                <IconButton
+                  appearance="ghost"
+                  className="shelfdrag"
+                  intent="neutral"
+                  label="Drag to reorder queues"
+                  size="sm"
+                >
+                  <DragIcon />
+                </IconButton>
+              </Tip>
+            )}
+          </span>
+        </div>
+      }
+      hidden={isHiddenByFilter}
+      aria-label={label}
+    >
+      <h2>
+        {/* `ghost` is the appearance for an icon row — nothing until hovered — which is
+            what all four of this heading's controls painted by hand. The class stays and
+            carries only the ROTATE: ▾ turns to ► when the shelf is collapsed, a state no
+            component prop describes. */}
+        <IconButton
+          appearance="ghost"
+          className="collapse-toggle"
+          intent="neutral"
+          aria-expanded={!isCollapsed}
+          label={
+            isCollapsed ? "Preview queue" : "Collapse queue"
+          }
+          onClick={onToggle}
+          size="sm"
+        >
+          <ChevronDownIcon />
+        </IconButton>
+        {/* An anchor, so the shelf title can be middle-clicked / ⌘-clicked into a new tab
+            like any other link. It records nothing on the way out: `Main` remembers where
+            each history entry was scrolled to, so Back lands here by itself. */}
+        <Link className="open" to={`/q/${setId}`}>
+          <span className="lbl">{label}</span>
+          <span className="sec">{items.length}</span>
+        </Link>
+        {/* WHAT THIS SHELF IS. The badge says the queue is a view; the line beside it names
+            what it is a view OF, because "Filtered" alone leaves the reader to guess which of
+            the shelves above it belongs to. Both sit inside the heading rather than under it,
+            so a collapsed shelf still says so. */}
+        {filteredFrom ? (
+          <>
+            <Badge intent="neutral" size="sm">
+              Filtered
+            </Badge>
+            <Link
+              className="filtered-parent"
+              to={`/q/${filteredFrom.id}`}
+            >
+              filters {filteredFrom.label}
+            </Link>
+          </>
+        ) : null}
+        {/* Inside the heading, beside the Filtered badge and for the same reason: a COLLAPSED
+            shelf still has to say it. */}
+        <SeasonMark set={set} />
+        {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
+            The shared avatar badge and visible name tell two same-activity queues apart. The
+            heading's content is baseline-aligned so the badges and names read as one row. */}
+        <PeopleRow
+          groups={groups}
+          members={members}
+          people={people}
+        />
+        <span className="livepill" hidden={!isLive}>
+          {isLive && now.now?.state === "paused"
+            ? "Paused"
+            : "Playing"}
+        </span>
+      </h2>
+
+      <div className="strip-wrap" ref={wrapRef}>
+        <button
+          aria-label="scroll left"
+          className="scroll left"
+          onClick={() =>
+            stripRef.current?.scrollBy({
+              left: -stripRef.current.clientWidth * 0.85,
+            })
+          }
+          ref={leftRef}
+          type="button"
+        >
+          ‹
+        </button>
+        <ul
+          className="strip"
+          onScroll={updateArrows}
+          ref={stripRef}
+        >
+          {items.length === 0 ? (
+            <li className="empty">
+              <EmptyState
+                description="Open it to add something."
+                heading="Empty"
+                headingLevel={3}
+                size="sm"
+              />
+            </li>
+          ) : (
+            <>
+              {lanes.priority.map((item, index) =>
+                renderTile(item, "priority", index + 1),
+              )}
+              {/* THE DIVIDER, and it is deliberately not a `li.tile`: `useHomeDrags` builds
+                  the queue's new order from `strip.querySelectorAll("li.tile")` and hit-tests
+                  drop slots the same way, so a marker that matched would be sent to the
+                  server as a key. `aria-hidden` because the shelf heading already says the
+                  split in words ("3 priority · 9 pool") — this is the visual echo of that
+                  sentence, not a second copy of it for a screen reader to read out. */}
+              {hasBothLanes ? (
+                <li
+                  aria-hidden="true"
+                  className="lanesplit"
+                >
+                  <span>Random pool</span>
+                </li>
+              ) : null}
+              {lanes.random.map((item) =>
+                renderTile(item, "random"),
+              )}
+            </>
+          )}
+        </ul>
+        <button
+          aria-label="scroll right"
+          className="scroll right"
+          onClick={() =>
+            stripRef.current?.scrollBy({
+              left: stripRef.current.clientWidth * 0.85,
+            })
+          }
+          ref={rightRef}
+          type="button"
+        >
+          ›
+        </button>
+      </div>
+    </Card>
+  )
+}

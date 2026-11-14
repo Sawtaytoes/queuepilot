@@ -44,6 +44,9 @@ import {
 import { usePendingView } from "../state/pendingView"
 import { usePeople } from "../state/people"
 import { setStatus, useStore } from "../state/store"
+import { CrossGlyph } from "./CrossGlyph"
+import { PlusGlyph } from "./PlusGlyph"
+import { StartGlyph } from "./StartGlyph"
 
 /**
  * One tile's height in CSS px, as the windowed grid's starting guess.
@@ -88,69 +91,6 @@ const ROW_BLOCK_SIZE = 132
  * arriving by a different door.
  */
 const ROW_MIN_INLINE_SIZE = 400
-
-/** Add this to a queue. */
-const PlusGlyph = () => (
-  <svg
-    aria-hidden="true"
-    height="14"
-    viewBox="0 0 14 14"
-    width="14"
-  >
-    <path
-      d="M7 1.5v11M1.5 7h11"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="2"
-    />
-  </svg>
-)
-
-/** Choose where this starts. A clock face, not the "⏱" character: a glyph that is a tofu
- *  box in some fonts is the same defect the Watched chip was written to avoid. */
-const StartGlyph = () => (
-  <svg
-    aria-hidden="true"
-    height="14"
-    viewBox="0 0 14 14"
-    width="14"
-  >
-    <circle
-      cx="7"
-      cy="7"
-      fill="none"
-      r="5.5"
-      stroke="currentColor"
-      strokeWidth="1.6"
-    />
-    <path
-      d="M7 3.8V7l2.3 1.6"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.6"
-    />
-  </svg>
-)
-
-/** Dismiss — the same ✕ the queue tile's remove control draws. */
-const CrossGlyph = () => (
-  <svg
-    aria-hidden="true"
-    height="12"
-    viewBox="0 0 12 12"
-    width="12"
-  >
-    <path
-      d="M1.5 1.5l9 9M10.5 1.5l-9 9"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="2"
-    />
-  </svg>
-)
 
 /**
  * A pending item, dressed as the entry the start picker takes.
