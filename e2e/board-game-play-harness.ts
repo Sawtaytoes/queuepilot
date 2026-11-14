@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { waitReady } from './fixture-server.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const NOW = '2026-01-01T00:00:00.000Z';
@@ -225,15 +226,7 @@ export async function startBoardGameServer(port: number): Promise<BoardGameServe
 
   const base = `http://localhost:${port}`;
 
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try {
-      const res = await fetch(`${base}/api/people`);
-      if (res.ok) break;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+  await waitReady(`${base}/api/people`);
 
   return { base, child, dir, storePath: path.join(dir, 'queues.queuepilot.sqlite') };
 }
