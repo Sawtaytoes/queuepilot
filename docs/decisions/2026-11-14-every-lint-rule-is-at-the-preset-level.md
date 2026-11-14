@@ -12,8 +12,10 @@
 
 `pnpm run lint` runs `biome check` and then `eslint .` over `web/`, `server/`, `shared/` and
 `e2e/`. Every ESLint rule is at the level that `createAppConfig` from
-`@charcuterie/eslint-config` sets, and the script passes no `--max-warnings`, so any finding
-fails the run.
+`@charcuterie/eslint-config` sets, and the script passes no `--max-warnings`. Every preset rule
+the repo uses is an error, so a finding fails the run. `eslint.config.mjs` also makes an
+unused `eslint-disable` comment an error (the preset reports one as a warning), so a
+suppression that no longer covers a finding fails the run instead of staying behind.
 
 A name that is fixed by something outside TypeScript keeps that name. That covers a field of
 the app's HTTP JSON, a YAML config key that users already have, a SQLite field, an MQTT
@@ -42,7 +44,7 @@ The sweep ran in four pull requests, each reviewed on its own:
    and 43 suppressions.
 3. #383: 572 renames in `web/`, and each component moves to its own file. `id-length` and
    `react/no-multi-comp` return to `error`.
-4. This change: the last 244 boolean type properties. 50 are internal and are renamed. 194
+4. This change: the last 244 boolean type properties. 53 are internal and are renamed. 191
    keep their names, each with a reason.
 
 Every local rename went through the TypeScript language service. A check then confirmed that
@@ -58,8 +60,8 @@ with no cap makes each new exception a visible line with a reason.
 
 ## Evidence
 
-- `eslint .` after this change: 0 errors and 0 warnings. 194 findings keep their names under
-  185 comments for `@typescript-eslint/naming-convention` (183 next-line comments and two
+- `eslint .` after this change: 0 errors and 0 warnings. 191 findings keep their names under
+  182 comments for `@typescript-eslint/naming-convention` (180 next-line comments and two
   narrow disable blocks), all listed in this change's pull request. The six from #380 and the
   43 from #381 are listed in those pull requests.
 - The reasons, by count: 110 HTTP JSON fields; 15 YAML keys or copies of them; 16 MQTT

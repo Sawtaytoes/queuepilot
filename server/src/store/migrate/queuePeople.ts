@@ -49,8 +49,7 @@ import { ensureImported } from "./yaml.js"
 
 /** What one run did. Reported rather than logged only, so a test can assert on it. */
 export interface QueuePeopleSeedReport {
-  // eslint-disable-next-line @typescript-eslint/naming-convention -- named by a string key in an `Omit<>` type
-  seeded: boolean
+  isSeeded: boolean
   reason: string
   /** Set ids that gained members, and how many each got. */
   seededSets: { setId: string; memberCount: number }[]
@@ -64,7 +63,7 @@ export interface QueuePeopleSeedReport {
 
 const EMPTY: Omit<
   QueuePeopleSeedReport,
-  "seeded" | "reason"
+  "isSeeded" | "reason"
 > = {
   seededSets: [],
   skippedSetIds: [],
@@ -113,7 +112,7 @@ export function seedQueuePeople({
       ...EMPTY,
       reason:
         "STORE_BACKEND=yaml has no queue_people table",
-      seeded: false,
+      isSeeded: false,
     }
   }
 
@@ -124,7 +123,7 @@ export function seedQueuePeople({
     return {
       ...EMPTY,
       reason: "already seeded",
-      seeded: false,
+      isSeeded: false,
     }
   }
 
@@ -207,7 +206,7 @@ export function seedQueuePeople({
 
   return {
     reason: isForced ? "forced" : "first run",
-    seeded: true,
+    isSeeded: true,
     seededSets,
     skippedSetIds: skippedSetIds.sort(),
     unclaimedSetIds,
@@ -229,13 +228,13 @@ export function ensureQueuePeopleSeeded(): QueuePeopleSeedReport {
     return {
       ...EMPTY,
       reason: "already run in this process",
-      seeded: false,
+      isSeeded: false,
     }
   hasRun = true
 
   try {
     const report = seedQueuePeople()
-    if (report.seeded && report.seededSets.length) {
+    if (report.isSeeded && report.seededSets.length) {
       const places = report.seededSets.reduce(
         (sum, row) => sum + row.memberCount,
         0,
@@ -260,7 +259,7 @@ export function ensureQueuePeopleSeeded(): QueuePeopleSeedReport {
     return {
       ...EMPTY,
       reason: errMessage(error),
-      seeded: false,
+      isSeeded: false,
     }
   }
 }

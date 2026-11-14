@@ -15,8 +15,8 @@ import { defineConfig } from "eslint/config"
 // `server/`, `shared/`, and `e2e/` (which `e2e/tsconfig.json`
 // types).
 //
-// Every rule is at the preset's level, and `lint` allows no
-// warnings. A name that something outside TypeScript fixes (an
+// Every rule is at the preset's level, and an unused disable
+// comment is an error (below). A name that something outside TypeScript fixes (an
 // HTTP, YAML, SQLite, MQTT, Plex, or Kavita field, or a field an
 // untyped e2e stub reads) keeps its name, with an
 // `eslint-disable-next-line` and a reason on that line. See
@@ -27,6 +27,16 @@ export default defineConfig(
     appDirectories: ["web"],
     ignores: ["docs/**", "cast_sidecar/**"],
   }),
+
+  // The preset reports an unused `eslint-disable` comment as a
+  // warning, and `lint` passes no `--max-warnings`. As an error,
+  // a suppression that no longer covers a finding fails the run
+  // instead of staying behind.
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: "error",
+    },
+  },
 
   // `shared/queueTitle.ts` belongs to no tsconfig of its own:
   // `web/` and `server/` both import it by relative path, so the

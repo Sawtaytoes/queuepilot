@@ -101,28 +101,26 @@ const STAGED_NAME = "board-game-picker-import.sqlite"
  * new directory cannot be added without saying how it is skipped. */
 const DIRECTORIES: readonly {
   from: string
-  switch: "cache" | "images"
+  switch: "isCopyingCache" | "isCopyingImages"
   to: string
 }[] = [
   {
     from: "images",
-    switch: "images",
+    switch: "isCopyingImages",
     to: "board-game-images",
   },
   {
     from: "cache",
-    switch: "cache",
+    switch: "isCopyingCache",
     to: "board-game-cache",
   },
 ]
 
 interface Options {
   isApplying: boolean
-  // eslint-disable-next-line @typescript-eslint/naming-convention -- read by string key through the directory names
-  cache: boolean
+  isCopyingCache: boolean
   from: string
-  // eslint-disable-next-line @typescript-eslint/naming-convention -- read by string key through the directory names
-  images: boolean
+  isCopyingImages: boolean
   to: string
 }
 
@@ -141,12 +139,12 @@ function parseArgs(argv: readonly string[]): Options {
     process.env.QUEUES_PATH || "/config/queues.yaml"
   return {
     isApplying: argv.includes("--apply"),
-    cache: !argv.includes("--no-cache"),
+    isCopyingCache: !argv.includes("--no-cache"),
     from:
       argFor(argv, "--from") ||
       process.env.BOARD_GAME_PICKER_CONFIG ||
       "/config/board-game-picker",
-    images: !argv.includes("--no-images"),
+    isCopyingImages: !argv.includes("--no-images"),
     to: argFor(argv, "--to") || path.dirname(queues),
   }
 }
