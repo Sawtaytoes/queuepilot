@@ -254,8 +254,8 @@ importers:
   server:
     dependencies:
       '@charcuterie/server':
-        specifier: ^0.6.0
-        version: 0.6.0(@hono/node-server@2.1.1(hono@4.13.13))(hono@4.13.13)(mqtt@5.15.2)
+        specifier: ^0.8.0
+        version: 0.8.0(@hono/node-server@2.1.1(hono@4.13.13))(hono@4.13.13)(mqtt@5.15.2)
       '@hono/node-server':
         specifier: ^2.0.2
         version: 2.1.1(hono@4.13.13)
@@ -328,8 +328,8 @@ importers:
         version: 8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@charcuterie/server':
-        specifier: ^0.6.0
-        version: 0.6.0(vite@8.2.2)
+        specifier: ^0.8.0
+        version: 0.8.0
       '@charcuterie/tsconfig':
         specifier: ^1.0.0
         version: 1.0.0
@@ -472,17 +472,14 @@ packages:
     peerDependencies:
       '@playwright/test': '>=1.40'
 
-  '@charcuterie/server@0.6.0':
-    resolution: {integrity: sha512-kmB0GIrvgzv28KfSjbPBjf5gRcj6qoBKPkY5k+yKU48fjDVG+QMiApXXQlj+T3YxFKplMcLC3E8QHv2bkPEcUA==}
+  '@charcuterie/server@0.8.0':
+    resolution: {integrity: sha512-NBMvq5/IMYu04pthD8ISY0RPu+uwdFVDUum6NH8CgP3/FOpD374UgkVlPEvjRuV6K6PlfTDJWVgKz5w/BH4BAw==}
     peerDependencies:
       '@hono/node-server': '>=1.13'
       hono: '>=4'
       mqtt: '>=5'
-      vite: '>=5'
     peerDependenciesMeta:
       mqtt:
-        optional: true
-      vite:
         optional: true
 
   '@charcuterie/tokens@1.10.2':
@@ -3356,16 +3353,14 @@ snapshots:
       - playwright
       - vitest
 
-  '@charcuterie/server@0.6.0(@hono/node-server@2.1.1(hono@4.13.13))(hono@4.13.13)(mqtt@5.15.2)':
+  '@charcuterie/server@0.8.0': {}
+
+  '@charcuterie/server@0.8.0(@hono/node-server@2.1.1(hono@4.13.13))(hono@4.13.13)(mqtt@5.15.2)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.13)
       hono: 4.13.13
     optionalDependencies:
       mqtt: 5.15.2
-
-  '@charcuterie/server@0.6.0(vite@8.2.2)':
-    optionalDependencies:
-      vite: 8.2.2
 
   '@charcuterie/tokens@1.10.2': {}
 
