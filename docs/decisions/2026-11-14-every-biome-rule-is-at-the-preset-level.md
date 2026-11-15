@@ -60,5 +60,6 @@ the same element, so each move was checked for that.
 - The `app.css` moves were checked two ways. A script compared every pair of selectors whose
   order changed, and reported each pair with equal specificity, the same `!important`, and an
   overlapping property. Each reported pair was read by hand and styles different elements.
-  Then the VRT screens, plus the Configure and entry editor modals, were rendered from `main`
-  and from this change, and every element's computed style was compared.
+  Then the 13 VRT screens and the Configure modal were rendered from `main` and from this
+  change, wide and narrow, light and dark. Every element's computed style matched. The only new
+  element is the heading's rename `<button>`, and those screenshots are byte-identical.
