@@ -26,9 +26,6 @@
       "includes": ["web/**"],
       "linter": {
         "rules": {
-          "style": {
-            "noNonNullAssertion": "off"
-          },
           "a11y": {
             "noLabelWithoutControl": {
               "level": "error",
@@ -39,20 +36,7 @@
                   "SelectListbox"
                 ]
               }
-            },
-            "noNoninteractiveTabindex": "off",
-            "noStaticElementInteractions": "off",
-            "useKeyWithClickEvents": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["web/src/styles/app.css"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noDescendingSpecificity": "off"
+            }
           }
         }
       }

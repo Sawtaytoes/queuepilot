@@ -1,4 +1,5 @@
 import { type RefObject, useEffect } from "react"
+import { defined } from "../../../shared/defined"
 
 import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
@@ -65,9 +66,13 @@ export function useHomeDrags(
   shelvesRef: RefObject<HTMLElement | null>,
 ) {
   useEffect(() => {
-    const shelvesEl = shelvesRef.current
+    const maybeShelves = shelvesRef.current
 
-    if (!shelvesEl) return
+    if (!maybeShelves) return
+
+    // Typed, not narrowed: the drag handlers below are function declarations, and TypeScript
+    // does not carry a narrowing into a hoisted function.
+    const shelvesEl: HTMLElement = maybeShelves
 
     const scrollRegion = findVerticalScrollRegion(shelvesEl)
 
@@ -94,7 +99,7 @@ export function useHomeDrags(
       autoScroll(event.clientY, 80)
 
       const others = [
-        ...shelvesEl!.querySelectorAll<HTMLElement>(
+        ...shelvesEl.querySelectorAll<HTMLElement>(
           ".queue-family:not(.dragging)",
         ),
       ].filter((shelf) => !shelf.hidden)
@@ -136,11 +141,12 @@ export function useHomeDrags(
         return
       }
 
+      const { shelf } = shelfDrag
+
       flipMove(
         others,
-        () =>
-          shelvesEl!.insertBefore(shelfDrag!.shelf, ref),
-        shelfDrag.shelf,
+        () => shelvesEl.insertBefore(shelf, ref),
+        shelf,
       )
     }
 
@@ -158,12 +164,14 @@ export function useHomeDrags(
       document.body.classList.remove("sdrag")
 
       const domOrder = [
-        ...shelvesEl!.querySelectorAll<HTMLElement>(
+        ...shelvesEl.querySelectorAll<HTMLElement>(
           ".shelf",
         ),
-      ].map((shelfEl) => shelfEl.dataset.set!)
+      ].map((shelfEl) =>
+        defined(shelfEl.dataset.set, "a shelf's data-set"),
+      )
 
-      shelvesEl!.insertBefore(shelf, nextSibling)
+      shelvesEl.insertBefore(shelf, nextSibling)
 
       const data = getState().data
 
@@ -237,7 +245,7 @@ export function useHomeDrags(
     // server refuses those three writes for the same reason (`filteredQueues.ts`); this is
     // what stops the drag from being offered in the first place.
     const stripsOnScreen = () => [
-      ...shelvesEl!.querySelectorAll<HTMLElement>(
+      ...shelvesEl.querySelectorAll<HTMLElement>(
         ".shelf:not(.collapsed):not([hidden]):not(.filtered) .strip",
       ),
     ]
@@ -251,7 +259,7 @@ export function useHomeDrags(
     }
 
     const clearDropTargets = () => {
-      shelvesEl!
+      shelvesEl
         .querySelectorAll(".shelf.drop-target")
         .forEach((shelf) => {
           shelf.classList.remove("drop-target")
@@ -305,9 +313,10 @@ export function useHomeDrags(
       let target: HTMLElement | null = null
 
       for (const strip of stripsOnScreen()) {
-        const rect = strip
-          .closest(".strip-wrap")!
-          .getBoundingClientRect()
+        const rect = defined(
+          strip.closest(".strip-wrap"),
+          "a strip's .strip-wrap",
+        ).getBoundingClientRect()
 
         if (
           event.clientX >= rect.left &&
@@ -325,12 +334,16 @@ export function useHomeDrags(
 
       if (!target) return
 
-      target.closest(".shelf")!.classList.add("drop-target")
+      defined(
+        target.closest(".shelf"),
+        "a strip's .shelf",
+      ).classList.add("drop-target")
 
       // Strip auto-scroll near its left/right edge.
-      const wr = target
-        .closest(".strip-wrap")!
-        .getBoundingClientRect()
+      const wr = defined(
+        target.closest(".strip-wrap"),
+        "a strip's .strip-wrap",
+      ).getBoundingClientRect()
 
       if (event.clientX < wr.left + 70)
         target.scrollBy({ behavior: "auto", left: -18 })
@@ -389,10 +402,13 @@ export function useHomeDrags(
         return
       }
 
+      const dropStrip = target
+      const { card } = hpress
+
       flipMove(
         tiles,
-        () => target!.insertBefore(hpress!.card, ref),
-        hpress.card,
+        () => dropStrip.insertBefore(card, ref),
+        card,
       )
     }
 
@@ -421,11 +437,15 @@ export function useHomeDrags(
 
       if (!strip) return
 
-      const toSet =
-        strip.closest<HTMLElement>(".shelf")!.dataset.set!
+      const toSet = defined(
+        strip.closest<HTMLElement>(".shelf")?.dataset.set,
+        "the drop strip's shelf data-set",
+      )
       const keys = [
         ...strip.querySelectorAll<HTMLElement>("li.tile"),
-      ].map((li) => li.dataset.key!)
+      ].map((li) =>
+        defined(li.dataset.key, "a tile's data-key"),
+      )
 
       // Hand the DOM back to React before the optimistic state update.
       parent?.insertBefore(card, nextSibling)
@@ -446,9 +466,11 @@ export function useHomeDrags(
               to.items.map((it) => [it.key, it]),
             )
 
-            to.items = keys
-              .map((key) => byKey.get(key)!)
-              .filter(Boolean)
+            to.items = keys.flatMap((key) => {
+              const item = byKey.get(key)
+
+              return item ? [item] : []
+            })
             bumpRevision()
           }
 
@@ -457,7 +479,10 @@ export function useHomeDrags(
           })
           setStatus("Order saved", "ok")
         } else {
-          const key = card.dataset.key!
+          const key = defined(
+            card.dataset.key,
+            "the dragged tile's data-key",
+          )
           const moved = from?.items.find(
             (it) => it.key === key,
           )
@@ -474,9 +499,11 @@ export function useHomeDrags(
               ]),
             )
 
-            to.items = keys
-              .map((key) => byKey.get(key)!)
-              .filter(Boolean)
+            to.items = keys.flatMap((key) => {
+              const item = byKey.get(key)
+
+              return item ? [item] : []
+            })
             bumpRevision()
           }
 
@@ -487,7 +514,7 @@ export function useHomeDrags(
             toSet,
           })
           setStatus(
-            `Moved to ${data.sets[toSet]!.label}`,
+            `Moved to ${defined(data.sets[toSet], `queue ${toSet}`).label}`,
             "ok",
           )
         }
@@ -523,7 +550,10 @@ export function useHomeDrags(
 
       hpress = {
         card,
-        fromSet: card.dataset.set!,
+        fromSet: defined(
+          card.dataset.set,
+          "a Home tile's data-set",
+        ),
         hiddenEmpty: null,
         isArmed: event.pointerType !== "touch",
         isDragging: false,

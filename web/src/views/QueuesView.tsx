@@ -1,6 +1,7 @@
 import { useAdaptiveColumns } from "@charcuterie/ui"
 import { Fragment, useMemo, useRef } from "react"
 import { useLocation } from "react-router"
+import { defined } from "../../../shared/defined"
 import { AlsoInDivider } from "../components/AlsoInDivider"
 import { LandingFilterBar } from "../components/LandingFilterBar"
 import { useHomeDrags } from "../hooks/useHomeDrags"
@@ -217,7 +218,7 @@ export function QueuesView({
     }
   }
   const renderShelf = (id: string) => {
-    const queue = data!.sets[id]!
+    const queue = defined(data?.sets[id], `queue ${id}`)
     const registrySet = setById(id)
     // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
     // printed the activity unconditionally until 2026-08-26, which renamed

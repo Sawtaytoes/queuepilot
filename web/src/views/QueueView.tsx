@@ -1307,7 +1307,7 @@ export function QueueView({
           </Tip>
           {isPull ? (
             // No device to cast to — hand back the launcher URL instead.
-            <OpenQueueButton set={regSet!} />
+            <OpenQueueButton set={regSet} />
           ) : (
             <>
               {/* A Charcuterie `Button`, `intent="accent"` — what `.playbtn`'s solid accent skin

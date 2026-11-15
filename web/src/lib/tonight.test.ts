@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest"
+import { defined } from "../../../shared/defined"
 import {
   ACTIVITIES,
   ACTIVITY_FILTERS,
@@ -653,7 +654,7 @@ describe("resolveMembers", () => {
     })
 
     const queueWithGroup = withPeople("older-kids", [
-      resolved!,
+      defined(resolved, "the resolved people match"),
     ])
     expect(
       queueMatchesPeople(queueWithGroup, ["grace"]),

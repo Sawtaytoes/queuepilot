@@ -18,7 +18,7 @@ import { ClearIcon } from "./ClearIcon"
  * (decision `2026-07-21-shelf-ui-conventions`):
  *
  * 1. **Keyboard**: ↑/↓ move the highlight, Enter picks it (the first row if none is
- *    highlighted), Esc closes.
+ *    highlighted), Esc closes — from the input, or from a row's own control.
  * 2. **Delegated picks.** The click handler lives on the LIST, not the row. A
  *    listener bound to the row dies when a late search response re-renders the list
  *    between mousedown and mouseup — that was "clicking a result doesn't work".
@@ -254,6 +254,26 @@ export function SearchDropdown<T>({
     row.pick()
   }
 
+  // The list's own keys. A row is picked from the input (↑/↓/Enter, above), so the only
+  // things in the list that take focus are a row's own controls (Add to, Start at, Add
+  // another), and each handles its own keys. Escape from one of them closes the results and
+  // returns focus to the input, as Escape in the input does. Without it the results stayed
+  // open after focus left the input, because only the input's blur closes them.
+  const onListKeyDown = (
+    event: React.KeyboardEvent<HTMLUListElement>,
+  ) => {
+    if (event.key !== "Escape" || event.defaultPrevented)
+      return
+    // A row's Add-to menu is PORTALLED to <body>, and React still bubbles its keys here
+    // through the component tree. Its Escape closes the menu, not the results.
+    if (!listRef.current?.contains(event.target as Node))
+      return
+
+    event.preventDefault()
+    close()
+    inputRef.current?.focus()
+  }
+
   return (
     <>
       <SearchInput
@@ -291,6 +311,7 @@ export function SearchDropdown<T>({
         className={`results${isOpen ? " open" : ""}`}
         id={listId}
         onClick={onListClick}
+        onKeyDown={onListKeyDown}
         ref={listRef}
       >
         {noMatch ? (

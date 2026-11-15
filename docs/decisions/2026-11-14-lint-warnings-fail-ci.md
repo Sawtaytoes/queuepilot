@@ -5,7 +5,8 @@
 - **Type:** Tooling / CI
 - **Supersedes:** In part, [Every lint rule is at the preset's level](2026-11-14-every-lint-rule-is-at-the-preset-level.md):
   its statement that `lint` passes no `--max-warnings`. The rest of that record stands.
-- **Superseded by:** —
+- **Superseded by:** In part, [Every Biome rule is at the preset's level](2026-11-14-every-biome-rule-is-at-the-preset-level.md),
+  for item 4's list of rules that stay lowered.
 
 ## Decision
 

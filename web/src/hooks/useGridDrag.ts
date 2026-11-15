@@ -1,4 +1,5 @@
 import { type RefObject, useEffect } from "react"
+import { defined } from "../../../shared/defined"
 
 import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
@@ -133,9 +134,13 @@ export function useGridDrag(
   // closure cannot go stale.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
-    const grid = gridRef.current
+    const maybeGrid = gridRef.current
 
-    if (!grid) return
+    if (!maybeGrid) return
+
+    // Typed, not narrowed: `reposition` and `onUp` are function declarations, and TypeScript
+    // does not carry a narrowing into a hoisted function.
+    const grid: HTMLElement = maybeGrid
 
     const scrollRegion = findVerticalScrollRegion(grid)
 
@@ -260,7 +265,7 @@ export function useGridDrag(
     const captureSlots = () => {
       slots = []
 
-      for (const lane of lanesOf(grid!)) {
+      for (const lane of lanesOf(grid)) {
         const tiles = [
           ...lane.querySelectorAll<HTMLElement>("li.tile"),
         ]
@@ -332,10 +337,11 @@ export function useGridDrag(
           "li.tile:not(.dragging)",
         ),
       ]
-      const ref = !best.tile
+      const bestTile = best.tile
+      const ref = !bestTile
         ? null
         : (() => {
-            const index = others.indexOf(best.tile!)
+            const index = others.indexOf(bestTile)
 
             // The winning tile IS the dragged one (it is excluded from `others`, so the
             // index misses): the card is already where the pointer is.
@@ -360,15 +366,17 @@ export function useGridDrag(
       // FLIP over EVERY tile on the page, not just this lane's: a promote empties a slot in
       // one lane and opens one in the other, so the tiles that move are in both.
       const moving = [
-        ...grid!.querySelectorAll<HTMLElement>(
+        ...grid.querySelectorAll<HTMLElement>(
           "li.tile:not(.dragging)",
         ),
       ]
 
+      const { card } = press
+
       flipMove(
         moving,
-        () => lane.insertBefore(press!.card, ref),
-        press.card,
+        () => lane.insertBefore(card, ref),
+        card,
       )
     }
 
@@ -456,7 +464,7 @@ export function useGridDrag(
           toggleSelectThrough(
             set,
             key,
-            lanesOf(grid!).flatMap((lane) =>
+            lanesOf(grid).flatMap((lane) =>
               [
                 ...lane.querySelectorAll<HTMLElement>(
                   "li.tile",
@@ -500,10 +508,12 @@ export function useGridDrag(
       // Both lanes, in screen order, as ONE list. The file is a single sequence and the
       // engine plays the priority entries in file order, so priority-then-pool is the only
       // order that means what the screen shows.
-      const keys = lanesOf(grid!).flatMap((lane) =>
+      const keys = lanesOf(grid).flatMap((lane) =>
         [
           ...lane.querySelectorAll<HTMLElement>("li.tile"),
-        ].map((li) => li.dataset.key!),
+        ].map((li) =>
+          defined(li.dataset.key, "a tile's data-key"),
+        ),
       )
 
       // Hand the DOM back to React, then let the optimistic state update repaint
@@ -535,9 +545,11 @@ export function useGridDrag(
           queueSet.items.map((it) => [it.key, it]),
         )
 
-        queueSet.items = keys
-          .map((key) => byKey.get(key)!)
-          .filter(Boolean)
+        queueSet.items = keys.flatMap((key) => {
+          const item = byKey.get(key)
+
+          return item ? [item] : []
+        })
 
         const hit = byKey.get(key)
 

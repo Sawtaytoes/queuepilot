@@ -1,5 +1,6 @@
 import { Button } from "@charcuterie/ui"
 import { useState } from "react"
+import { defined } from "../../../shared/defined"
 import { api } from "../lib/api"
 import { normalizeProductKind } from "../lib/kind"
 import { queuePeopleLabel } from "../lib/people"
@@ -106,7 +107,10 @@ export function SelectionBar({
   const only = (() => {
     if (count !== 1) return null
 
-    const sel = [...selected.values()][0]!
+    const [sel] = selected.values()
+
+    if (!sel) return null
+
     const item = data?.sets[sel.fromSet]?.items.find(
       (it) => it.key === sel.key,
     )
@@ -118,14 +122,17 @@ export function SelectionBar({
   // A Picks queue is two lanes; a rules channel's members are one list. The Lane field is
   // rendered only for the first, so the bar never offers a promote where there is no lane
   // to promote into.
+  const currentQueue = currentSet
+    ? data?.sets[currentSet]
+    : undefined
   const isPicks =
     Boolean(currentSet) &&
     normalizeProductKind(
       // The registry row first, the queues payload second — the same order `QueueView`
       // resolves the lane in, and for the same reason: the registry always carries an
       // effective `kind`.
-      picksSet?.kind ?? data?.sets[currentSet!]?.kind,
-      picksSet?.source ?? data?.sets[currentSet!]?.source,
+      picksSet?.kind ?? currentQueue?.kind,
+      picksSet?.source ?? currentQueue?.source,
     ) === "picks"
   const hasEdit =
     episodes !== null ||
@@ -367,7 +374,8 @@ export function SelectionBar({
               people.people,
               people.groups,
             ),
-            label: data!.sets[id]!.label,
+            label: defined(data?.sets[id], `queue ${id}`)
+              .label,
             value: id,
           }))}
           value={value}

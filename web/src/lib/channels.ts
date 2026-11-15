@@ -67,7 +67,9 @@ export async function fetchRatings(
     ? `${ch.id}::${resolvedBinding.plex_user || ""}`
     : ch.id
 
-  if (ratingsCache.has(key)) return ratingsCache.get(key)!
+  const cached = ratingsCache.get(key)
+
+  if (cached) return cached
 
   const url = ch.has_explicit_profiles
     ? `/api/ratings?uuid=${encodeURIComponent(resolvedBinding.user_uuid || "")}`
