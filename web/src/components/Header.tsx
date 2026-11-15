@@ -245,7 +245,13 @@ export function Header({
           >
             {back?.label ?? "← All queues"}
           </ButtonLink>
-          <h1 id="heading" onClick={begin}>
+          {/* The heading's text is a BUTTON when the queue can be renamed, so the click that
+              starts a rename lands on a control rather than on a bare `<h1>`. It fills the
+              heading (see `#heading .heading-rename` in app.css), so a click anywhere on the
+              heading still starts the rename and nothing on screen moves. It is a tab stop
+              too: the Narrow View hides the Rename pen, so there the heading is the only way
+              to rename from the keyboard. */}
+          <h1 id="heading">
             {isEditing ? (
               <input
                 id="headingedit"
@@ -267,6 +273,14 @@ export function Header({
                 type="text"
                 value={draft}
               />
+            ) : editableSetId ? (
+              <button
+                className="heading-rename"
+                onClick={begin}
+                type="button"
+              >
+                {heading}
+              </button>
             ) : (
               heading
             )}

@@ -254,9 +254,11 @@ export function orderAtPriorityPosition(
     (item) => item.key === movedKey,
   )
 
-  if (from < 0) return items
+  const moved = priority[from]
 
-  const [moved] = priority.splice(from, 1)
+  if (!moved) return items
+
+  priority.splice(from, 1)
   const requested = Number.isFinite(position)
     ? Math.round(position) - 1
     : from
@@ -265,7 +267,7 @@ export function orderAtPriorityPosition(
     Math.min(priority.length, requested),
   )
 
-  priority.splice(at, 0, moved!)
+  priority.splice(at, 0, moved)
 
   return [...priority, ...random]
 }

@@ -192,8 +192,14 @@ export async function drawSurprise(
       index,
       Math.max(0, Math.floor(random() * (index + 1))),
     )
-    const current = activities[index]!
-    activities[index] = activities[swap]!
+    const current = activities[index]
+    const other = activities[swap]
+
+    // Both indices are in range (`swap` is clamped to `index`), so this never skips.
+    if (current === undefined || other === undefined)
+      continue
+
+    activities[index] = other
     activities[swap] = current
   }
 

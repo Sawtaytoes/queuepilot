@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest"
+import { defined } from "../../../shared/defined"
 
 import { SURPRISE_SCOPES } from "./tonight"
 import { drawSurprise, drawTonight } from "./tonightDraw"
@@ -232,9 +233,10 @@ describe("drawTonight", () => {
       pick: queuePick("shows"),
       shortlist: [queuePick("shows")],
     } satisfies TonightPickResponse)
-    const media = SURPRISE_SCOPES.find(
-      (scope) => scope.id === "media",
-    )!
+    const media = defined(
+      SURPRISE_SCOPES.find((scope) => scope.id === "media"),
+      "the media scope",
+    )
 
     const outcome = await drawSurprise(
       {
@@ -259,9 +261,10 @@ describe("drawTonight", () => {
 
   test("tries the other Games activity when the first one has no answer", async () => {
     const calls: { body: unknown; url: string }[] = []
-    const games = SURPRISE_SCOPES.find(
-      (scope) => scope.id === "games",
-    )!
+    const games = defined(
+      SURPRISE_SCOPES.find((scope) => scope.id === "games"),
+      "the games scope",
+    )
     const request = <T>(
       _method: string,
       url: string,
