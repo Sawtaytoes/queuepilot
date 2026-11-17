@@ -1813,6 +1813,10 @@ const POSTER_TIMEOUT_MS = 8000 // the same per-attempt budget as plexGet
 const POSTER_MAX_REDIRECTS = 3
 export async function thumb(
   ratingKey: string,
+  // `jpeg` asks the transcoder for a JPEG. Without it Plex can answer in a much heavier
+  // encoding at the same size: one show's 480x720 poster measured 519,897 bytes plain and
+  // 91,024 bytes as `format=jpeg` (2026-11-17), and the chooser keeps at most 512,000.
+  { format }: { format?: "jpeg" } = {},
 ): Promise<PosterImage | null> {
   let tp: string | null | undefined =
     _thumbPath.get(ratingKey)
@@ -1827,6 +1831,7 @@ export async function thumb(
   const tok = encodeURIComponent(PLEX_TOKEN)
   const transcode =
     `${PLEX_URL}/photo/:/transcode?width=480&height=720&minSize=1&upscale=0` +
+    (format ? `&format=${format}` : "") +
     `&url=${encodeURIComponent(tp)}&X-Plex-Token=${tok}`
   const sep = tp.includes("?") ? "&" : "?"
   const raw = `${PLEX_URL}${tp}${sep}X-Plex-Token=${tok}` // fall back to raw art

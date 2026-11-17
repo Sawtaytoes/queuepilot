@@ -377,11 +377,14 @@ export async function plexServerEpisodes(
   }
 }
 
-/** Read an item's poster without exposing the shared server token or URL. */
+/** Read an item's poster without exposing the shared server token or URL.
+ * `format: "jpeg"` asks that server's transcoder for a bounded JPEG first, then falls back
+ * to the raw thumb; without it the raw thumb is read, as it always was. */
 export async function plexServerThumb(
   access: PlexServerAccess,
   ratingKey: string,
   fetchImpl: Fetch = fetch,
+  { format }: { format?: "jpeg" } = {},
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (!/^\d+$/.test(ratingKey)) return null
   const metadata = await plexServerGet(
@@ -397,22 +400,48 @@ export async function plexServerThumb(
     !thumb.startsWith("/")
   )
     return null
-  const response = await fetchImpl(
-    `${access.baseUrl}${thumb}`,
-    {
-      headers: {
-        "X-Plex-Token": access.token,
-        "X-Plex-Client-Identifier": PLEX_CLIENT_IDENTIFIER,
+  const paths = [
+    ...(format
+      ? [
+          "/photo/:/transcode?width=480&height=720&minSize=1&upscale=0" +
+            `&format=${format}&url=${encodeURIComponent(thumb)}`,
+        ]
+      : []),
+    thumb,
+  ]
+  // Headers AND body are one attempt: a transcode that answers 200 and then stalls or drops
+  // still falls back to the raw thumb. Only the transcode is optional; a failed raw read
+  // still throws, as it always did.
+  const read = async (path: string) => {
+    const response = await fetchImpl(
+      `${access.baseUrl}${path}`,
+      {
+        headers: {
+          "X-Plex-Token": access.token,
+          "X-Plex-Client-Identifier":
+            PLEX_CLIENT_IDENTIFIER,
+        },
+        signal: AbortSignal.timeout(4000),
       },
-      signal: AbortSignal.timeout(4000),
-    },
-  )
-  if (!response.ok) return null
-  return {
-    buffer: Buffer.from(await response.arrayBuffer()),
-    contentType:
-      response.headers.get("content-type") || "image/jpeg",
+    )
+    if (!response.ok) return null
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      contentType:
+        response.headers.get("content-type") ||
+        "image/jpeg",
+    }
   }
+  for (const path of paths) {
+    const image = await read(path).catch(
+      (error: unknown) => {
+        if (path === thumb) throw error
+        return null
+      },
+    )
+    if (image) return image
+  }
+  return null
 }
 
 /** Resolve the display and next-up fields for one shared-server entry. */

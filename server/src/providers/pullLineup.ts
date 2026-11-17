@@ -112,12 +112,18 @@ export async function curatedEntries(
  *
  * `only` names a single entry ("read THIS one"), which is a launch-side affordance — a
  * top-up never passes it, because a background tick has nobody's tap behind it.
+ *
+ * `isReadOnly` is for a caller that only LOOKS at the lineup — the chooser's poster sample.
+ * It never stamps `queued_at`, so drawing a preview writes nothing to `queues.yaml`.
  */
 export async function pullLineup(
   setId: string,
   cfg: RoutingSetCfg,
   provider: Provider,
-  { only = null }: { only?: string | null } = {},
+  {
+    only = null,
+    isReadOnly = false,
+  }: { only?: string | null; isReadOnly?: boolean } = {},
 ): Promise<PlayItem[]> {
   const block = resolveSingle({ ...cfg } as BlockSourceCfg)
   const { play } = await provider.buckets({
@@ -130,7 +136,7 @@ export async function pullLineup(
     // the library shelf instead of its own ninety-three entries.
     entries: await curatedEntries(setId, only, {
       isStampingQueued:
-        provider.isStampingQueuedAt === true,
+        !isReadOnly && provider.isStampingQueuedAt === true,
     }),
     // Same rule the engine uses for the curated shuffle: Random-pool Picks
     // (legacy kind: anime still reads as random via kind.isRandomOrder).

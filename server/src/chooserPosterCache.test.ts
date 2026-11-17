@@ -9,7 +9,26 @@ const mocks = vi.hoisted(() => ({
   ),
 }))
 vi.mock("./chooserPoster.js", () => ({
+  CHOOSER_POSTER_MAX_BYTES: 512_000,
   chooserPoster: mocks.poster,
+}))
+vi.mock("./providers/blocks.js", () => ({
+  providerIdForSet: (set: {
+    provider_id?: string
+    provider_kind?: string
+  }) => set.provider_id || set.provider_kind || "plex",
+}))
+vi.mock("./providers/config.js", () => ({
+  KINDS: [
+    "plex",
+    "kavita",
+    "board-game-picker",
+    "steam",
+    "mister",
+  ],
+  definitionFor: (id: string) =>
+    id === "unknown" ? null : { id, kind: id },
+  isConfigured: (id: string) => id !== "steam",
 }))
 vi.mock("./sets.js", () => ({
   getRegistry: mocks.registry,
@@ -22,6 +41,8 @@ vi.mock("./season.js", () => ({
 import {
   cachedChooserPoster,
   chooserPosterPath,
+  chooserPosterPaths,
+  hasChooserPoster,
   warmChooserPosters,
 } from "./chooserPosterCache.js"
 import { getSet } from "./sets.js"
@@ -168,4 +189,156 @@ test("a null refresh removes previous artwork and negative results expire", asyn
     expect(mocks.poster).toHaveBeenCalledTimes(calls + 1),
   )
   vi.restoreAllMocks()
+})
+
+test("the manifest lists every configured provider's queues, not only Plex", async () => {
+  mocks.registry.mockResolvedValue({
+    sets: [
+      { id: "shows", provider_kind: "plex" },
+      { id: "reading", provider_kind: "kavita" },
+      { id: "reading-narrow", provider_kind: "kavita" },
+      {
+        id: "tabletop",
+        provider_kind: "board-game-picker",
+      },
+      { id: "arcade", provider_kind: "mister" },
+      { id: "desktop-games", provider_kind: "steam" },
+      {
+        id: "orphan",
+        provider_kind: "",
+        provider_id: "unknown",
+      },
+    ],
+  })
+  expect(
+    (await chooserPosterPaths()).map(({ id }) => id),
+  ).toEqual([
+    "shows",
+    "reading",
+    "reading-narrow",
+    "tabletop",
+    "arcade",
+  ])
+})
+
+test("a legacy set with no provider kind is still a Plex queue", () => {
+  expect(
+    hasChooserPoster({
+      id: "legacy",
+      provider_kind: "",
+    } as never),
+  ).toBe(true)
+})
+
+test("the image route serves a reading queue's poster and refuses an unconfigured provider", async () => {
+  mocks.getSet.mockImplementation(async (id: string) => ({
+    id,
+    provider_kind: id === "games" ? "steam" : "kavita",
+  }))
+  mocks.poster.mockResolvedValue({
+    buffer: Buffer.from("cover"),
+    contentType: "image/png",
+  })
+  expect(
+    (await cachedChooserPoster("books"))?.buffer.toString(),
+  ).toBe("cover")
+  const calls = mocks.poster.mock.calls.length
+  expect(await cachedChooserPoster("games")).toBeNull()
+  expect(mocks.poster).toHaveBeenCalledTimes(calls)
+  mocks.getSet.mockImplementation((id: string) =>
+    Promise.resolve({ id, provider_kind: "plex" }),
+  )
+})
+
+test("an oversized image is never cached or served", async () => {
+  mocks.poster.mockResolvedValue({
+    buffer: Buffer.alloc(512_001),
+    contentType: "image/jpeg",
+  })
+  expect(await cachedChooserPoster("huge", true)).toBeNull()
+})
+
+test("a pull provider's found cover is kept 30 minutes and the warmer does not force it", async () => {
+  mocks.getSet.mockImplementation(async (id: string) => ({
+    id,
+    provider_kind: id === "bookshelf" ? "kavita" : "plex",
+  }))
+  mocks.registry.mockResolvedValue({
+    sets: [
+      { id: "bookshelf", provider_kind: "kavita" },
+      { id: "screen", provider_kind: "plex" },
+    ],
+  })
+  mocks.poster.mockResolvedValue({
+    buffer: Buffer.from("cover"),
+    contentType: "image/png",
+  })
+  await warmChooserPosters()
+  await vi.waitFor(() =>
+    expect(mocks.poster).toHaveBeenCalledWith("bookshelf"),
+  )
+  mocks.poster.mockClear()
+  await warmChooserPosters()
+  // Plex is refreshed on every run; the reading queue's fresh cover is not.
+  expect(mocks.poster.mock.calls).toEqual([["screen"]])
+  const realNow = Date.now()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 600_000)
+  mocks.poster.mockClear()
+  await cachedChooserPoster("bookshelf")
+  expect(mocks.poster).not.toHaveBeenCalled()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 1_860_000)
+  await cachedChooserPoster("bookshelf")
+  await vi.waitFor(() =>
+    expect(mocks.poster).toHaveBeenCalledWith("bookshelf"),
+  )
+  vi.restoreAllMocks()
+  mocks.getSet.mockImplementation((id: string) =>
+    Promise.resolve({ id, provider_kind: "plex" }),
+  )
+})
+
+test("stale pull covers and stale misses refresh two at a time, and the warmer waits for them", async () => {
+  const ids = ["r1", "r2", "r3", "r4", "r5", "r6"]
+  mocks.getSet.mockImplementation(async (id: string) => ({
+    id,
+    provider_kind: "kavita",
+  }))
+  mocks.registry.mockResolvedValue({
+    sets: ids.map((id) => ({
+      id,
+      provider_kind: "kavita",
+    })),
+  })
+  // Half hold a cover, half a confirmed miss.
+  mocks.poster.mockImplementation(async (id: string) =>
+    ["r1", "r3", "r5"].includes(id)
+      ? {
+          buffer: Buffer.from(id),
+          contentType: "image/png",
+        }
+      : null,
+  )
+  await warmChooserPosters()
+  const realNow = Date.now()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 1_860_000)
+  const activity = { count: 0, maximum: 0, finished: 0 }
+  mocks.poster.mockImplementation(async () => {
+    activity.count += 1
+    activity.maximum = Math.max(
+      activity.maximum,
+      activity.count,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    activity.count -= 1
+    activity.finished += 1
+    return null
+  })
+  await warmChooserPosters()
+  expect(activity.maximum).toBe(2)
+  expect(activity.finished).toBe(ids.length)
+  expect(activity.count).toBe(0)
+  vi.restoreAllMocks()
+  mocks.getSet.mockImplementation((id: string) =>
+    Promise.resolve({ id, provider_kind: "plex" }),
+  )
 })

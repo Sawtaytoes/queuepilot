@@ -4,7 +4,7 @@
 - **Date:** 2026-10-30
 - **Type:** Design
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** In part, [Every queue gets chooser art from its own provider](2026-11-17-every-queue-gets-chooser-art-from-its-own-provider.md): the manifest covers every provider with covers, not only Plex.
 
 ## Decision
 
