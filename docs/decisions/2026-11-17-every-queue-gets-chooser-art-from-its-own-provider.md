@@ -18,20 +18,27 @@ One predicate, `hasChooserPoster()`, decides this for the manifest, the warmer, 
 1. The lineup head.
 2. The rest of the lineup, in order.
 3. The rest of the queue: every stored entry with an id, in file order, finished entries
-   included, because a finished item still has a picture. A filtered queue skips this
-   step, because it reads its parent's entries and cannot tell here which of them its
-   filter keeps.
+   included, because a finished item still has a picture.
+
+A curated pull queue (one with stored entries) takes art only from its own entries. When
+every entry is finished, its lineup is not built, because the provider would answer from
+the whole library shelf (Kavita does), and a shelf item outside the queue is never used. A
+pull queue with no stored entries is rule-based, and its shelf is its queue.
+
+A filtered reading queue narrows its parent's entries the way its page does: by the
+library each item's tile reports, through `passesFilter()`. A filtered Plex queue is not
+narrowed anywhere in the engine, so its lineup, its items, and its art are its parent's.
 
 A Plex episode shows its show's poster. A Kavita item shows its series cover; a game shows
 its own cover. A candidate that fails, has no art, or is larger than
 `CHOOSER_POSTER_MAX_BYTES` (512,000) is skipped. A candidate is never asked twice, and
-episodes of one show are one poster, so they cost one attempt.
+episodes of one show ask for their show's poster once.
 
-One search requests at most eight images and looks at most at 32 candidates. Every search
-asks the first four candidates first, then continues the rest of the queue from where the
-previous search stopped. Art found past those four parks the search there, so a refresh
-finds it again. A queue searched to its end without art wraps back to its head. A long
-artless prefix therefore costs a few warm-ups, not unbounded work in one.
+Every search starts at the lineup head and walks to the end of the queue, one request at a
+time, up to 2,000 distinct candidates (the engine's own whole-queue cap). A search
+therefore finds art anywhere in the queue, and a restored head wins on the next search.
+The work is proportional to the artless prefix, which is one request for nearly every
+queue.
 
 Plex posters are requested as `format=jpeg` from the home server's transcoder and from a
 shared server's transcoder, with the raw thumb as the fallback. Other callers of
@@ -42,9 +49,10 @@ display chooser show one picture for one queue.
 
 A Plex poster is refreshed on every warm-up, as before. A pull provider's lineup reads each
 curated item (Kavita probes every series), so its found cover is kept for 30 minutes and
-the warmer does not force it.
+the warmer does not force it. The warmer waits for every refresh it starts, stale ones
+included, so it keeps its bound of two queues at a time.
 
-When a search finds no art, the image route answers 404 and the manifest path ends in
+When no candidate has art, the image route answers 404 and the manifest path ends in
 `-none`. A client then draws its own fallback tile. There is no server-side placeholder
 image.
 
@@ -75,12 +83,14 @@ and the image route accepted Plex queues only.
 ## Evidence
 
 - `server/src/chooserPoster.test.ts`: the lineup fallback, the size cap, a failed
-  metadata read, the queue-entry fallback, a failed lineup, no art anywhere, the attempt
-  bound, a search continued across refreshes, the wrap to the head, one show's episodes as
-  one attempt, a filtered queue, a shared server without a grant, Kavita covers (head, next
-  series, a queue whose entries are all finished), and a provider without covers.
+  metadata read, the queue-entry fallback, a failed lineup, no art anywhere, no repeated
+  item, art 52 candidates deep in one search, one show's episodes as one request, a
+  filtered Plex queue, a shared server without a grant, Kavita covers (head, next series, a
+  queue whose entries are all finished, no shelf series outside a curated queue, a filtered
+  queue narrowed by library), and a provider without covers.
 - `server/src/chooserPosterCache.test.ts`: the manifest across provider kinds, an
-  unconfigured provider, an oversized image, and the 30-minute pull cover.
+  unconfigured provider, an oversized image, the 30-minute pull cover, and stale refreshes
+  held to two at a time.
 - `server/src/routes/chooserPosterRoutes.test.ts`: both routes over HTTP.
 - `server/src/plexSources.test.ts`: the shared-server transcode, and its fallback when the
   transcode fails or its body fails.

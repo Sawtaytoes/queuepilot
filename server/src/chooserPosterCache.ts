@@ -62,10 +62,14 @@ export const hasChooserPoster = (set: SetRegistryEntry) =>
 const FOUND_TTL_MS = 300_000
 const PULL_FOUND_TTL_MS = 1_800_000
 const MISSING_TTL_MS = 30_000
-/** Cached bytes belong to the effective configuration, never just the queue ID. */
+/** Cached bytes belong to the effective configuration, never just the queue ID.
+ * `isRefresh` looks again even when the kept image is fresh. `isAwaitingWork` waits for a
+ * look this call started (or found running) instead of answering with the kept image, which
+ * is what lets the warmer keep its two-at-a-time bound. */
 export async function cachedChooserPoster(
   id: string,
   isRefresh = false,
+  isAwaitingWork = false,
 ): Promise<Image> {
   const set = await sets.getSet(id)
   const kind = set ? posterKindOf(set) : null
@@ -115,7 +119,9 @@ export async function cachedChooserPoster(
       pending.set(key, request)
     }
   }
-  return cached && !isRefresh
+  return cached &&
+    !isRefresh &&
+    !(isAwaitingWork && pending.has(key))
     ? cached.image
     : defined(
         pending.get(key),
@@ -159,7 +165,7 @@ export async function warmChooserPosters() {
         paths
           .slice(index, index + 2)
           .map(({ id, isRefresh }) =>
-            cachedChooserPoster(id, isRefresh),
+            cachedChooserPoster(id, isRefresh, true),
           ),
       )
   }, Promise.resolve())

@@ -296,3 +296,49 @@ test("a pull provider's found cover is kept 30 minutes and the warmer does not f
     Promise.resolve({ id, provider_kind: "plex" }),
   )
 })
+
+test("stale pull covers and stale misses refresh two at a time, and the warmer waits for them", async () => {
+  const ids = ["r1", "r2", "r3", "r4", "r5", "r6"]
+  mocks.getSet.mockImplementation(async (id: string) => ({
+    id,
+    provider_kind: "kavita",
+  }))
+  mocks.registry.mockResolvedValue({
+    sets: ids.map((id) => ({
+      id,
+      provider_kind: "kavita",
+    })),
+  })
+  // Half hold a cover, half a confirmed miss.
+  mocks.poster.mockImplementation(async (id: string) =>
+    ["r1", "r3", "r5"].includes(id)
+      ? {
+          buffer: Buffer.from(id),
+          contentType: "image/png",
+        }
+      : null,
+  )
+  await warmChooserPosters()
+  const realNow = Date.now()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 1_860_000)
+  const activity = { count: 0, maximum: 0, finished: 0 }
+  mocks.poster.mockImplementation(async () => {
+    activity.count += 1
+    activity.maximum = Math.max(
+      activity.maximum,
+      activity.count,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    activity.count -= 1
+    activity.finished += 1
+    return null
+  })
+  await warmChooserPosters()
+  expect(activity.maximum).toBe(2)
+  expect(activity.finished).toBe(ids.length)
+  expect(activity.count).toBe(0)
+  vi.restoreAllMocks()
+  mocks.getSet.mockImplementation((id: string) =>
+    Promise.resolve({ id, provider_kind: "plex" }),
+  )
+})

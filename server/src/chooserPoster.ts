@@ -1,4 +1,5 @@
 import * as routing from "./engine/routing.js"
+import { passesFilter } from "./filteredQueues.js"
 import { wireKindForSet } from "./kind.js"
 import * as plex from "./plex.js"
 import {
@@ -19,16 +20,13 @@ import type {
   Provider,
   ProviderCover,
   RoutingSetCfg,
+  SetRegistryEntry,
 } from "./types.js"
 
 /** The largest image the chooser keeps. The cache holds up to 128 of them. */
 export const CHOOSER_POSTER_MAX_BYTES = 512_000
-/** Images that may be REQUESTED in one search. Bounds each warm-up's provider work. */
-const MAX_ART_ATTEMPTS = 8
-/** Candidates that may be looked at in one search, repeats included. */
-const MAX_EXAMINED = 32
-/** The lineup head and the next few items are asked first on EVERY search. */
-const HEAD_WINDOW = 4
+/** The most distinct candidates one search looks at — the engine's own whole-queue cap. */
+const MAX_CANDIDATES = 2000
 
 type PosterImage = ProviderCover
 type Candidate = {
@@ -54,26 +52,14 @@ const isUsable = (
 const candidateKey = ({ id, plexServer }: Candidate) =>
   `${plexServer ?? ""}:${id}`
 
-/** Per queue: where the next search continues after the head window. */
-const resumeAt = new Map<string, number>()
-/** Forget every queue's search position (tests). */
-export function forgetChooserPosterSearch() {
-  resumeAt.clear()
-}
-
 /**
- * The first candidate with usable art. Every search asks the head window first, in order,
- * then continues the rest of the queue from where the previous search stopped. A search
- * requests at most `MAX_ART_ATTEMPTS` images and looks at most at `MAX_EXAMINED`
- * candidates, so a long artless queue is searched across several warm-ups, not one.
- * A candidate that fails, has no art, or is too large to keep moves on to the next.
- * Art found past the head window parks the search there, so the next refresh finds it
- * again instead of replacing it with "none". Null means this search found nothing; the
- * cache retries a null after 30 seconds, and a queue scanned to its end with no art wraps
- * back to its head.
+ * The first candidate with usable art, in order. Every search starts at the lineup head and
+ * walks to the end of the queue, one request at a time, so null means NO candidate has art.
+ * A candidate that fails, has no art, or is too large to keep moves on to the next; a
+ * candidate is never asked twice. The work is proportional to the artless prefix, which is
+ * one request for nearly every queue.
  */
 async function firstArt(
-  setId: string,
   candidates: Candidate[],
   artFor: (candidate: Candidate) => Promise<Art>,
 ): Promise<PosterImage | null> {
@@ -84,41 +70,10 @@ async function firstArt(
     seen.add(key)
     return true
   })
-  const head = Math.min(HEAD_WINDOW, unique.length)
-  const resume = resumeAt.get(setId) ?? head
-  const tailStart =
-    resume > head && resume < unique.length ? resume : head
-  const range = (from: number, to: number) =>
-    Array.from(
-      { length: to - from },
-      (_value, offset) => from + offset,
-    )
-  const order = [
-    ...range(0, head),
-    ...range(tailStart, unique.length),
-  ]
-  let attempts = 0
-  let next = tailStart
-  for (const [examined, index] of order.entries()) {
-    if (
-      attempts >= MAX_ART_ATTEMPTS ||
-      examined >= MAX_EXAMINED
-    )
-      break
-    const candidate = unique[index]
-    if (!candidate) continue
+  for (const candidate of unique.slice(0, MAX_CANDIDATES)) {
     const art = await artFor(candidate).catch(() => null)
-    if (index >= head) next = index + 1
-    if (art === REPEAT) continue
-    attempts += 1
-    if (isUsable(art)) {
-      if (index >= head) resumeAt.set(setId, index)
-      else resumeAt.delete(setId)
-      return art
-    }
+    if (isUsable(art)) return art
   }
-  if (next >= unique.length) resumeAt.delete(setId)
-  else resumeAt.set(setId, next)
   return null
 }
 
@@ -134,14 +89,12 @@ export function pullItemId(item: PlayItem): string | null {
 /**
  * The rest of the queue, after its lineup: every stored entry with an id, in file order,
  * finished ones included — a finished item still has a picture. A pull provider's id is
- * stored in `ratingKey` too. A FILTERED queue reads its parent's entries and cannot tell here which of them its filter
- * keeps, so it offers none rather than another queue's art.
+ * stored in `ratingKey` too. A FILTERED queue's entries are its parent's; the caller narrows
+ * them (see `pullPoster`).
  */
-async function queueEntryCandidates(
+async function storedCandidates(
   setId: string,
-  cfg: RoutingSetCfg,
-): Promise<Candidate[]> {
-  if (cfg.filtered_from) return []
+): Promise<(Candidate & { isDone: boolean })[]> {
   const rows = await queues.listSet(setId).catch(() => [])
   return rows.flatMap((row) => {
     const { ratingKey, extras } = queues.splitEntry(
@@ -152,6 +105,7 @@ async function queueEntryCandidates(
     return [
       {
         id: String(ratingKey),
+        isDone: row.done === true,
         ...(typeof server === "string" && server
           ? { plexServer: server }
           : {}),
@@ -287,46 +241,76 @@ async function plexPoster(
     if (isRepeat("", key)) return REPEAT
     return plex.thumb(key, { format: "jpeg" })
   }
+  // A filtered Plex queue is not narrowed anywhere in the engine (see `filteredQueues.ts`),
+  // so its lineup and its items are its parent's, and so is its art.
   return firstArt(
-    setId,
-    [
-      ...lineup,
-      ...(await queueEntryCandidates(setId, cfg)),
-    ],
+    [...lineup, ...(await storedCandidates(setId))],
     artFor,
   )
 }
 
 /** Kavita, board games, Steam, MiSTer: the provider's own cover for each item. */
 async function pullPoster(
-  setId: string,
+  set: SetRegistryEntry,
   cfg: RoutingSetCfg,
   provider: Provider,
 ): Promise<PosterImage | null> {
   const cover = provider.cover?.bind(provider)
   if (!cover) return null
-  const lineup = await pullLineup(setId, cfg, provider, {
-    isReadOnly: true,
-  }).catch(() => [] as PlayItem[])
-  const entries = await queueEntryCandidates(setId, cfg)
+  const stored = await storedCandidates(set.id)
+  const storedIds = new Set(stored.map(({ id }) => id))
+  // A CURATED queue's art comes only from its own entries. When every entry is finished the
+  // provider would answer from the whole library shelf (Kavita does), so the lineup is not
+  // even built; a queue with no entries is rule-based and its shelf IS its queue.
+  const isCurated = stored.length > 0
+  const lineup =
+    isCurated && stored.every(({ isDone }) => isDone)
+      ? []
+      : await pullLineup(set.id, cfg, provider, {
+          isReadOnly: true,
+        }).catch(() => [] as PlayItem[])
+  const lineupIds = lineup.flatMap((item) => {
+    const id = pullItemId(item)
+    return id && (!isCurated || storedIds.has(id))
+      ? [id]
+      : []
+  })
   return firstArt(
-    setId,
     [
-      ...lineup.flatMap((item) => {
-        const id = pullItemId(item)
-        return id ? [{ id }] : []
-      }),
-      ...entries.map(({ id }) => ({ id })),
-    ],
+      ...lineupIds,
+      ...(await narrowed(set, provider, stored)),
+    ].map((id) => ({ id })),
     ({ id }) => cover(id),
+  )
+}
+
+/**
+ * A filtered queue's stored entries, narrowed by its filter the way its page narrows them:
+ * by the library each item's tile reports (`passesFilter`; an item whose library cannot be
+ * read is kept, as on the page). An ordinary queue's entries pass unchanged.
+ */
+async function narrowed(
+  set: SetRegistryEntry,
+  provider: Provider,
+  stored: Candidate[],
+): Promise<string[]> {
+  const ids = stored.map(({ id }) => id)
+  if (!set.filtered_from || !set.filter?.libraries.length)
+    return ids
+  if (typeof provider.tiles !== "function") return []
+  const rows = await provider.tiles(ids).catch(() => null)
+  if (!rows) return []
+  return ids.filter((_id, index) =>
+    passesFilter(set.filter, {
+      libraryId: rows[index]?.libraryId ?? null,
+    }),
   )
 }
 
 /** Read-only lineup sample: never materialize, persist completion, or start playback.
  * Random queues choose again at playback; artwork is a preview, never a reservation.
  * The lineup head's art comes first, then the rest of the lineup, then the rest of the
- * queue, each through the queue's own provider. Null when this search found no art; see
- * `firstArt` for how a long queue is searched across warm-ups.
+ * queue, each through the queue's own provider. Null only when none of them has art.
  * On-demand image requests keep scans independent of provider latency.
  */
 export async function chooserPoster(
@@ -338,5 +322,5 @@ export async function chooserPoster(
   const provider = providerFor(providerIdForSet({ ...cfg }))
   return provider.kind === "plex"
     ? plexPoster(setId, cfg, provider)
-    : pullPoster(setId, cfg, provider)
+    : pullPoster(set, cfg, provider)
 }
