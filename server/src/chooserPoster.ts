@@ -9,10 +9,7 @@ import {
 } from "./plexSources.js"
 import { providerIdForSet } from "./providers/blocks.js"
 import { providerFor } from "./providers/index.js"
-import {
-  curatedEntries,
-  pullLineup,
-} from "./providers/pullLineup.js"
+import { pullLineup } from "./providers/pullLineup.js"
 import * as queues from "./queues.js"
 import { isSetAvailable } from "./season.js"
 import * as sets from "./sets.js"
@@ -26,8 +23,12 @@ import type {
 
 /** The largest image the chooser keeps. The cache holds up to 128 of them. */
 export const CHOOSER_POSTER_MAX_BYTES = 512_000
-/** Items that may be ASKED for art before the queue is called artless. Bounds warm-up work. */
+/** Images that may be REQUESTED in one search. Bounds each warm-up's provider work. */
 const MAX_ART_ATTEMPTS = 8
+/** Candidates that may be looked at in one search, repeats included. */
+const MAX_EXAMINED = 32
+/** The lineup head and the next few items are asked first on EVERY search. */
+const HEAD_WINDOW = 4
 
 type PosterImage = ProviderCover
 type Candidate = {
@@ -36,12 +37,16 @@ type Candidate = {
   /** A shared Plex server's machine id; absent on the home server and other providers. */
   plexServer?: string
 }
+/** A candidate whose picture this search already asked for (another episode of one show). */
+const REPEAT = Symbol("repeat")
+type Art = PosterImage | null | typeof REPEAT
 
 const isUsable = (
-  image: PosterImage | null | undefined,
+  image: Art | undefined,
 ): image is PosterImage =>
   Boolean(
     image &&
+      image !== REPEAT &&
       image.buffer.length > 0 &&
       image.buffer.length <= CHOOSER_POSTER_MAX_BYTES,
   )
@@ -49,16 +54,28 @@ const isUsable = (
 const candidateKey = ({ id, plexServer }: Candidate) =>
   `${plexServer ?? ""}:${id}`
 
+/** Per queue: where the next search continues after the head window. */
+const resumeAt = new Map<string, number>()
+/** Forget every queue's search position (tests). */
+export function forgetChooserPosterSearch() {
+  resumeAt.clear()
+}
+
 /**
- * The first candidate with usable art, in order, never asking more than
- * `MAX_ART_ATTEMPTS` of them. A candidate that fails, has no art, or is too large to keep
- * moves on to the next; one bad item never leaves the queue artless.
+ * The first candidate with usable art. Every search asks the head window first, in order,
+ * then continues the rest of the queue from where the previous search stopped. A search
+ * requests at most `MAX_ART_ATTEMPTS` images and looks at most at `MAX_EXAMINED`
+ * candidates, so a long artless queue is searched across several warm-ups, not one.
+ * A candidate that fails, has no art, or is too large to keep moves on to the next.
+ * Art found past the head window parks the search there, so the next refresh finds it
+ * again instead of replacing it with "none". Null means this search found nothing; the
+ * cache retries a null after 30 seconds, and a queue scanned to its end with no art wraps
+ * back to its head.
  */
 async function firstArt(
+  setId: string,
   candidates: Candidate[],
-  artFor: (
-    candidate: Candidate,
-  ) => Promise<PosterImage | null>,
+  artFor: (candidate: Candidate) => Promise<Art>,
 ): Promise<PosterImage | null> {
   const seen = new Set<string>()
   const unique = candidates.filter((candidate) => {
@@ -67,13 +84,41 @@ async function firstArt(
     seen.add(key)
     return true
   })
-  for (const candidate of unique.slice(
-    0,
-    MAX_ART_ATTEMPTS,
-  )) {
-    const image = await artFor(candidate).catch(() => null)
-    if (isUsable(image)) return image
+  const head = Math.min(HEAD_WINDOW, unique.length)
+  const resume = resumeAt.get(setId) ?? head
+  const tailStart =
+    resume > head && resume < unique.length ? resume : head
+  const range = (from: number, to: number) =>
+    Array.from(
+      { length: to - from },
+      (_value, offset) => from + offset,
+    )
+  const order = [
+    ...range(0, head),
+    ...range(tailStart, unique.length),
+  ]
+  let attempts = 0
+  let next = tailStart
+  for (const [examined, index] of order.entries()) {
+    if (
+      attempts >= MAX_ART_ATTEMPTS ||
+      examined >= MAX_EXAMINED
+    )
+      break
+    const candidate = unique[index]
+    if (!candidate) continue
+    const art = await artFor(candidate).catch(() => null)
+    if (index >= head) next = index + 1
+    if (art === REPEAT) continue
+    attempts += 1
+    if (isUsable(art)) {
+      if (index >= head) resumeAt.set(setId, index)
+      else resumeAt.delete(setId)
+      return art
+    }
   }
+  if (next >= unique.length) resumeAt.delete(setId)
+  else resumeAt.set(setId, next)
   return null
 }
 
@@ -87,8 +132,9 @@ export function pullItemId(item: PlayItem): string | null {
 }
 
 /**
- * The rest of the queue, after its lineup: every stored entry with an id, in file order.
- * A FILTERED queue reads its parent's entries and cannot tell here which of them its filter
+ * The rest of the queue, after its lineup: every stored entry with an id, in file order,
+ * finished ones included — a finished item still has a picture. A pull provider's id is
+ * stored in `ratingKey` too. A FILTERED queue reads its parent's entries and cannot tell here which of them its filter
  * keeps, so it offers none rather than another queue's art.
  */
 async function queueEntryCandidates(
@@ -195,10 +241,18 @@ async function plexPoster(
     servers.set(server, access)
     return access
   }
+  // Eight episodes of one show are one picture: asking for it again is not a new attempt.
+  const askedPosters = new Set<string>()
+  const isRepeat = (server: string, key: string) => {
+    const asked = `${server}:${key}`
+    if (askedPosters.has(asked)) return true
+    askedPosters.add(asked)
+    return false
+  }
   const artFor = async ({
     id,
     plexServer,
-  }: Candidate): Promise<PosterImage | null> => {
+  }: Candidate): Promise<Art> => {
     if (plexServer) {
       const access = await accessFor(plexServer)
       if (!access) return null
@@ -206,12 +260,14 @@ async function plexPoster(
         access,
         `/library/metadata/${encodeURIComponent(id)}`,
       )
-      return plexServerThumb(
-        access,
-        posterKeyOf(id, data.MediaContainer?.Metadata?.[0]),
-        fetch,
-        { format: "jpeg" },
+      const key = posterKeyOf(
+        id,
+        data.MediaContainer?.Metadata?.[0],
       )
+      if (isRepeat(plexServer, key)) return REPEAT
+      return plexServerThumb(access, key, fetch, {
+        format: "jpeg",
+      })
     }
     const data = (await plex.plexGet(
       `/library/metadata/${encodeURIComponent(id)}`,
@@ -224,12 +280,15 @@ async function plexPoster(
         }[]
       }
     }
-    return plex.thumb(
-      posterKeyOf(id, data.MediaContainer?.Metadata?.[0]),
-      { format: "jpeg" },
+    const key = posterKeyOf(
+      id,
+      data.MediaContainer?.Metadata?.[0],
     )
+    if (isRepeat("", key)) return REPEAT
+    return plex.thumb(key, { format: "jpeg" })
   }
   return firstArt(
+    setId,
     [
       ...lineup,
       ...(await queueEntryCandidates(setId, cfg)),
@@ -249,10 +308,9 @@ async function pullPoster(
   const lineup = await pullLineup(setId, cfg, provider, {
     isReadOnly: true,
   }).catch(() => [] as PlayItem[])
-  const entries = cfg.filtered_from
-    ? []
-    : await curatedEntries(setId).catch(() => [])
+  const entries = await queueEntryCandidates(setId, cfg)
   return firstArt(
+    setId,
     [
       ...lineup.flatMap((item) => {
         const id = pullItemId(item)
@@ -267,7 +325,8 @@ async function pullPoster(
 /** Read-only lineup sample: never materialize, persist completion, or start playback.
  * Random queues choose again at playback; artwork is a preview, never a reservation.
  * The lineup head's art comes first, then the rest of the lineup, then the rest of the
- * queue, each through the queue's own provider. Null only when none of them has art.
+ * queue, each through the queue's own provider. Null when this search found no art; see
+ * `firstArt` for how a long queue is searched across warm-ups.
  * On-demand image requests keep scans independent of provider latency.
  */
 export async function chooserPoster(

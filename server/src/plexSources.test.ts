@@ -284,6 +284,40 @@ describe("shared-server posters", () => {
     )
   })
 
+  test("a transcode whose body fails still falls back to the raw thumb", async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (
+      input: string | URL | Request,
+    ) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.includes("/library/metadata/"))
+        return reply({
+          MediaContainer: {
+            Metadata: [{ thumb: "/art/7/poster" }],
+          },
+        })
+      if (url.includes("/photo/:/transcode"))
+        return {
+          ok: true,
+          headers: new Headers(),
+          arrayBuffer: () =>
+            Promise.reject(new Error("body timeout")),
+        } as unknown as Response
+      return new Response("raw")
+    }) as typeof fetch
+    expect(
+      (
+        await plexServerThumb(access, "7", fetchImpl, {
+          format: "jpeg",
+        })
+      )?.buffer.toString(),
+    ).toBe("raw")
+    expect(urls.at(-1)).toBe(
+      "https://remote.example/art/7/poster",
+    )
+  })
+
   test("without a format the raw thumb is read, as before", async () => {
     const { urls, fetchImpl } = serve(true)
     expect(

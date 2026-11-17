@@ -83,6 +83,7 @@ vi.mock("./plexSources.js", () => ({
 import {
   CHOOSER_POSTER_MAX_BYTES,
   chooserPoster,
+  forgetChooserPosterSearch,
   pullItemId,
 } from "./chooserPoster.js"
 
@@ -97,6 +98,7 @@ const jpeg = { format: "jpeg" }
 
 beforeEach(() => {
   vi.resetAllMocks()
+  forgetChooserPosterSearch()
   mocks.providerKind.mockReturnValue("plex")
   mocks.hasCover.mockReturnValue(true)
   const cfg = {
@@ -247,6 +249,9 @@ test("a queue with no art anywhere has no poster", async () => {
   mocks.listSet.mockResolvedValue([
     { key: "rk:91", value: { ratingKey: "91" } },
   ])
+  mocks.plexGet.mockResolvedValue(
+    metadata({ type: "movie" }),
+  )
   mocks.thumb.mockResolvedValue(null)
   expect(await chooserPoster("learning")).toBeNull()
   expect(mocks.thumb).toHaveBeenCalledTimes(2)
@@ -401,11 +406,16 @@ test("a reading queue whose head has no cover uses the next series", async () =>
   expect(mocks.cover.mock.calls).toEqual([["31"], ["32"]])
 })
 
-test("a fully read reading queue still shows a series cover from its entries", async () => {
+test("a fully read queue still shows a cover from its FINISHED entries", async () => {
   mocks.providerKind.mockReturnValue("kavita")
   mocks.pullLineup.mockResolvedValue([])
-  mocks.curatedEntries.mockResolvedValue([
-    { id: "44", placement: null, batch: null },
+  // Every entry is done: the lineup is empty, and a finished item still has a picture.
+  mocks.listSet.mockResolvedValue([
+    {
+      key: "rk:44",
+      value: { ratingKey: "44" },
+      done: true,
+    },
   ])
   mocks.cover.mockResolvedValue({
     buffer: Buffer.from("series-44"),
@@ -414,10 +424,92 @@ test("a fully read reading queue still shows a series cover from its entries", a
   expect(
     (await chooserPoster("learning"))?.buffer.toString(),
   ).toBe("series-44")
-  // The default — no `isStampingQueued` — is the read-only one.
-  expect(mocks.curatedEntries).toHaveBeenCalledWith(
-    "learning",
+  // The playback list, which drops finished entries and may stamp `queued_at`, is not read.
+  expect(mocks.curatedEntries).not.toHaveBeenCalled()
+})
+
+test("a long artless prefix is searched across refreshes, then the found art stays", async () => {
+  mocks.buckets.mockResolvedValue({
+    play: Array.from({ length: 12 }, (_value, index) => ({
+      ratingKey: String(200 + index),
+    })),
+  })
+  mocks.plexGet.mockResolvedValue(
+    metadata({ type: "movie" }),
   )
+  mocks.thumb.mockImplementation(async (key: string) =>
+    key === "210" ? image("deep") : null,
+  )
+  // The first search asks eight items and stops.
+  expect(await chooserPoster("learning")).toBeNull()
+  expect(mocks.thumb).toHaveBeenCalledTimes(8)
+  // The next one asks the head again, then continues where the first stopped.
+  mocks.thumb.mockClear()
+  expect(
+    (await chooserPoster("learning"))?.buffer.toString(),
+  ).toBe("deep")
+  expect(
+    mocks.thumb.mock.calls.map(([key]) => key),
+  ).toEqual([
+    "200",
+    "201",
+    "202",
+    "203",
+    "208",
+    "209",
+    "210",
+  ])
+  // A refresh finds the same art again rather than replacing it with none.
+  mocks.thumb.mockClear()
+  expect(
+    (await chooserPoster("learning"))?.buffer.toString(),
+  ).toBe("deep")
+  expect(mocks.thumb).toHaveBeenCalledTimes(5)
+})
+
+test("a queue searched to its end without art wraps back to its head", async () => {
+  mocks.buckets.mockResolvedValue({
+    play: Array.from({ length: 10 }, (_value, index) => ({
+      ratingKey: String(300 + index),
+    })),
+  })
+  mocks.plexGet.mockResolvedValue(
+    metadata({ type: "movie" }),
+  )
+  mocks.thumb.mockResolvedValue(null)
+  expect(await chooserPoster("learning")).toBeNull()
+  expect(await chooserPoster("learning")).toBeNull()
+  mocks.thumb.mockClear()
+  expect(await chooserPoster("learning")).toBeNull()
+  expect(mocks.thumb.mock.calls[4]?.[0]).toBe("304")
+})
+
+test("episodes of one show are one poster, not one attempt each", async () => {
+  mocks.buckets.mockResolvedValue({
+    play: [
+      ...Array.from({ length: 9 }, (_value, index) => ({
+        ratingKey: String(400 + index),
+      })),
+      { ratingKey: "500" },
+    ],
+  })
+  mocks.plexGet.mockImplementation(async (path: string) =>
+    metadata(
+      path.endsWith("/500")
+        ? { type: "movie" }
+        : { type: "episode", grandparentRatingKey: "77" },
+    ),
+  )
+  mocks.thumb.mockImplementation(async (key: string) =>
+    key === "77" ? null : image("movie"),
+  )
+  expect(
+    (await chooserPoster("learning"))?.buffer.toString(),
+  ).toBe("movie")
+  expect(mocks.thumb.mock.calls).toEqual([
+    ["77", jpeg],
+    ["500", jpeg],
+  ])
 })
 
 test("a provider without covers has no poster", async () => {

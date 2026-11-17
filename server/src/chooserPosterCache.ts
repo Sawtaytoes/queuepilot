@@ -40,23 +40,36 @@ const generationFor = (set: SetRegistryEntry) =>
  * Plex is configured by the app env rather than the provider secrets file, so it is not
  * asked `isConfigured()`.
  */
-export function hasChooserPoster(set: SetRegistryEntry) {
-  if (!isSetAvailable(set)) return false
+function posterKindOf(set: SetRegistryEntry) {
+  if (!isSetAvailable(set)) return null
   const id = providerIdForSet({ ...set })
   const kind =
     set.provider_kind ||
     definitionFor(id)?.kind ||
     (id === "plex" ? "plex" : "")
-  if (kind === "plex") return true
+  if (kind === "plex") return kind
   return KINDS.includes(kind) && isConfigured(id, kind)
+    ? kind
+    : null
 }
+export const hasChooserPoster = (set: SetRegistryEntry) =>
+  posterKindOf(set) !== null
+/**
+ * How long a found image is kept before it is looked for again. A pull provider's lineup
+ * reads every curated series (Kavita probes each one), so its art is kept for 30 minutes and
+ * the warmer does not force it; a Plex lineup is cheap and keeps the old 5 minutes.
+ */
+const FOUND_TTL_MS = 300_000
+const PULL_FOUND_TTL_MS = 1_800_000
+const MISSING_TTL_MS = 30_000
 /** Cached bytes belong to the effective configuration, never just the queue ID. */
 export async function cachedChooserPoster(
   id: string,
   isRefresh = false,
 ): Promise<Image> {
   const set = await sets.getSet(id)
-  if (!set || !hasChooserPoster(set)) {
+  const kind = set ? posterKindOf(set) : null
+  if (!set || !kind) {
     images.delete(id)
     generations.delete(id)
     return null
@@ -71,7 +84,11 @@ export async function cachedChooserPoster(
     isRefresh ||
     !cached ||
     Date.now() - cached.at >
-      (cached.image ? 300_000 : 30_000)
+      (cached.image
+        ? kind === "plex"
+          ? FOUND_TTL_MS
+          : PULL_FOUND_TTL_MS
+        : MISSING_TTL_MS)
   ) {
     if (!pending.has(key)) {
       const request = chooserPoster(id)
@@ -125,16 +142,25 @@ export async function chooserPosterPaths() {
       artworkPath: chooserPosterPath(set),
     }))
 }
-/** Warm independently of scans, two provider requests at a time. */
+/** Warm independently of scans, two at a time. Plex posters are
+ * refreshed on every run; a pull provider's only once its kept image is stale. */
 export async function warmChooserPosters() {
-  const paths = await chooserPosterPaths()
+  const registry = await sets.getRegistry()
+  const paths = registry.sets.flatMap((set) => {
+    const kind = posterKindOf(set)
+    return kind
+      ? [{ id: set.id, isRefresh: kind === "plex" }]
+      : []
+  })
   await paths.reduce(async (previous, _entry, index) => {
     await previous
     if (index % 2 === 0)
       await Promise.all(
         paths
           .slice(index, index + 2)
-          .map(({ id }) => cachedChooserPoster(id, true)),
+          .map(({ id, isRefresh }) =>
+            cachedChooserPoster(id, isRefresh),
+          ),
       )
   }, Promise.resolve())
   const active = new Set(paths.map(({ id }) => id))

@@ -257,3 +257,42 @@ test("an oversized image is never cached or served", async () => {
   })
   expect(await cachedChooserPoster("huge", true)).toBeNull()
 })
+
+test("a pull provider's found cover is kept 30 minutes and the warmer does not force it", async () => {
+  mocks.getSet.mockImplementation(async (id: string) => ({
+    id,
+    provider_kind: id === "bookshelf" ? "kavita" : "plex",
+  }))
+  mocks.registry.mockResolvedValue({
+    sets: [
+      { id: "bookshelf", provider_kind: "kavita" },
+      { id: "screen", provider_kind: "plex" },
+    ],
+  })
+  mocks.poster.mockResolvedValue({
+    buffer: Buffer.from("cover"),
+    contentType: "image/png",
+  })
+  await warmChooserPosters()
+  await vi.waitFor(() =>
+    expect(mocks.poster).toHaveBeenCalledWith("bookshelf"),
+  )
+  mocks.poster.mockClear()
+  await warmChooserPosters()
+  // Plex is refreshed on every run; the reading queue's fresh cover is not.
+  expect(mocks.poster.mock.calls).toEqual([["screen"]])
+  const realNow = Date.now()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 600_000)
+  mocks.poster.mockClear()
+  await cachedChooserPoster("bookshelf")
+  expect(mocks.poster).not.toHaveBeenCalled()
+  vi.spyOn(Date, "now").mockReturnValue(realNow + 1_860_000)
+  await cachedChooserPoster("bookshelf")
+  await vi.waitFor(() =>
+    expect(mocks.poster).toHaveBeenCalledWith("bookshelf"),
+  )
+  vi.restoreAllMocks()
+  mocks.getSet.mockImplementation((id: string) =>
+    Promise.resolve({ id, provider_kind: "plex" }),
+  )
+})

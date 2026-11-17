@@ -17,14 +17,21 @@ One predicate, `hasChooserPoster()`, decides this for the manifest, the warmer, 
 
 1. The lineup head.
 2. The rest of the lineup, in order.
-3. The rest of the queue: every stored entry with an id, in file order. A filtered queue
-   skips this step, because it reads its parent's entries and cannot tell here which of
-   them its filter keeps.
+3. The rest of the queue: every stored entry with an id, in file order, finished entries
+   included, because a finished item still has a picture. A filtered queue skips this
+   step, because it reads its parent's entries and cannot tell here which of them its
+   filter keeps.
 
 A Plex episode shows its show's poster. A Kavita item shows its series cover; a game shows
 its own cover. A candidate that fails, has no art, or is larger than
-`CHOOSER_POSTER_MAX_BYTES` (512,000) is skipped. At most eight candidates are asked, and a
-candidate is never asked twice.
+`CHOOSER_POSTER_MAX_BYTES` (512,000) is skipped. A candidate is never asked twice, and
+episodes of one show are one poster, so they cost one attempt.
+
+One search requests at most eight images and looks at most at 32 candidates. Every search
+asks the first four candidates first, then continues the rest of the queue from where the
+previous search stopped. Art found past those four parks the search there, so a refresh
+finds it again. A queue searched to its end without art wraps back to its head. A long
+artless prefix therefore costs a few warm-ups, not unbounded work in one.
 
 Plex posters are requested as `format=jpeg` from the home server's transcoder and from a
 shared server's transcoder, with the raw thumb as the fallback. Other callers of
@@ -33,7 +40,11 @@ shared server's transcoder, with the raw thumb as the fallback. Other callers of
 `GET /api/native/queues` carries the same `artworkPath` for each queue, so the TV and the
 display chooser show one picture for one queue.
 
-When no candidate has art, the image route answers 404 and the manifest path ends in
+A Plex poster is refreshed on every warm-up, as before. A pull provider's lineup reads each
+curated item (Kavita probes every series), so its found cover is kept for 30 minutes and
+the warmer does not force it.
+
+When a search finds no art, the image route answers 404 and the manifest path ends in
 `-none`. A client then draws its own fallback tile. There is no server-side placeholder
 image.
 
@@ -65,11 +76,13 @@ and the image route accepted Plex queues only.
 
 - `server/src/chooserPoster.test.ts`: the lineup fallback, the size cap, a failed
   metadata read, the queue-entry fallback, a failed lineup, no art anywhere, the attempt
-  bound, a filtered queue, a shared server without a grant, Kavita covers (head, next
-  series, fully read), and a provider without covers.
+  bound, a search continued across refreshes, the wrap to the head, one show's episodes as
+  one attempt, a filtered queue, a shared server without a grant, Kavita covers (head, next
+  series, a queue whose entries are all finished), and a provider without covers.
 - `server/src/chooserPosterCache.test.ts`: the manifest across provider kinds, an
-  unconfigured provider, and an oversized image.
+  unconfigured provider, an oversized image, and the 30-minute pull cover.
 - `server/src/routes/chooserPosterRoutes.test.ts`: both routes over HTTP.
-- `server/src/plexSources.test.ts`: the shared-server transcode and its fallback.
+- `server/src/plexSources.test.ts`: the shared-server transcode, and its fallback when the
+  transcode fails or its body fails.
 - `server/src/nativeTv.test.ts`: the TV catalog carries the chooser's poster path.
 - The live measurements above were taken inside the deployed container on 2026-11-17.

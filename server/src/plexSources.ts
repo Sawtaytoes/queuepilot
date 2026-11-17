@@ -409,7 +409,10 @@ export async function plexServerThumb(
       : []),
     thumb,
   ]
-  for (const path of paths) {
+  // Headers AND body are one attempt: a transcode that answers 200 and then stalls or drops
+  // still falls back to the raw thumb. Only the transcode is optional; a failed raw read
+  // still throws, as it always did.
+  const read = async (path: string) => {
     const response = await fetchImpl(
       `${access.baseUrl}${path}`,
       {
@@ -420,18 +423,23 @@ export async function plexServerThumb(
         },
         signal: AbortSignal.timeout(4000),
       },
-    ).catch((error: unknown) => {
-      // Only the transcode attempt is optional; a failed raw read still throws, as before.
-      if (path === thumb) throw error
-      return null
-    })
-    if (response?.ok)
-      return {
-        buffer: Buffer.from(await response.arrayBuffer()),
-        contentType:
-          response.headers.get("content-type") ||
-          "image/jpeg",
-      }
+    )
+    if (!response.ok) return null
+    return {
+      buffer: Buffer.from(await response.arrayBuffer()),
+      contentType:
+        response.headers.get("content-type") ||
+        "image/jpeg",
+    }
+  }
+  for (const path of paths) {
+    const image = await read(path).catch(
+      (error: unknown) => {
+        if (path === thumb) throw error
+        return null
+      },
+    )
+    if (image) return image
   }
   return null
 }
