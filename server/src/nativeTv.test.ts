@@ -797,6 +797,21 @@ describe("native TV queue titles", () => {
     expect(ids).toContain("grace_shorts")
   })
 
+  test("gives every queue the chooser's poster path, so the TV and the chooser agree", async () => {
+    const queues = (
+      (await nativeQueues([])) as {
+        queues: { id: string; artworkPath: string }[]
+      }
+    ).queues
+    expect(queues.length).toBeGreaterThan(0)
+    for (const queue of queues)
+      expect(queue.artworkPath).toMatch(
+        new RegExp(
+          `^/api/chooser/poster/${queue.id}\\?v=[0-9a-f]{16}-`,
+        ),
+      )
+  })
+
   test("keeps a queue's number when the people filter hides its siblings", async () => {
     // Numbered over the whole registry before the filter, like the web page: hiding Ada's
     // queues must not turn the second Rules queue into the first.
