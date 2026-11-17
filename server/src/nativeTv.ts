@@ -37,9 +37,11 @@ import {
   unlock,
 } from "./nativeLock.js"
 import {
+  type NativeLanguages,
   nativeClient,
   nativeGrant,
   nativeHomeUsers,
+  nativeLanguages,
   nativeScopeProof,
   nativeTimeline,
   nativeVerifiedProfile,
@@ -137,6 +139,11 @@ export interface NativePlaybackGrant {
 export type NativePlanResponse = NativePlan & {
   sessionKey: string
   grants: NativePlaybackGrant[]
+  /**
+   * The queue profile's plex.tv language settings, read with its own proof, for the TV to apply
+   * when Plex selects no stream. Response only, like `grants`; null when plex.tv did not answer.
+   */
+  languages: NativeLanguages | null
 }
 
 export interface NativeEvent {
@@ -434,6 +441,8 @@ async function planForQueue(
   const identity = {
     machineIdentifier: queueAccess.homeServerId,
   }
+  // Read while the lineup is chosen. Never fails the plan: null leaves Plex's selection alone.
+  const languages = nativeLanguages(credential)
   const token = home.token
   if (cfg.source === "queue")
     await watchedReset.applySeasonalReset(setId, cfg)
@@ -634,7 +643,12 @@ async function planForQueue(
       token: access.token,
     })
   }
-  return { ...plan, sessionKey, grants: playback }
+  return {
+    ...plan,
+    sessionKey,
+    grants: playback,
+    languages: await languages,
+  }
 }
 
 export function readNativePlan(
