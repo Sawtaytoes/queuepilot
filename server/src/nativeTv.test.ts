@@ -73,6 +73,24 @@ const fixture = vi.hoisted(() => ({
   scopeProof: vi.fn(async (uuid: string | null) =>
     uuid ? `fixture-switched-${uuid}` : "fixture-owner",
   ),
+  /** Each minted proof's plex.tv language settings; the device's own proof has none here. */
+  languages: vi.fn(async (proof: string) =>
+    proof === "fixture-owner"
+      ? {
+          defaultAudioLanguage: "en",
+          autoSelectAudio: true,
+          defaultSubtitleLanguage: "en",
+          autoSelectSubtitle: 1,
+        }
+      : proof.startsWith("fixture-switched-grace")
+        ? {
+            defaultAudioLanguage: "ja",
+            autoSelectAudio: true,
+            defaultSubtitleLanguage: "en",
+            autoSelectSubtitle: 2,
+          }
+        : null,
+  ),
 }))
 vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<
@@ -195,6 +213,8 @@ vi.mock("./nativePlex.js", () => ({
   },
   nativeScopeProof: (uuid: string | null) =>
     fixture.scopeProof(uuid),
+  nativeLanguages: (proof: string) =>
+    fixture.languages(proof),
   nativeGrant: async () => ({
     id: "fixture-home-server",
     baseUrl: "https://media.example.com",
@@ -326,6 +346,7 @@ beforeEach(() => {
         : binding,
   )
   fixture.scopeProof.mockClear()
+  fixture.languages.mockClear()
   resetLockState()
   fixture.provider.profileToken.mockResolvedValue(
     "fixture-server-token",
@@ -470,6 +491,17 @@ describe("native TV sessions", () => {
     )
     expect(plan.profileUuid).toBeNull()
     expect(fixture.scopeProof).toHaveBeenCalledWith(null)
+    // Its language settings are the queue profile's too, never the device's.
+    expect(plan.languages).toMatchObject({
+      defaultAudioLanguage: "en",
+      autoSelectSubtitle: 1,
+    })
+    expect(fixture.languages).toHaveBeenCalledWith(
+      "fixture-owner",
+    )
+    expect(fixture.languages).not.toHaveBeenCalledWith(
+      "fixture-child",
+    )
     expect(fixture.scopeProof).not.toHaveBeenCalledWith(
       "grace-uuid",
     )
@@ -512,6 +544,13 @@ describe("native TV sessions", () => {
       expect(fixture.scopeProof).toHaveBeenCalledWith(
         "grace-uuid",
       )
+      // The TV applies Grace's own languages when Plex selects no stream.
+      expect(plan.languages).toEqual({
+        defaultAudioLanguage: "ja",
+        autoSelectAudio: true,
+        defaultSubtitleLanguage: "en",
+        autoSelectSubtitle: 2,
+      })
       // Progress scrobbles through the queue profile's grant, never the device's.
       await nativeEvent(plan.id, plan.sessionKey, event())
       expect(fixture.timeline).toHaveBeenCalledOnce()

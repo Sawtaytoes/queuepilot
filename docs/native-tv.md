@@ -61,7 +61,12 @@ Decision: `docs/decisions/2026-10-23-the-native-tv-plays-each-queue-as-its-own-p
   signed in as another (possibly restricted) profile streams the items as the queue's profile.
   Grants are in the response only: never stored in `native_tv_sessions` and never returned by
   `GET /api/native/sessions/:id`; `continue` returns fresh ones with the next window. No
-  owner token and no profile switch token is ever returned.
+  owner token and no profile switch token is ever returned. `languages` carries the queue
+  profile's plex.tv language settings (`defaultAudioLanguage`, `autoSelectAudio`,
+  `defaultSubtitleLanguage`, `autoSelectSubtitle`: 0 manual, 1 with foreign audio, 2 always),
+  read with that profile's own proof, or null when plex.tv does not answer. The TV applies them
+  only when Plex marks no audio or subtitle stream `selected`, since it holds no plex.tv token for
+  another profile. Like `grants`, they are in the response only.
   `start` = `{entryKey, ratingKey, plexServer?, mode: "continue" | "only"}` (Picks queues only)
   begins at a picked item: `continue` plays it, the rest of its entry that is not watched, then
   the engine's lineup; `only` plays it alone and does not refill. Nothing before the pick is

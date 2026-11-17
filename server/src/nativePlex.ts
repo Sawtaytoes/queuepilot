@@ -43,6 +43,59 @@ async function cloud(
     )
   return response.json()
 }
+/**
+ * A profile's plex.tv language settings: the `profile` fields of `GET /api/v2/user`. A native TV
+ * applies them when Plex marks no audio or subtitle stream `selected` for an item. The TV holds
+ * no plex.tv token for a queue that plays as another profile, so the plan carries them.
+ */
+export interface NativeLanguages {
+  defaultAudioLanguage: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
+  autoSelectAudio: boolean
+  defaultSubtitleLanguage: string | null
+  /** 0 manual, 1 with audio in another language, 2 always; null when plex.tv does not say. */
+  autoSelectSubtitle: number | null
+}
+const languageOf = (value: unknown): string | null =>
+  typeof value === "string" && value.trim()
+    ? value.trim()
+    : null
+/**
+ * The language settings of the profile `proof` belongs to, or null when plex.tv does not answer.
+ * Null is safe: Plex's own stream selection still plays, and the TV never substitutes another
+ * profile's settings.
+ */
+export async function nativeLanguages(
+  proof: string,
+): Promise<NativeLanguages | null> {
+  try {
+    const user = (await cloud("/api/v2/user", proof)) as {
+      profile?: Record<string, unknown> | null
+    }
+    const profile = user?.profile
+    if (!profile || typeof profile !== "object") return null
+    const subtitleMode = Number(profile.autoSelectSubtitle)
+    return {
+      defaultAudioLanguage: languageOf(
+        profile.defaultAudioLanguage,
+      ),
+      autoSelectAudio:
+        profile.autoSelectAudio === true ||
+        profile.autoSelectAudio === 1 ||
+        profile.autoSelectAudio === "1",
+      defaultSubtitleLanguage: languageOf(
+        profile.defaultSubtitleLanguage,
+      ),
+      autoSelectSubtitle:
+        profile.autoSelectSubtitle == null ||
+        !Number.isInteger(subtitleMode)
+          ? null
+          : subtitleMode,
+    }
+  } catch {
+    return null
+  }
+}
 export async function nativeHomeUsers(): Promise<
   (HomeUser & { thumb?: string })[]
 > {
