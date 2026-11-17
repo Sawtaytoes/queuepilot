@@ -305,6 +305,57 @@ test("art far down the queue is found in ONE search, so a 404 means none anywher
   ).toBe("head")
   expect(mocks.thumb.mock.calls).toEqual([["200", jpeg]])
 })
+test("2,000 episodes of one artless show do not hide a stored item's art", async () => {
+  mocks.buckets.mockResolvedValue({
+    play: Array.from({ length: 2000 }, (_value, index) => ({
+      ratingKey: String(10_000 + index),
+    })),
+  })
+  mocks.listSet.mockResolvedValue([
+    { key: "rk:5", value: { ratingKey: "5" } },
+  ])
+  mocks.plexGet.mockImplementation(async (path: string) =>
+    metadata(
+      path.endsWith("/5")
+        ? { type: "movie" }
+        : { type: "episode", grandparentRatingKey: "77" },
+    ),
+  )
+  mocks.thumb.mockImplementation(async (key: string) =>
+    key === "5" ? image("stored") : null,
+  )
+  expect(
+    (await chooserPoster("learning"))?.buffer.toString(),
+  ).toBe("stored")
+  // One request for the show's poster, then the stored item's.
+  expect(mocks.thumb.mock.calls).toEqual([
+    ["77", jpeg],
+    ["5", jpeg],
+  ])
+})
+
+test("a reading queue's 2,001st finished entry still supplies its cover", async () => {
+  mocks.providerKind.mockReturnValue("kavita")
+  mocks.listSet.mockResolvedValue(
+    Array.from({ length: 2001 }, (_value, index) => ({
+      key: `rk:${index}`,
+      value: { ratingKey: String(index) },
+      done: true,
+    })),
+  )
+  mocks.cover.mockImplementation(async (id: string) => {
+    if (id !== "2000") throw new Error("HTTP 404")
+    return {
+      buffer: Buffer.from("last"),
+      contentType: "image/png",
+    }
+  })
+  expect(
+    (await chooserPoster("learning"))?.buffer.toString(),
+  ).toBe("last")
+  expect(mocks.cover).toHaveBeenCalledTimes(2001)
+})
+
 test("a filtered Plex queue uses its parent's entries, as its lineup does", async () => {
   const cfg = {
     id: "narrow",

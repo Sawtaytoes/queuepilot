@@ -35,10 +35,10 @@ its own cover. A candidate that fails, has no art, or is larger than
 episodes of one show ask for their show's poster once.
 
 Every search starts at the lineup head and walks to the end of the queue, one request at a
-time, up to 2,000 distinct candidates (the engine's own whole-queue cap). A search
-therefore finds art anywhere in the queue, and a restored head wins on the next search.
-The work is proportional to the artless prefix, which is one request for nearly every
-queue.
+time, with no cap: the candidates are the lineup and the stored entries, both finite, and
+stopping early would answer "no art" for a queue that has some. A search therefore finds
+art anywhere in the queue, and a restored head wins on the next search. The work is
+proportional to the artless prefix, which is one request for nearly every queue.
 
 Plex posters are requested as `format=jpeg` from the home server's transcoder and from a
 shared server's transcoder, with the raw thumb as the fallback. Other callers of
@@ -84,7 +84,8 @@ and the image route accepted Plex queues only.
 
 - `server/src/chooserPoster.test.ts`: the lineup fallback, the size cap, a failed
   metadata read, the queue-entry fallback, a failed lineup, no art anywhere, no repeated
-  item, art 52 candidates deep in one search, one show's episodes as one request, a
+  item, art 52 candidates deep in one search, a stored item after 2,000 episodes of one
+  artless show, a reading queue's 2,001st finished entry, one show's episodes as one request, a
   filtered Plex queue, a shared server without a grant, Kavita covers (head, next series, a
   queue whose entries are all finished, no shelf series outside a curated queue, a filtered
   queue narrowed by library), and a provider without covers.

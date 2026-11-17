@@ -25,9 +25,6 @@ import type {
 
 /** The largest image the chooser keeps. The cache holds up to 128 of them. */
 export const CHOOSER_POSTER_MAX_BYTES = 512_000
-/** The most distinct candidates one search looks at — the engine's own whole-queue cap. */
-const MAX_CANDIDATES = 2000
-
 type PosterImage = ProviderCover
 type Candidate = {
   /** The id the provider's art is read by: a Plex ratingKey, a Kavita series, a game id. */
@@ -70,7 +67,9 @@ async function firstArt(
     seen.add(key)
     return true
   })
-  for (const candidate of unique.slice(0, MAX_CANDIDATES)) {
+  // No cap: the list is the lineup plus the stored entries, both finite, and stopping
+  // early would answer "no art" for a queue that has some.
+  for (const candidate of unique) {
     const art = await artFor(candidate).catch(() => null)
     if (isUsable(art)) return art
   }
