@@ -13,6 +13,7 @@ vi.mock("./config.js", () => ({
 
 import {
   nativeGrant,
+  nativeLanguages,
   nativeVerifiedProfile,
   verifiedFetch,
 } from "./nativePlex.js"
@@ -42,6 +43,30 @@ beforeEach(() => {
         options?: RequestInit & { dispatcher?: unknown },
       ) => {
         expect(options?.dispatcher).toBeDefined() // Every new call opts into certificate verification.
+        const userToken = (
+          options?.headers as
+            | Record<string, string>
+            | undefined
+        )?.["X-Plex-Token"]
+        if (
+          input.endsWith("/api/v2/user") &&
+          userToken === "fixture-unavailable"
+        )
+          return new Response("", { status: 503 })
+        if (
+          input.endsWith("/api/v2/user") &&
+          userToken === "fixture-languages"
+        )
+          return Response.json({
+            id: 2,
+            uuid: "grace-uuid",
+            profile: {
+              defaultAudioLanguage: "ja",
+              autoSelectAudio: true,
+              defaultSubtitleLanguage: " en ",
+              autoSelectSubtitle: 1,
+            },
+          })
         if (input.endsWith("/api/v2/user"))
           return Response.json(
             (
@@ -86,6 +111,25 @@ beforeEach(() => {
       },
     ),
   )
+})
+describe("native profile languages", () => {
+  test("reads the profile's plex.tv language settings, and null when plex.tv cannot say", async () => {
+    expect(
+      await nativeLanguages("fixture-languages"),
+    ).toEqual({
+      defaultAudioLanguage: "ja",
+      autoSelectAudio: true,
+      defaultSubtitleLanguage: "en",
+      autoSelectSubtitle: 1,
+    })
+    // A user record with no `profile`, and a plex.tv failure, leave Plex's selection alone.
+    expect(
+      await nativeLanguages("fixture-child"),
+    ).toBeNull()
+    expect(
+      await nativeLanguages("fixture-unavailable"),
+    ).toBeNull()
+  })
 })
 describe("native direct Plex grants", () => {
   test("verifies actual managed and owner identities", async () => {
