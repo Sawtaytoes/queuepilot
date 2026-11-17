@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import {
   plexServerSearch,
+  plexServerThumb,
   plexSourcesForToken,
 } from "./plexSources.js"
 
@@ -212,5 +213,120 @@ describe("shared Plex search", () => {
       "/library/sections/7/all?title=Fixture",
     )
     expect(requests[0]?.token).toBe("friend-grant")
+  })
+})
+
+describe("shared-server posters", () => {
+  const access = {
+    id: "remote",
+    name: "Remote",
+    baseUrl: "https://remote.example",
+    token: "remote-grant",
+    libraries: [],
+  }
+  const serve = (isTranscodeOk: boolean) => {
+    const urls: string[] = []
+    const fetchImpl = (async (
+      input: string | URL | Request,
+    ) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.includes("/library/metadata/"))
+        return reply({
+          MediaContainer: {
+            Metadata: [{ thumb: "/art/7/poster" }],
+          },
+        })
+      if (url.includes("/photo/:/transcode"))
+        return isTranscodeOk
+          ? new Response("small", {
+              headers: { "Content-Type": "image/jpeg" },
+            })
+          : new Response(null, { status: 500 })
+      return new Response("raw", {
+        headers: { "Content-Type": "image/png" },
+      })
+    }) as typeof fetch
+    return { urls, fetchImpl }
+  }
+
+  test("a JPEG request reads that server's transcoder, and the token stays in a header", async () => {
+    const { urls, fetchImpl } = serve(true)
+    const image = await plexServerThumb(
+      access,
+      "7",
+      fetchImpl,
+      {
+        format: "jpeg",
+      },
+    )
+    expect(image?.buffer.toString()).toBe("small")
+    expect(urls[1]).toContain(
+      "https://remote.example/photo/:/transcode?",
+    )
+    expect(urls[1]).toContain("format=jpeg")
+    expect(urls.join(" ")).not.toContain("remote-grant")
+  })
+
+  test("a failed transcode falls back to the raw thumb", async () => {
+    const { urls, fetchImpl } = serve(false)
+    const image = await plexServerThumb(
+      access,
+      "7",
+      fetchImpl,
+      {
+        format: "jpeg",
+      },
+    )
+    expect(image?.buffer.toString()).toBe("raw")
+    expect(urls.at(-1)).toBe(
+      "https://remote.example/art/7/poster",
+    )
+  })
+
+  test("a transcode whose body fails still falls back to the raw thumb", async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (
+      input: string | URL | Request,
+    ) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.includes("/library/metadata/"))
+        return reply({
+          MediaContainer: {
+            Metadata: [{ thumb: "/art/7/poster" }],
+          },
+        })
+      if (url.includes("/photo/:/transcode"))
+        return {
+          ok: true,
+          headers: new Headers(),
+          arrayBuffer: () =>
+            Promise.reject(new Error("body timeout")),
+        } as unknown as Response
+      return new Response("raw")
+    }) as typeof fetch
+    expect(
+      (
+        await plexServerThumb(access, "7", fetchImpl, {
+          format: "jpeg",
+        })
+      )?.buffer.toString(),
+    ).toBe("raw")
+    expect(urls.at(-1)).toBe(
+      "https://remote.example/art/7/poster",
+    )
+  })
+
+  test("without a format the raw thumb is read, as before", async () => {
+    const { urls, fetchImpl } = serve(true)
+    expect(
+      (
+        await plexServerThumb(access, "7", fetchImpl)
+      )?.buffer.toString(),
+    ).toBe("raw")
+    expect(
+      urls.some((url) => url.includes("transcode")),
+    ).toBe(false)
   })
 })

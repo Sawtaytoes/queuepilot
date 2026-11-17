@@ -11,6 +11,7 @@ import {
   queueTitle,
 } from "../../shared/queueTitle.js"
 import * as cache from "./cache.js"
+import { chooserPosterPath } from "./chooserPosterCache.js"
 import { defined } from "./defined.js"
 import { playbackLength } from "./engine/playbackLength.js"
 import * as resolve from "./engine/resolve.js"
@@ -353,6 +354,9 @@ export async function nativeQueues(
       audience: audienceText(members, nameOf),
       playsAs: playsAs(s.id, s.requires_profile),
       isLocked: isQueueLocked(s),
+      // The SAME poster path the display chooser gets, so the TV and the chooser show one
+      // picture for one queue. A 404 there means the queue has no art anywhere.
+      artworkPath: chooserPosterPath(s),
     }))
   return {
     queues,
