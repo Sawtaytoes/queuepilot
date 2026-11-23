@@ -16,17 +16,20 @@ fs.writeFileSync(
   `#!/usr/bin/env node
 const fs = require("node:fs")
 const args = process.argv.slice(2)
+if (args[2].startsWith("/early")) { process.stderr.write("refused before reading\\n"); process.exit(7) }
 const body = args.includes("--data") ? fs.readFileSync(0, "latin1") : null
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, body, fallback: process.env.GATEHOUSE_FALLBACK_ENV_FILE }) + "\\n")
 const path = args[2]
 if (path.startsWith("/missing")) { process.stderr.write("the upstream answered HTTP 404 (through Gatehouse)\\n"); process.stdout.write("<html/>"); process.exit(3) }
 if (path.startsWith("/denied")) { process.stderr.write("HTTP 403: denied (rule). Do not fall back.\\n"); process.exit(4) }
+if (path.startsWith("/playQueues")) { process.stderr.write("gatehouse-request: Gatehouse did not work (no_rule)\\n"); process.exit(6) }
 if (path.startsWith("/held")) { process.stderr.write("HTTP 202: the request waits for the owner's approval\\n"); process.exit(5) }
 process.stdout.write(path.startsWith("/thumb") ? Buffer.from([0xff, 0xd8, 0xff, 0xe0]) : '{"MediaContainer":{"size":1}}')
 `,
 )
 fs.chmodSync(helper, 0o755)
 process.env.GATEHOUSE_REQUEST = helper
+process.env.PLEX_WEB_URL = "https://plex.example.com/"
 
 const {
   startGatehousePlex,
@@ -94,6 +97,11 @@ assert.equal(
 assert.equal(statusOf(3, "no status"), 502)
 assert.equal(statusOf(4, ""), 403)
 assert.equal(statusOf(5, ""), 502)
+assert.equal(
+  statusOf(6, "Gatehouse did not work (no_rule)"),
+  403,
+)
+assert.equal(statusOf(6, "unreachable"), 502)
 assert.equal(statusOf(null, ""), 502)
 
 const server = await startGatehousePlex(0)
@@ -153,6 +161,34 @@ try {
   assert.equal(denied.status, 403)
   assert.equal((await denied.json()).exitCode, 4)
   assert.equal((await fetch(`${base}/held`)).status, 502)
+
+  // A web-client link redirects to PLEX_WEB_URL and never reaches the helper.
+  const link = await fetch(
+    `${base}/web/index.html?X-Plex-Token=leak`,
+    { redirect: "manual" },
+  )
+  assert.equal(link.status, 302)
+  assert.equal(
+    link.headers.get("location"),
+    "https://plex.example.com/web/index.html",
+  )
+
+  // No broker rule for play queues: a refusal, reported as 403.
+  assert.equal(
+    (await fetch(`${base}/playQueues/1`)).status,
+    403,
+  )
+
+  // A helper that exits without reading a large body must not crash the forwarder.
+  const early = await fetch(`${base}/early`, {
+    method: "PUT",
+    body: Buffer.alloc(4 * 1024 * 1024, 120),
+  })
+  assert.equal(early.status, 502)
+  assert.equal(
+    (await fetch(`${base}/library/sections`)).status,
+    200,
+  )
 
   const [first, scrobble, playlist, headCall] = calls()
   assert.deepEqual(first.args.slice(0, 3), [

@@ -10,12 +10,18 @@
 // Environment:
 //   GATEHOUSE_REQUEST     the helper (default /work/bin/gatehouse-request)
 //   GATEHOUSE_PLEX_PORT   the loopback port (default 18799)
+//   PLEX_WEB_URL          optional; the Plex web client's origin. The server builds tile links
+//                         as PLEX_API_SERVER_URL/web/index.html#!/…, so they point here; this
+//                         forwarder redirects /web/… to PLEX_WEB_URL, or answers 404 without it.
 //
 // Limits, all from the helper: it reports no response headers, so the Content-Type is sniffed
 // from the body; it reports the status only for an error, so every success is a 200; and the
 // broker refuses HEAD, so a HEAD is sent as a GET and its body dropped. Plex.tv calls do not
 // pass through here, so features that need plex.tv (Home users, per-account tokens, devices)
 // fall back to their degraded paths in these harnesses.
+//
+// The broker has no Plex rule for /playQueues, so a play-queue call (playback, the
+// spike-playqueue-extend script) answers 403 here until such a rule exists.
 import { spawn } from "node:child_process"
 import { resolve as resolvePath } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -33,6 +39,10 @@ const PORT = Number(
 )
 // One helper process per request; a page of posters must not start a hundred at once.
 const MAX_IN_FLIGHT = 8
+const WEB_URL = (process.env.PLEX_WEB_URL || "").replace(
+  /\/+$/,
+  "",
+)
 
 /** The request path without any X-Plex-Token query parameter, byte for byte otherwise. */
 export const withoutToken = (url: string): string => {
@@ -93,6 +103,9 @@ export const statusOf = (
     return found ? Number(found[1]) : 502
   }
   if (exitCode === 4) return 403
+  // 6 with no_rule: the broker has no rule for the path, which is a refusal, not an outage.
+  if (exitCode === 6 && stderr.includes("no_rule"))
+    return 403
   return 502
 }
 
@@ -130,6 +143,9 @@ const runHelper = (
       },
       stdio: ["pipe", "pipe", "pipe"],
     })
+    // The helper can exit before it reads the body (a refusal, a usage error). Writing to
+    // its closed stdin then fails with EPIPE; the exit code below reports the outcome.
+    child.stdin.on("error", () => {})
     const out: Buffer[] = []
     const err: Buffer[] = []
     child.stdout.on("data", (chunk: Buffer) =>
@@ -212,6 +228,25 @@ const handle = async (
 ) => {
   const method = (request.method || "GET").toUpperCase()
   const path = withoutToken(request.url || "/")
+  if (path === "/web" || path.startsWith("/web/")) {
+    // The Plex web client is a browser page, not an API call, so it is never fetched
+    // through the broker. The browser keeps the #! fragment across the redirect.
+    if (WEB_URL) {
+      response.writeHead(302, {
+        Location: `${WEB_URL}${path}`,
+      })
+      response.end()
+    } else {
+      response.writeHead(404, {
+        "Content-Type": "text/plain",
+      })
+      response.end(
+        "Set PLEX_WEB_URL to the Plex web client's origin to follow this link.\n",
+      )
+    }
+    request.resume()
+    return
+  }
   const body = await readBody(request)
   const release = await slot()
   try {

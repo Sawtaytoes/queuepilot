@@ -41,6 +41,7 @@ echo "[dev] starting the Gatehouse Plex forwarder on :$GATEHOUSE_PLEX_PORT"
 "$TSX" e2e/gatehouse-plex.ts &
 PLEXGW=$!
 # The forwarder strips any token, and the broker adds the real one; this is a placeholder.
+# Tile links to the Plex web client follow PLEX_WEB_URL when it is set (see the forwarder).
 export PLEX_API_SERVER_URL="http://127.0.0.1:$GATEHOUSE_PLEX_PORT" PLEX_TOKEN=gatehouse-adds-the-token
 
 echo "[dev] starting fake MQTT broker on :$FAKE_MQTT_PORT"
