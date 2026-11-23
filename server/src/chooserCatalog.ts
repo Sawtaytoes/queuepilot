@@ -53,12 +53,17 @@ export const chooserCatalog = async (
  * names its account only through its default binding, so a tap that sent no profile played
  * on whoever was signed in and the account audit then stopped it. A tap names the profile
  * the same way a direct card does, which makes the scan switch the TV and wait for it.
+ * Only a rotation binding counts: routing plays an ungated queue set as the owner and
+ * ignores a hand-written top-level `plex_user` there.
  */
 const chooserProfile = (set: {
   requires_profile?: string | null
   plex_user?: string | null
+  source?: string
 }): string | null =>
-  set.requires_profile || set.plex_user || null
+  set.requires_profile ||
+  (set.source === "rotation" ? set.plex_user : null) ||
+  null
 /** IDs come from the caller's explicit card binding, never a guessed name match. */
 export const chooserPerson = (id: string) => {
   const person = listPeople().find(

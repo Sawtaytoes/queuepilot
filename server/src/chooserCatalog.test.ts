@@ -62,6 +62,13 @@ beforeEach(() => {
         requires_profile: null,
         plex_user: null,
       },
+      {
+        id: "hand_edited",
+        kind: "picks",
+        source: "queue",
+        requires_profile: null,
+        plex_user: "Grace",
+      },
     ],
   })
 })
@@ -74,8 +81,10 @@ test("a tap names the profile a rotation channel plays as, so the scan switches 
     { id: "learning", profile: "Student" },
     { id: "films", profile: "Ada" },
     { id: "shared", profile: undefined },
+    { id: "hand_edited", profile: undefined },
   ])
-  expect(
-    queues.find((queue) => queue.id === "shared"),
-  ).not.toHaveProperty("profile")
+  for (const id of ["shared", "hand_edited"])
+    expect(
+      queues.find((queue) => queue.id === id),
+    ).not.toHaveProperty("profile")
 })
