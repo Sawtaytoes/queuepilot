@@ -3,7 +3,7 @@
 // Boots the fake broker + THIS checkout's server against the fixture, like verify-members.
 //
 //   server/node_modules/.bin/tsx e2e/verify-preview-dedupe.ts
-// Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
+// Needs: Plex through e2e/gatehouse-plex.ts (PLEX_API_SERVER_URL=http://127.0.0.1:18799), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
 import { chromium } from "./playwright.js"
 import {

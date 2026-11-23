@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Run the queuepilot-web E2E suites against a LOCAL server + temp data copies.
-# Needs: the root agentic .env (PLEX token), mux-magic's node_modules (playwright),
+# Needs: gatehouse-request (Plex goes through e2e/gatehouse-plex.ts; no token is read here),
+# mux-magic's node_modules (playwright),
 # and PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers (agent-sandbox-base).
 # live-smoke.ts is separate: it drives https://plex-channels.example.com read-only.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; source /mnt/TrueNAS-Apps/Repos/agentic/.env; set +a
 # The frontend is a Vite build since M6d — the server serves web/dist, so a stale (or
 # missing) dist means every browser suite drives an empty page.
 [ -d web/node_modules ] || pnpm install --frozen-lockfile
@@ -15,12 +15,20 @@ pnpm --filter queuepilot-web run build
 # tsx is a server/ devDependency, hence the explicit bin path (npx is denied fleet-wide).
 [ -d server/node_modules ] || pnpm install --frozen-lockfile
 TSX=server/node_modules/.bin/tsx
+# Plex goes through the Gatehouse forwarder. The broker adds the real token; this is a placeholder.
+export GATEHOUSE_PLEX_PORT="${GATEHOUSE_PLEX_PORT:-18799}"
+"$TSX" e2e/gatehouse-plex.ts &
+PLEXGW=$!
+trap 'kill $PLEXGW 2>/dev/null || true' EXIT
+export PLEX_API_SERVER_URL="http://127.0.0.1:$GATEHOUSE_PLEX_PORT" PLEX_TOKEN=gatehouse-adds-the-token
 unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS   # suites assert the degraded no-broker paths
 export QUEUES_PATH=/tmp/queues-ui.yaml SETS_PATH=/tmp/sets-ui.yaml WEB_PORT=18768 \
        CACHE_PATH=/tmp/cache-e2e.sqlite \
        NODE_TLS_REJECT_UNAUTHORIZED=0 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
 rm -f /tmp/cache-e2e.sqlite /tmp/cache-e2e.sqlite-wal /tmp/cache-e2e.sqlite-shm
 TOTAL=0
+echo "=== gatehouse-plex-test ==="   # browserless; the Plex forwarder passes no token on
+"$TSX" e2e/gatehouse-plex-test.ts || TOTAL=$((TOTAL+1))
 echo "=== history-persist-test ==="   # manages its own server (port 18770) + files
 "$TSX" e2e/history-persist-test.ts || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)

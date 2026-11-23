@@ -10,7 +10,8 @@
 //
 // Creates a playQueue and never pushes it at a device: NOTHING PLAYS.
 //
-// Run: set -a; source /mnt/TrueNAS-Apps/Repos/agentic/.env; set +a
+// Run: server/node_modules/.bin/tsx e2e/gatehouse-plex.ts &   # Plex through gatehouse-request
+//      PLEX_API_SERVER_URL=http://127.0.0.1:18799 PLEX_TOKEN=gatehouse-adds-the-token \
 //      server/node_modules/.bin/tsx e2e/spike-playqueue-extend.ts
 const { PLEX_URL, PLEX_TOKEN } = await import(
   "../server/src/config.js"

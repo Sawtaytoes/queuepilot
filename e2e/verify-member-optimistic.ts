@@ -3,9 +3,10 @@
 // must end up agreeing. Mirrors what PR #18 did for the queue grid.
 //
 // Boots its own fake MQTT broker + this checkout's server against the rich fixtures, so it
-// never touches real data. Needs the root agentic .env (Plex token) + playwright.
+// never touches real data. Needs Plex through e2e/gatehouse-plex.ts (no token is read) + playwright.
 //
-//   set -a; source /mnt/TrueNAS-Apps/Repos/agentic/.env; set +a
+//   server/node_modules/.bin/tsx e2e/gatehouse-plex.ts &
+//   PLEX_API_SERVER_URL=http://127.0.0.1:18799 PLEX_TOKEN=gatehouse-adds-the-token \
 //   server/node_modules/.bin/tsx e2e/verify-member-optimistic.ts
 import { chromium } from "./playwright.js"
 import { pickValueMaybe } from "./pick.js"
