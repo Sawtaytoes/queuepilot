@@ -36,16 +36,29 @@ export const chooserCatalog = async (
           selected,
         ),
     )
-    .map((set) => ({
-      artworkPath: chooserPosterPath(set),
-      id: set.id,
-      title: titles.get(set.id) ?? set.id,
-      kind: wireKindForSet(set),
-      ...(set.requires_profile
-        ? { profile: set.requires_profile }
-        : {}),
-    }))
+    .map((set) => {
+      const profile = chooserProfile(set)
+      return {
+        artworkPath: chooserPosterPath(set),
+        id: set.id,
+        title: titles.get(set.id) ?? set.id,
+        kind: wireKindForSet(set),
+        ...(profile ? { profile } : {}),
+      }
+    })
 }
+
+/**
+ * The Plex profile a chooser tap must play as. A rotation channel is ungated on disk and
+ * names its account only through its default binding, so a tap that sent no profile played
+ * on whoever was signed in and the account audit then stopped it. A tap names the profile
+ * the same way a direct card does, which makes the scan switch the TV and wait for it.
+ */
+const chooserProfile = (set: {
+  requires_profile?: string | null
+  plex_user?: string | null
+}): string | null =>
+  set.requires_profile || set.plex_user || null
 /** IDs come from the caller's explicit card binding, never a guessed name match. */
 export const chooserPerson = (id: string) => {
   const person = listPeople().find(
