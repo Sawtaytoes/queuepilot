@@ -10,9 +10,9 @@
 // Environment:
 //   GATEHOUSE_REQUEST     the helper (default /work/bin/gatehouse-request)
 //   GATEHOUSE_PLEX_PORT   the loopback port (default 18799)
-//   PLEX_WEB_URL          optional; the Plex web client's origin. The server builds tile links
-//                         as PLEX_API_SERVER_URL/web/index.html#!/…, so they point here; this
-//                         forwarder redirects /web/… to PLEX_WEB_URL, or answers 404 without it.
+//   PLEX_WEB_URL          optional; the Plex web client's origin. With it set, the server
+//                         builds tile links from it directly. A /web/… request that still
+//                         reaches this forwarder is redirected there, or answered 404 without it.
 //
 // Limits, all from the helper: it reports no response headers, so the Content-Type is sniffed
 // from the body; it reports the status only for an error, so every success is a 200; and the
@@ -228,7 +228,8 @@ const handle = async (
 ) => {
   const method = (request.method || "GET").toUpperCase()
   const path = withoutToken(request.url || "/")
-  if (path === "/web" || path.startsWith("/web/")) {
+  const pathname = path.split("?", 1)[0] ?? path
+  if (pathname === "/web" || pathname.startsWith("/web/")) {
     // The Plex web client is a browser page, not an API call, so it is never fetched
     // through the broker. The browser keeps the #! fragment across the redirect.
     if (WEB_URL) {

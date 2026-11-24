@@ -63,6 +63,8 @@ accounts and obtain the server-scoped tokens that keep watch history separate fo
 
 1. Set `PLEX_API_SERVER_URL` to the Plex URL that QueuePilot and its users can reach. Do not add
    `/web` to it.
+   Tile links open the Plex web client at this URL. If browsers reach the web client at a
+   different URL from the one QueuePilot uses, set `PLEX_WEB_URL` to that origin.
 2. Get an `X-Plex-Token` by following Plex's
    [token instructions](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/),
    and set it as `PLEX_TOKEN`.

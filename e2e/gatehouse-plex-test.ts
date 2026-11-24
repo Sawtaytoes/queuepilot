@@ -173,6 +173,17 @@ try {
     "https://plex.example.com/web/index.html",
   )
 
+  // The query is not part of the /web match, and the token never reaches Location.
+  const linkWithQuery = await fetch(
+    `${base}/web?x=1&X-Plex-Token=leak`,
+    { redirect: "manual" },
+  )
+  assert.equal(linkWithQuery.status, 302)
+  assert.equal(
+    linkWithQuery.headers.get("location"),
+    "https://plex.example.com/web?x=1",
+  )
+
   // No broker rule for play queues: a refusal, reported as 403.
   assert.equal(
     (await fetch(`${base}/playQueues/1`)).status,

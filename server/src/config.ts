@@ -16,6 +16,11 @@ export const PLEX_URL = rstrip(
     "https://plex.example.com",
   ),
 )
+// The Plex web client's origin, for the tile links a browser opens (webLinks.ts). It is
+// PLEX_URL unless PLEX_WEB_URL is set: the e2e harnesses point PLEX_URL at a loopback
+// forwarder that a browser on another machine cannot reach, and set this to the real origin.
+export const PLEX_WEB_URL =
+  rstrip(process.env.PLEX_WEB_URL) || PLEX_URL
 // The OWNER/admin token (same one the Python service uses). PLEX_TOKEN wins, then the
 // legacy PLEX_API_KEY name, matching config.py's precedence.
 export const PLEX_TOKEN =
