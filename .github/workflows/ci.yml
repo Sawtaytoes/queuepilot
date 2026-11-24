@@ -329,6 +329,16 @@ jobs:
       - name: Plex tile webUrl host (offline)
         run: $TSX e2e/plex-web-url-test.ts
 
+      # PLEX_WEB_URL overrides that host, for harnesses whose PLEX_API_SERVER_URL is a loopback
+      # forwarder. Offline, like the step above.
+      - name: Plex tile webUrl override (offline)
+        run: $TSX e2e/plex-web-origin-test.ts
+
+      # The harnesses' Plex forwarder passes no token on and maps the helper's exit codes.
+      # A fake gatehouse-request stands in; nothing reaches the broker or Plex.
+      - name: Gatehouse Plex forwarder (offline)
+        run: $TSX e2e/gatehouse-plex-test.ts
+
       # The Kavita provider and the 302 launcher, with HTTP fully stubbed. Pins the details
       # that are invisible until a real card fails: continue-point returns a NULL seriesId
       # (so the provider must thread it back in or every deep link points at series `null`),

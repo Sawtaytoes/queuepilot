@@ -2,14 +2,15 @@
 # Local dev harness — boots the whole queuepilot web stack OFFLINE for screenshot-driven
 # UI iteration: the Node server with the rich YAML fixtures, a FAKE MQTT broker + responder
 # (e2e/fake-mqtt.ts — real broker is unreachable), and the REAL Plex server (posters,
-# search, ratings, collections all resolve live). Foreground; Ctrl-C stops both processes.
+# search, ratings, collections all resolve live) reached through e2e/gatehouse-plex.ts, which
+# sends each Plex call through gatehouse-request so no token is read here. Foreground; Ctrl-C
+# stops every process.
 #
 # The fake broker's aedes comes from the root `pnpm install` (e2e/broker is a workspace).
 # Screenshots without the interactive server: `server/node_modules/.bin/tsx e2e/shots.ts`
 # (self-contained).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; source /srv/repos/agentic/.env; set +a
 
 PORT="${WEB_PORT:-18780}"
 FAKE_MQTT_PORT="${FAKE_MQTT_PORT:-11883}"
@@ -34,6 +35,16 @@ export QUEUES_PATH=/tmp/queues-harness.yaml \
        NODE_TLS_REJECT_UNAUTHORIZED=0 \
        PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}"
 
+GATEHOUSE_PLEX_PORT="${GATEHOUSE_PLEX_PORT:-18799}"
+export GATEHOUSE_PLEX_PORT
+echo "[dev] starting the Gatehouse Plex forwarder on :$GATEHOUSE_PLEX_PORT"
+"$TSX" e2e/gatehouse-plex.ts &
+PLEXGW=$!
+# The forwarder strips any token, and the broker adds the real one; this is a placeholder.
+# Set PLEX_WEB_URL to the Plex web client's origin to make tile links open it; without it they
+# point at the loopback forwarder, which answers 404 (and no other machine can reach it).
+export PLEX_API_SERVER_URL="http://127.0.0.1:$GATEHOUSE_PLEX_PORT" PLEX_TOKEN=gatehouse-adds-the-token
+
 echo "[dev] starting fake MQTT broker on :$FAKE_MQTT_PORT"
 "$TSX" e2e/fake-mqtt.ts &
 BROKER=$!
@@ -43,6 +54,6 @@ echo "[dev] starting web server on http://localhost:$PORT (fixtures + fake MQTT 
 "$TSX" server/src/index.ts &
 SRV=$!
 
-trap 'kill $BROKER $SRV 2>/dev/null || true' EXIT INT TERM
+trap 'kill $PLEXGW $BROKER $SRV 2>/dev/null || true' EXIT INT TERM
 echo "[dev] up. Open http://localhost:$PORT  (or devshare $PORT \"queuepilot-dev\")"
 wait $SRV

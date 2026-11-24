@@ -10,8 +10,10 @@
 //
 // Creates a playQueue and never pushes it at a device: NOTHING PLAYS.
 //
-// Run: set -a; source /srv/repos/agentic/.env; set +a
+// Run: server/node_modules/.bin/tsx e2e/gatehouse-plex.ts &   # Plex through gatehouse-request
+//      PLEX_API_SERVER_URL=http://127.0.0.1:18799 PLEX_TOKEN=gatehouse-adds-the-token \
 //      server/node_modules/.bin/tsx e2e/spike-playqueue-extend.ts
+// Gatehouse has no Plex rule for /playQueues yet, so through the forwarder this answers 403.
 const { PLEX_URL, PLEX_TOKEN } = await import(
   "../server/src/config.js"
 )

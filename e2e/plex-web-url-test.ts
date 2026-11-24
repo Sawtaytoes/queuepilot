@@ -42,6 +42,8 @@ registerHooks({
 // against the live household value look like proof the code reads the env, when it would
 // also pass if the host were hard-coded to that same value.
 process.env.PLEX_API_SERVER_URL = "https://plex.example.com"
+// Without PLEX_WEB_URL the link uses PLEX_API_SERVER_URL; plex-web-origin-test covers the override.
+delete process.env.PLEX_WEB_URL
 delete process.env.CONFIG_PATH
 
 const { plexWebUrl } = await import(
