@@ -35,6 +35,7 @@
 //     lives and where the type system is actually earning its keep.
 import { createRequire } from "node:module"
 import { existsSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 
 // --- the API slice -----------------------------------------------------------------
 
@@ -609,11 +610,14 @@ const ROOTS = [
     "charcuterie",
     "gallery-downloader",
   ].map(
+    // fileURLToPath, not .pathname, so a parent folder with a space still resolves.
     (sibling) =>
-      new URL(
-        `../../${sibling}/node_modules/`,
-        import.meta.url,
-      ).pathname,
+      fileURLToPath(
+        new URL(
+          `../../${sibling}/node_modules/`,
+          import.meta.url,
+        ),
+      ),
   ),
 ]
 

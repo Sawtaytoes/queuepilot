@@ -7,7 +7,9 @@
 // (blur, mosaics, real cover art) before anything is committed to the Satori subset. Keep the
 // winning design in step with kavita-cover.ts by hand, or use this only to pick the next one.
 //
-//   ../mux-magic/node_modules/.bin/tsx e2e/shot-list-cover.ts   (run from this checkout's root)
+// From this checkout's root:
+//
+//   ../mux-magic/node_modules/.bin/tsx e2e/shot-list-cover.ts
 //
 // Writes `__screenshots__/list-cover/cover-<id>.png` at 640x960 (Kavita covers are 2:3;
 // its own generated ones are 320x455) and `__screenshots__/list-cover/index.html`.
@@ -35,9 +37,9 @@ import { chromium } from "./playwright.js"
 const OUT = "__screenshots__/list-cover"
 const ART = `${OUT}/art`
 // Charcuterie's self-hosted faces, from a Charcuterie checkout next to this one unless
-// CHARCUTERIE_FONTS names another folder.
+// CHARCUTERIE_FONTS names another folder. An empty value counts as unset.
 const FONTS =
-  process.env.CHARCUTERIE_FONTS ??
+  process.env.CHARCUTERIE_FONTS ||
   fileURLToPath(
     new URL(
       "../../charcuterie/packages/tokens/fonts",
