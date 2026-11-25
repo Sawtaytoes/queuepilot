@@ -599,16 +599,22 @@ const ROOTS = [
   // hits. `nmHoistingLimits: workspaces` is why it lands here rather than at the root.
   //
   // The sibling-borrowing below is the pre-migration fallback, kept for a checkout whose
-  // install has not been run: those absolute paths exist on the NAS, and in CI they do not —
-  // Node resolves a nonexistent `/mnt/...` prefix by walking up to `/`, never reaching the
-  // checkout, which is why the old unpinned `npm install playwright` was unreachable from
-  // here even when it had run.
+  // install has not been run: it reads the node_modules of sibling checkouts that sit next to
+  // this one. In CI they do not exist, and a missing root is skipped.
   new URL("./node_modules/", import.meta.url).pathname,
   new URL("../node_modules/", import.meta.url).pathname,
-  "/srv/repos/mux-magic/node_modules/",
-  "/srv/repos/castkit/node_modules/",
-  "/srv/repos/charcuterie/node_modules/",
-  "/srv/repos/gallery-downloader/node_modules/",
+  ...[
+    "mux-magic",
+    "castkit",
+    "charcuterie",
+    "gallery-downloader",
+  ].map(
+    (sibling) =>
+      new URL(
+        `../../${sibling}/node_modules/`,
+        import.meta.url,
+      ).pathname,
+  ),
 ]
 
 function resolve(): PlaywrightModule {

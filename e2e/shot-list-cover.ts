@@ -7,7 +7,7 @@
 // (blur, mosaics, real cover art) before anything is committed to the Satori subset. Keep the
 // winning design in step with kavita-cover.ts by hand, or use this only to pick the next one.
 //
-//   /srv/repos/mux-magic/node_modules/.bin/tsx e2e/shot-list-cover.ts
+//   ../mux-magic/node_modules/.bin/tsx e2e/shot-list-cover.ts   (run from this checkout's root)
 //
 // Writes `__screenshots__/list-cover/cover-<id>.png` at 640x960 (Kavita covers are 2:3;
 // its own generated ones are 320x455) and `__screenshots__/list-cover/index.html`.
@@ -29,12 +29,21 @@ import {
   existsSync,
   readdirSync,
 } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { chromium } from "./playwright.js"
 
 const OUT = "__screenshots__/list-cover"
 const ART = `${OUT}/art`
+// Charcuterie's self-hosted faces, from a Charcuterie checkout next to this one unless
+// CHARCUTERIE_FONTS names another folder.
 const FONTS =
-  "/srv/repos/charcuterie/packages/tokens/fonts"
+  process.env.CHARCUTERIE_FONTS ??
+  fileURLToPath(
+    new URL(
+      "../../charcuterie/packages/tokens/fonts",
+      import.meta.url,
+    ),
+  )
 
 const SET_LABEL =
   process.env.COVER_SET_LABEL || "Manga & Webtoons"
