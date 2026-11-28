@@ -260,20 +260,39 @@ function sensorState(
         valueJson,
       )
   }
+  // Read the whole template before any branch: one `if`, any `elif`s, at most one `else`, then
+  // `endif` at the very end, with nothing between the tags but branch text.
   const tag =
     /\{%\s*(if|elif|else|endif)\s*(.*?)\s*%\}([^{]*)/g
-  let rest = template
+  const branches: {
+    word: string
+    test: string
+    text: string
+  }[] = []
   let consumed = 0
   for (const [
     whole,
-    word,
+    word = "",
     test = "",
     text = "",
   ] of template.matchAll(tag)) {
     if (template.indexOf(whole, consumed) !== consumed)
       throw new Error(`unread text at ${consumed}`)
     consumed += whole.length
-    rest = template.slice(consumed)
+    branches.push({ word, test, text })
+  }
+  const words = branches
+    .map((branch) => branch.word)
+    .join(" ")
+  if (
+    consumed !== template.length ||
+    !/^if( elif)*( else)? endif$/.test(words) ||
+    branches.at(-1)?.text !== ""
+  )
+    throw new Error(
+      `not an if/elif/else/endif template: ${words}`,
+    )
+  for (const { word, test, text } of branches) {
     if (word === "endif") break
     if (
       word === "else" ||
@@ -283,7 +302,7 @@ function sensorState(
     )
       return text
   }
-  throw new Error(`no branch matched; left: ${rest}`)
+  return ""
 }
 
 async function main(): Promise<void> {
@@ -617,9 +636,26 @@ async function main(): Promise<void> {
       "discovery exposes the state as attributes for HA dashboards and household automations",
       cfg?.json_attributes_topic === T_STATE,
     )
+    const template = String(cfg?.value_template)
+    // The reader refuses templates Jinja would refuse, so it cannot pass a broken one.
+    for (const [name, broken] of [
+      ["no endif", template.replace("{% endif %}", "")],
+      ["text after endif", `${template}x`],
+      [
+        "an else before an elif",
+        "{% if value_json.a %}a{% else %}b{% elif value_json.c %}c{% endif %}",
+      ],
+    ] as const) {
+      let isRefused = false
+      try {
+        sensorState(broken, {})
+      } catch {
+        isRefused = true
+      }
+      ok(`the template reader refuses ${name}`, isRefused)
+    }
     // The sensor's state for each kind of state payload. A start handed to QueuePilot TV is
     // `sent`, never `playing`: the app may still be asking for the TV PIN.
-    const template = String(cfg?.value_template)
     for (const [name, payload, expected] of [
       [
         "an error",

@@ -14,6 +14,8 @@ const ctl = vi.hoisted(() => ({
   // The order of the steps that touch the Shield and the Plex server's log.
   steps: [] as string[],
   isFsm: true,
+  close: "closed" as string,
+  account: null as { title: string } | null,
 }))
 vi.mock("./env.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./env.js")>()),
@@ -40,6 +42,7 @@ vi.mock("./engine/routing.js", () => ({
     },
   }),
   bindingFor: () => ({}),
+  channelFor: () => null,
 }))
 vi.mock("./adb.js", () => ({
   ensurePlexOpen: async () => {
@@ -53,7 +56,7 @@ vi.mock("./playback.js", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("./playback.js")
   >()),
-  currentAccount: async () => null,
+  currentAccount: async () => ctl.account,
 }))
 vi.mock("./profiles.js", async (importOriginal) => ({
   ...(await importOriginal<
@@ -74,9 +77,9 @@ vi.mock("./tvAppStart.js", () => ({
     ctl.starts.push(setName)
     return ctl.started
   },
-  closeBeforePlex: () => {
+  closeAfterPlexOpens: async () => {
     ctl.steps.push("close QueuePilot TV")
-    return true
+    return ctl.close
   },
 }))
 vi.mock("./providers/index.js", () => ({
@@ -111,6 +114,8 @@ beforeEach(() => {
   ctl.states = []
   ctl.steps = []
   ctl.isFsm = true
+  ctl.close = "closed"
+  ctl.account = null
   // A Plex sitting is running when the card is tapped.
   SESSION.playQueueID = 42
   SESSION.queue = [{ ratingKey: "1" }]
@@ -190,7 +195,7 @@ test("a start the TV app refused is a stated error, not a silent Plex play", asy
   ).toBe(true)
 })
 
-test("a start routed to Plex opens Plex and takes the Plex path", async () => {
+test("a start routed to Plex opens Plex and takes the Plex path, and leaves QueuePilot TV alone", async () => {
   ctl.route = { app: "plex", reason: "no remote start" }
   await expect(
     startSession({ set: "holiday", profile: "Older Kids" }),
@@ -198,26 +203,58 @@ test("a start routed to Plex opens Plex and takes the Plex path", async () => {
   expect(ctl.starts).toEqual([])
   expect(ctl.plexOpened).toBe(1)
   expect(ctl.buckets).toBe(1)
-  expect(ctl.steps).toEqual([
-    "close QueuePilot TV",
-    "open Plex",
-  ])
+  // The FSM path reads Plex's own session, never the log, so it has no reason to close the app.
+  expect(ctl.steps).toEqual(["open Plex"])
 })
 
-// QueuePilot TV signs its Plex requests as a profile, from the Shield's address. Each Plex path
-// closes it before Plex opens and before the log watch starts at the log's end, so no request
-// the TV app makes can read as Plex signed into a profile.
-test("set auto closes QueuePilot TV before it reads the profile from the Plex log", async () => {
+// QueuePilot TV signs its Plex requests as a profile, from the Shield's address. Each path that
+// reads the Plex log closes it once Plex is in front, before the watch starts at the log's end.
+test("set auto closes QueuePilot TV after Plex opens and before it reads the Plex log", async () => {
   expect(await startSession({ set: "auto" })).toEqual({
     error: "no profile",
   })
   expect(ctl.steps).toEqual([
-    "close QueuePilot TV",
     "open Plex",
+    "close QueuePilot TV",
     "watch the Plex log",
   ])
   expect(ctl.requests).toEqual([])
 })
+
+test("set auto reads no log line while QueuePilot TV may still run", async () => {
+  ctl.close = "unknown"
+  expect(await startSession({ set: "auto" })).toEqual({
+    error: "queuepilot tv open",
+  })
+  expect(ctl.steps).toEqual([
+    "open Plex",
+    "close QueuePilot TV",
+  ])
+  expect(
+    ctl.states.some((state) =>
+      String(state.error).includes(
+        "QueuePilot TV is still open",
+      ),
+    ),
+  ).toBe(true)
+})
+
+test("set auto with Plex's own session naming the account needs no log, and no close", async () => {
+  ctl.account = { title: "Nobody Mapped" }
+  expect(
+    await startSession({ set: "auto" }),
+  ).toHaveProperty("error")
+  expect(ctl.steps).toEqual(["open Plex"])
+})
+
+test.each([["absent"], ["unverified"]])(
+  "set auto reads the log when QueuePilot TV is %s",
+  async (close) => {
+    ctl.close = close
+    await startSession({ set: "auto" })
+    expect(ctl.steps.at(-1)).toBe("watch the Plex log")
+  },
+)
 
 test("the log-based profile gate (PLAYBACK_FSM off) closes QueuePilot TV before it watches", async () => {
   ctl.isFsm = false
@@ -226,12 +263,26 @@ test("the log-based profile gate (PLAYBACK_FSM off) closes QueuePilot TV before 
     set: "holiday",
     profile: "Older Kids",
   })
-  expect(result).not.toHaveProperty("ok")
+  expect(result).toEqual({ error: "profile gate" })
   expect(ctl.steps).toEqual([
-    "close QueuePilot TV",
     "open Plex",
+    "close QueuePilot TV",
     "watch the Plex log",
   ])
+  expect(ctl.buckets).toBe(0)
+})
+
+test("the log-based profile gate refuses while QueuePilot TV may still run", async () => {
+  ctl.isFsm = false
+  ctl.close = "unknown"
+  ctl.route = { app: "plex", reason: "no remote start" }
+  expect(
+    await startSession({
+      set: "holiday",
+      profile: "Older Kids",
+    }),
+  ).toEqual({ error: "queuepilot tv open" })
+  expect(ctl.steps).not.toContain("watch the Plex log")
   expect(ctl.buckets).toBe(0)
 })
 

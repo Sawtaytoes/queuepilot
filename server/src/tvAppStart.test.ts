@@ -17,7 +17,12 @@ const ctl = vi.hoisted(() => ({
   authorized: [] as unknown[][],
   calls: [] as string[][],
   pressed: [] as string[],
-  pid: "" as string | null,
+  // QueuePilot TV's process: whether it runs, whether the probe fails, and whether a stop ends it.
+  isTvAppAlive: false,
+  isProbeBroken: false,
+  isStopIgnored: false,
+  // `dumpsys activity activities` answers, one per read; the last one repeats.
+  dumps: [] as (string | null)[],
 }))
 vi.mock("./env.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./env.js")>()),
@@ -37,8 +42,21 @@ vi.mock("./adb.js", () => ({
     ctl.calls.push(args)
     if (args.includes("resolve-activity"))
       return ctl.resolveOutput
-    if (args.includes("pidof")) return ctl.pid
-    if (args.includes("force-stop")) return ""
+    const line = args.join(" ")
+    if (line.includes("pidof")) {
+      if (ctl.isProbeBroken) return null
+      return ctl.isTvAppAlive
+        ? "4242\nprobe-done\n"
+        : "probe-done\n"
+    }
+    if (line.includes("dumpsys activity activities"))
+      return ctl.dumps.length > 1
+        ? (ctl.dumps.shift() ?? null)
+        : (ctl.dumps[0] ?? null)
+    if (args.includes("force-stop")) {
+      if (!ctl.isStopIgnored) ctl.isTvAppAlive = false
+      return ""
+    }
     if (args.includes("am")) {
       ctl.foreground =
         "dev.queuepilot.player.prototype/dev.queuepilot.player.MainActivity"
@@ -62,7 +80,8 @@ vi.mock("./providers/index.js", () => ({
 }))
 
 import {
-  closeBeforePlex,
+  closeAfterPlexOpens,
+  hasTvAppStopped,
   profileRoute,
   queueRefusal,
   routeStart,
@@ -127,7 +146,10 @@ beforeEach(() => {
   ctl.authorized = []
   ctl.calls = []
   ctl.pressed = []
-  ctl.pid = ""
+  ctl.isTvAppAlive = false
+  ctl.isProbeBroken = false
+  ctl.isStopIgnored = false
+  ctl.dumps = []
 })
 
 describe("which starts QueuePilot TV can take", () => {
@@ -309,35 +331,91 @@ describe("startInTvApp", () => {
   })
 })
 
-describe("closeBeforePlex", () => {
-  test("stops a running QueuePilot TV", () => {
-    ctl.pid = "4242\n"
-    expect(closeBeforePlex()).toBe(true)
-    expect(ctl.calls.at(-1)).toEqual([
-      "shell",
-      "am",
-      "force-stop",
-      TV_APP_PACKAGE,
-    ])
-  })
+// The shape of Android 11's `dumpsys activity activities` on a Shield, cut to the lines read.
+const dumpWith = (
+  tvState: string,
+): string => `ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+  * Task{a1 #12 visible=true type=standard A=10090:com.plexapp.android U=0 sz=1}
+      * Hist #0: ActivityRecord{b1 u0 com.plexapp.android/.MainActivityDefault t12}
+          packageName=com.plexapp.android processName=com.plexapp.android
+          state=RESUMED stopped=false delayedResume=false finishing=false
+  * Task{a2 #11 visible=false type=standard A=10018:${TV_APP_PACKAGE} U=0 sz=1}
+      * Hist #0: ActivityRecord{b2 u0 ${TV_APP_PACKAGE}/dev.queuepilot.player.MainActivity t11}
+          packageName=${TV_APP_PACKAGE} processName=${TV_APP_PACKAGE}
+          state=${tvState} stopped=${tvState === "STOPPED"} delayedResume=false finishing=false
+`
+const forceStops = (): number =>
+  ctl.calls.filter((args) => args.includes("force-stop"))
+    .length
+const fast = { stopWaitMs: 60, pollMs: 5 }
+
+describe("hasTvAppStopped", () => {
   test.each([
-    ["not running", ""],
-    ["not installed", null],
+    ["STOPPED", true],
+    ["DESTROYED", true],
+    ["STOPPING", false],
+    ["PAUSED", false],
+    ["RESUMED", false],
   ])(
-    "leaves the Shield alone when the app is %s",
-    (_name, pid) => {
-      ctl.pid = pid
-      expect(closeBeforePlex()).toBe(false)
-      expect(
-        ctl.calls.some((args) =>
-          args.includes("force-stop"),
-        ),
-      ).toBe(false)
+    "reads QueuePilot TV in %s, whatever Plex is in",
+    (state, isStopped) => {
+      expect(hasTvAppStopped(dumpWith(state))).toBe(
+        isStopped,
+      )
     },
   )
-  test("does nothing when the Shield is unreachable", () => {
+  test("an unreadable dump is not read as stopped", () => {
+    expect(hasTvAppStopped(null)).toBeNull()
+    expect(hasTvAppStopped("Error: no service")).toBeNull()
+  })
+})
+
+describe("closeAfterPlexOpens", () => {
+  test("stops QueuePilot TV only after it finished onStop, then checks it is gone", async () => {
+    ctl.isTvAppAlive = true
+    ctl.dumps = [
+      dumpWith("PAUSED"),
+      dumpWith("STOPPING"),
+      dumpWith("STOPPED"),
+    ]
+    expect(await closeAfterPlexOpens(fast)).toBe("closed")
+    expect(forceStops()).toBe(1)
+    expect(ctl.dumps).toEqual([dumpWith("STOPPED")])
+    expect(ctl.calls.at(-1)?.join(" ")).toContain("pidof")
+  })
+  test("never ends an app that has not saved: it is left running, and the log is not trusted", async () => {
+    ctl.isTvAppAlive = true
+    ctl.dumps = [dumpWith("RESUMED")]
+    expect(await closeAfterPlexOpens(fast)).toBe("unknown")
+    expect(forceStops()).toBe(0)
+  })
+  test("a stop that leaves the process running is not trusted", async () => {
+    ctl.isTvAppAlive = true
+    ctl.isStopIgnored = true
+    ctl.dumps = [dumpWith("STOPPED")]
+    expect(await closeAfterPlexOpens(fast)).toBe("unknown")
+    expect(forceStops()).toBe(1)
+  })
+  test("a failed process probe is not read as no process", async () => {
+    ctl.isProbeBroken = true
+    expect(await closeAfterPlexOpens(fast)).toBe("unknown")
+    expect(forceStops()).toBe(0)
+  })
+  test("an unreadable activity dump is not read as stopped", async () => {
+    ctl.isTvAppAlive = true
+    ctl.dumps = [null]
+    expect(await closeAfterPlexOpens(fast)).toBe("unknown")
+    expect(forceStops()).toBe(0)
+  })
+  test("a Shield with no QueuePilot TV process is left alone", async () => {
+    expect(await closeAfterPlexOpens(fast)).toBe("absent")
+    expect(forceStops()).toBe(0)
+  })
+  test("with no ADB to the Shield, nothing can be known", async () => {
     ctl.connected = false
-    expect(closeBeforePlex()).toBe(false)
+    expect(await closeAfterPlexOpens(fast)).toBe(
+      "unverified",
+    )
     expect(ctl.calls).toEqual([])
   })
 })

@@ -48,17 +48,25 @@
    `sensor.queuepilot_status` reads `sent`.
 5. **A refused QueuePilot TV start is a stated error, never a quiet switch to Plex.** It names
    the queue and the reason.
-6. **Every other start opens Plex as before, after QueuePilot TV is closed.** It takes the Plex
-   path, including the profile gate and the picker walk. Before Plex opens, the server
-   force-stops QueuePilot TV when its process runs (`tvAppStart.closeBeforePlex`). The Plex
-   profile checks read the Plex server's log for requests from the Shield's address, and the
-   log line names the profile but not the app. QueuePilot TV signs its own requests with a
-   profile's device token from that address, so a request it made while Plex came forward
-   could read as Plex signed into that profile. Both Plex paths, `set: "auto"` and the
-   log-based gate, open Plex before their log watch starts at the log's end, so every line the
-   watch reads comes from after the TV app stopped. A start that opens Plex replaces what the
-   TV shows anyway. `TV_APP_START=false` sends every start to Plex, and still closes the TV
-   app first.
+6. **Every other start opens Plex and takes the Plex path, as before.** This includes the
+   profile gate and the picker walk. `TV_APP_START=false` sends every start to Plex.
+7. **A check that reads the Plex server's log first closes QueuePilot TV, after it saved.** The
+   log line for a request names the profile but not the app, and QueuePilot TV signs its own
+   requests with a profile's device token from the Shield's address. A paused player in the
+   background can still load media. So `set: "auto"` (when Plex's own session does not name the
+   account) and the log-based gate (`PLAYBACK_FSM=false`) call `closeAfterPlexOpens()` once
+   Plex is in front, before their watch starts at the log's end:
+   - The server waits up to 10 seconds for every QueuePilot TV activity to report `STOPPED` or
+     `DESTROYED` in `dumpsys activity activities`. The app saves its resume position in
+     `onStop` and waits for the save there, so it is never ended before it saved.
+   - Then it force-stops the app and checks that no process is left.
+   - A failed probe, an app that has not finished `onStop`, or a process that outlived the
+     stop means no log line is trusted. The start fails with a sentence that says QueuePilot TV
+     is still open.
+   - With no ADB to the Shield, the server can neither see nor close the app, and the log is
+     read as before. A setup that runs QueuePilot TV and a log-based check needs ADB.
+   The FSM path for a named queue reads Plex's own session, not the log, so it leaves
+   QueuePilot TV alone.
 
 ## Context
 
@@ -90,10 +98,11 @@ Owner direction, 2026-11-28, recorded in the private project notes. Tests, with 
 
 - `server/src/tvAppStart.test.ts`: the routing rule, the Shield check, the native check, the
   intent, a sleeping Shield, a start cancelled during the wake, ids a shell would read, and
-  closing QueuePilot TV.
+  closing QueuePilot TV only after it finished `onStop`, with each failure kept untrusted.
 - `server/src/sessionTvApp.test.ts`: a routed start never opens Plex, builds a lineup, or
-  leaves a sitting; a refused start is an error; and each Plex path closes QueuePilot TV
-  before it opens Plex and before it watches the Plex log.
+  leaves a sitting; a refused start is an error; each log-reading path closes QueuePilot TV
+  after Plex opens and before it watches the log, and refuses when the app may still run; and
+  the FSM path leaves the app alone.
 - `server/src/adbAdapters.test.ts`: the Plex launcher aliases.
 - `e2e/nfc-wire-contract-test.ts`: the sensor state that the published template gives each
-  kind of state payload.
+  kind of state payload, read by a reader that refuses a malformed template.

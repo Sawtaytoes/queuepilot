@@ -264,20 +264,9 @@ function lastPlayedFromItem(
   }
 }
 
-/**
- * Best-effort: bring Plex forward over ADB. Never force-stops Plex; see `ensurePlexOpen`. It
- * does close QueuePilot TV first, so the TV app's own requests cannot pass a Plex profile check
- * (`tvAppStart.closeBeforePlex`). Both Plex paths call this before their profile log watch.
- */
+/** Best-effort: bring Plex forward over ADB. Never force-stops; see `ensurePlexOpen`. */
 async function openPlex(): Promise<void> {
   if (!ADB_ENABLED) return
-  try {
-    tvAppStart.closeBeforePlex()
-  } catch (error) {
-    console.log(
-      `[session] closing QueuePilot TV: ${errMessage(error)}`,
-    )
-  }
   try {
     await adb.ensurePlexOpen()
   } catch (error) {
@@ -286,6 +275,31 @@ async function openPlex(): Promise<void> {
     )
   }
 }
+
+/**
+ * Before a check that reads the Plex server's log: close QueuePilot TV, whose own requests
+ * would read as Plex signed into a profile (`tvAppStart.closeAfterPlexOpens`). Returns false
+ * when the app may still be running, and the caller then trusts no log line.
+ */
+async function isPlexLogTrusted(): Promise<boolean> {
+  let close: tvAppStart.TvAppClose
+  try {
+    close = await tvAppStart.closeAfterPlexOpens()
+  } catch (error) {
+    console.log(
+      `[session] closing QueuePilot TV: ${errMessage(error)}`,
+    )
+    close = "unknown"
+  }
+  if (close === "unverified")
+    console.log(
+      "[session] no ADB to the Shield: the Plex log is read without checking for QueuePilot TV",
+    )
+  return close !== "unknown"
+}
+
+const TV_APP_STILL_OPEN =
+  "QueuePilot TV is still open on the Shield, so its requests could read as a Plex profile. Close it and try again."
 
 /**
  * Hand a named queue to QueuePilot TV (`tvAppStart.ts`). The app starts its own native session,
@@ -407,6 +421,16 @@ async function startSessionOnDevice(
           : null,
       timeoutMs: 1_000,
     })
+    // Plex's own session names the account outright. Only without one is the log read, and
+    // only once QueuePilot TV, which signs its requests as a profile too, is closed.
+    if (!active?.title && !(await isPlexLogTrusted())) {
+      if (isSuperseded()) return { cancelled: true }
+      _publishState({
+        error: TV_APP_STILL_OPEN,
+        ...SESSION.asDict(),
+      })
+      return { error: "queuepilot tv open" }
+    }
     const title =
       active?.title ??
       (await profiles.waitForProfile({
@@ -512,6 +536,14 @@ async function startSessionOnDevice(
       awaiting: `profile:${required}`,
       ...SESSION.asDict(),
     })
+    if (!(await isPlexLogTrusted())) {
+      if (isSuperseded()) return { cancelled: true }
+      _publishState({
+        error: `'${cfg.label || setName}' needs the '${required}' Plex profile. ${TV_APP_STILL_OPEN}`,
+        ...SESSION.asDict(),
+      })
+      return { error: "queuepilot tv open" }
+    }
     // Best-effort ADB switch in background + log wait
     const switchP = ADB_ENABLED
       ? adb

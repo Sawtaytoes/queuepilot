@@ -225,24 +225,110 @@ export async function startInTvApp(
 }
 
 /**
- * Close QueuePilot TV before a start opens Plex on the same Shield. Returns whether it was
- * running.
- *
- * The Plex profile checks read the Plex server's log for requests from the Shield's address
- * (`profiles.waitForProfile`). QueuePilot TV signs its own requests with a profile's
- * household-device token, from the same address, so a request it made while Plex was coming
- * forward could read as Plex signed into that profile. Both Plex paths call this before they open
- * Plex and before the log watch starts at the log's end, so every line the watch reads comes
- * from after QueuePilot TV stopped. A start that opens Plex replaces what the TV shows anyway.
+ * Whether QueuePilot TV has a process on the Shield: null when the probe itself failed, which
+ * is never read as "not running".
  */
-export function closeBeforePlex(): boolean {
-  if (!ADB_ENABLED || !adbTarget() || !adb.connect())
-    return false
-  const pid = adb.run(["shell", "pidof", TV_APP_PACKAGE])
-  if (!pid?.trim()) return false
-  adb.run(["shell", "am", "force-stop", TV_APP_PACKAGE])
-  console.log(
-    "[tv-app] closed QueuePilot TV before opening Plex",
-  )
+function isTvAppRunning(): boolean | null {
+  const out = adb.run([
+    "shell",
+    `pidof ${TV_APP_PACKAGE} || true; echo probe-done`,
+  ])
+  if (out == null || !out.includes("probe-done"))
+    return null
+  return /\d/.test(out.replace("probe-done", ""))
+}
+
+/**
+ * Whether every QueuePilot TV activity in `dumpsys activity activities` has finished `onStop`
+ * (`state=STOPPED` or `DESTROYED`), or null when the dump could not be read. The app saves its
+ * resume position in `onStop` and waits for the save there, so after this the process can end
+ * without losing it.
+ */
+export function hasTvAppStopped(
+  dump: string | null,
+): boolean | null {
+  if (dump == null || !dump.includes("Hist #")) return null
+  for (const record of dump
+    .split(/\n\s*\* Hist #\d+: /)
+    .slice(1)) {
+    const [head = ""] = record.split("\n", 1)
+    if (!head.includes(`${TV_APP_PACKAGE}/`)) continue
+    const state = /\bstate=(\w+)/.exec(record)?.[1]
+    if (state !== "STOPPED" && state !== "DESTROYED")
+      return false
+  }
   return true
+}
+
+/**
+ * - `absent`: QueuePilot TV has no process on the Shield.
+ * - `closed`: it had one, it finished `onStop`, and it was stopped.
+ * - `unverified`: there is no ADB to the Shield, so nothing can be known or changed.
+ * - `unknown`: ADB answered, but a probe failed, the app did not finish `onStop` in time, or
+ *   its process outlived the stop.
+ */
+export type TvAppClose =
+  | "absent"
+  | "closed"
+  | "unverified"
+  | "unknown"
+
+/**
+ * Close QueuePilot TV once Plex is in front, before a check that reads the Plex server's log.
+ *
+ * The Plex profile checks read that log for requests from the Shield's address
+ * (`profiles.waitForProfile`), and the log line names the profile but not the app. QueuePilot TV
+ * signs its own requests with a profile's household-device token from the same address, and a
+ * paused player in the background can still load media. So `set: "auto"` and the log-based gate
+ * call this after Plex is in front and before their watch starts at the log's end, and they
+ * trust no log line unless it returns `absent` or `closed`.
+ *
+ * It never ends the app before the app has saved: it waits for every QueuePilot TV activity to
+ * finish `onStop`, which Plex coming forward causes, and only then stops the process. Then it
+ * checks that the process is gone. A launch that a replaced QueuePilot TV start sent is in the
+ * process list by the time Plex is in front, so it is stopped too.
+ */
+export async function closeAfterPlexOpens({
+  stopWaitMs = 10_000,
+  pollMs = 250,
+}: {
+  stopWaitMs?: number
+  pollMs?: number
+} = {}): Promise<TvAppClose> {
+  if (!ADB_ENABLED || !adbTarget() || !adb.connect())
+    return "unverified"
+  const isRunning = isTvAppRunning()
+  if (isRunning == null) return "unknown"
+  if (!isRunning) return "absent"
+  const deadline = Date.now() + stopWaitMs
+  for (;;) {
+    const hasStopped = hasTvAppStopped(
+      adb.run([
+        "shell",
+        "dumpsys",
+        "activity",
+        "activities",
+      ]),
+    )
+    if (hasStopped == null) return "unknown"
+    if (hasStopped) break
+    if (Date.now() >= deadline) {
+      console.log(
+        "[tv-app] QueuePilot TV did not finish onStop; it was left running",
+      )
+      return "unknown"
+    }
+    await sleep(pollMs)
+  }
+  adb.run(["shell", "am", "force-stop", TV_APP_PACKAGE])
+  if (isTvAppRunning() !== false) {
+    console.log(
+      "[tv-app] QueuePilot TV still has a process after the stop",
+    )
+    return "unknown"
+  }
+  console.log(
+    "[tv-app] closed QueuePilot TV after it saved, before reading the Plex log",
+  )
+  return "closed"
 }
