@@ -221,6 +221,90 @@ interface StateMessage {
   [field: string]: unknown
 }
 
+/**
+ * The state Home Assistant gives `sensor.queuepilot_status` for one state payload, read from the
+ * discovery config's `value_template` the way Jinja reads it. It knows only the form the template
+ * uses: `{% if %}`/`{% elif %}`/`{% else %}` branches whose tests are `value_json` paths joined
+ * by `and`. Anything else throws, so a template that grows past this reader fails the contract
+ * instead of being read wrong.
+ */
+function sensorState(
+  template: string,
+  valueJson: Record<string, unknown>,
+): string {
+  const isTruthy = (value: unknown): boolean =>
+    value != null &&
+    value !== false &&
+    value !== 0 &&
+    value !== "" &&
+    !(Array.isArray(value) && value.length === 0) &&
+    !(
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 0
+    )
+  const read = (path: string): unknown => {
+    const match = /^value_json((?:\.[A-Za-z_]\w*)+)$/.exec(
+      path,
+    )
+    if (!match?.[1])
+      throw new Error(`unknown test: ${path}`)
+    return match[1]
+      .slice(1)
+      .split(".")
+      .reduce<unknown>(
+        (value, key) =>
+          value != null && typeof value === "object"
+            ? (value as Record<string, unknown>)[key]
+            : undefined,
+        valueJson,
+      )
+  }
+  // Read the whole template before any branch: one `if`, any `elif`s, at most one `else`, then
+  // `endif` at the very end, with nothing between the tags but branch text.
+  const tag =
+    /\{%\s*(if|elif|else|endif)\s*(.*?)\s*%\}([^{]*)/g
+  const branches: {
+    word: string
+    test: string
+    text: string
+  }[] = []
+  let consumed = 0
+  for (const [
+    whole,
+    word = "",
+    test = "",
+    text = "",
+  ] of template.matchAll(tag)) {
+    if (template.indexOf(whole, consumed) !== consumed)
+      throw new Error(`unread text at ${consumed}`)
+    consumed += whole.length
+    branches.push({ word, test, text })
+  }
+  const words = branches
+    .map((branch) => branch.word)
+    .join(" ")
+  if (
+    consumed !== template.length ||
+    !/^if( elif)*( else)? endif$/.test(words) ||
+    branches.at(-1)?.text !== ""
+  )
+    throw new Error(
+      `not an if/elif/else/endif template: ${words}`,
+    )
+  for (const { word, test, text } of branches) {
+    if (word === "endif") break
+    if (
+      word === "else" ||
+      test
+        .split(" and ")
+        .every((part) => isTruthy(read(part)))
+    )
+      return text
+  }
+  return ""
+}
+
 async function main(): Promise<void> {
   // ---- the broker -------------------------------------------------------------------- //
 
@@ -552,6 +636,64 @@ async function main(): Promise<void> {
       "discovery exposes the state as attributes for HA dashboards and household automations",
       cfg?.json_attributes_topic === T_STATE,
     )
+    const template = String(cfg?.value_template)
+    // The reader refuses templates Jinja would refuse, so it cannot pass a broken one.
+    for (const [name, broken] of [
+      ["no endif", template.replace("{% endif %}", "")],
+      ["text after endif", `${template}x`],
+      [
+        "an else before an elif",
+        "{% if value_json.a %}a{% else %}b{% elif value_json.c %}c{% endif %}",
+      ],
+    ] as const) {
+      let isRefused = false
+      try {
+        sensorState(broken, {})
+      } catch {
+        isRefused = true
+      }
+      ok(`the template reader refuses ${name}`, isRefused)
+    }
+    // The sensor's state for each kind of state payload. A start handed to QueuePilot TV is
+    // `sent`, never `playing`: the app may still be asking for the TV PIN.
+    for (const [name, payload, expected] of [
+      [
+        "an error",
+        { error: "x", awaiting: "profile" },
+        "error",
+      ],
+      ["a wait", { awaiting: "queuepilot-tv" }, "waiting"],
+      [
+        "a QueuePilot TV dispatch",
+        {
+          playback: {
+            isDispatched: true,
+            app: "queuepilot-tv",
+            queue: "x",
+          },
+          set: null,
+        },
+        "sent",
+      ],
+      [
+        "a Plex play",
+        { playback: { played: true } },
+        "playing",
+      ],
+      ["no session", { playback: null }, "idle"],
+    ] as const) {
+      let state = ""
+      try {
+        state = sensorState(template, payload)
+      } catch (error) {
+        state = String(error)
+      }
+      ok(
+        `the status sensor reads ${name} as ${expected}`,
+        state === expected,
+        state,
+      )
+    }
 
     /** Publish one command and wait for the next state message it causes. */
     const startAndRead = async (

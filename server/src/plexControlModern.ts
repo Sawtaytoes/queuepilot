@@ -33,13 +33,22 @@ export function isModernPlexOnboarding(
   )
 }
 
+/**
+ * The new Plex UI's one activity, by its own name or by a launcher alias.
+ *
+ * Plex 2026.23.1 (seen on 2026-11-28) declares about twenty launcher aliases for
+ * `tv.plex.app.MainActivity`, one per app icon (`.MainActivityDefault`, `.MainActivityNeon`, …).
+ * A launch through the launcher or a `plex://` link focuses the ALIAS, so the window reports
+ * `com.plexapp.android/.MainActivityDefault`. Matching only the target class sent every start
+ * to the legacy picker walk, which looks for activities this Plex no longer has.
+ */
+const MODERN_PLEX_ACTIVITY =
+  /^com\.plexapp\.android\/(?:tv\.plex\.app\.MainActivity|(?:com\.plexapp\.android)?\.MainActivity[A-Za-z]*)$/
+
 export function isModernPlexActivity(
   activity: string | null | undefined,
 ): boolean {
-  return (
-    activity ===
-    "com.plexapp.android/tv.plex.app.MainActivity"
-  )
+  return MODERN_PLEX_ACTIVITY.test(activity ?? "")
 }
 
 function decode(value: string): string {

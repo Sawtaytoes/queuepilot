@@ -452,6 +452,8 @@ function publishDiscovery(): void {
     value_template:
       "{% if value_json.error %}error" +
       "{% elif value_json.awaiting %}waiting" +
+      // A start handed to QueuePilot TV: the app may still ask for the TV PIN, so not playing.
+      "{% elif value_json.playback and value_json.playback.isDispatched %}sent" +
       "{% elif value_json.playback %}playing" +
       "{% else %}idle{% endif %}",
     json_attributes_topic: T_STATE,

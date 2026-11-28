@@ -51,6 +51,7 @@ import {
   seasonReturnLabel,
 } from "./season.js"
 import * as section from "./section.js"
+import * as tvAppStart from "./tvAppStart.js"
 import type {
   CancelFlag,
   Device,
@@ -60,6 +61,7 @@ import type {
   PlexPlayItem,
   ProviderArtifact,
   PublishedStateExtra,
+  RoutingSetCfg,
   SessionStartPayload,
   SessionState,
 } from "./types.js"
@@ -262,6 +264,102 @@ function lastPlayedFromItem(
   }
 }
 
+/** Best-effort: bring Plex forward over ADB. Never force-stops; see `ensurePlexOpen`. */
+async function openPlex(): Promise<void> {
+  if (!ADB_ENABLED) return
+  try {
+    await adb.ensurePlexOpen()
+  } catch (error) {
+    console.log(
+      `[session] ensurePlexOpen: ${errMessage(error)}`,
+    )
+  }
+}
+
+/**
+ * Before a check that reads the Plex server's log: close QueuePilot TV, whose own requests
+ * would read as Plex signed into a profile (`tvAppStart.closeAfterPlexOpens`). Returns false
+ * when the app may still be running, and the caller then trusts no log line.
+ */
+async function isPlexLogTrusted(): Promise<boolean> {
+  let close: tvAppStart.TvAppClose
+  try {
+    close = await tvAppStart.closeAfterPlexOpens()
+  } catch (error) {
+    console.log(
+      `[session] closing QueuePilot TV: ${errMessage(error)}`,
+    )
+    close = "unknown"
+  }
+  if (close === "unverified")
+    console.log(
+      "[session] no ADB to the Shield: the Plex log is read without checking for QueuePilot TV",
+    )
+  return close !== "unknown"
+}
+
+const TV_APP_STILL_OPEN =
+  "QueuePilot TV is still open on the Shield, so its requests could read as a Plex profile. Close it and try again."
+
+/**
+ * Hand a named queue to QueuePilot TV (`tvAppStart.ts`). The app starts its own native session,
+ * so this server keeps NO Plex sitting for it: no set, device, playQueue, lineup, resume plan or
+ * section plan. Advance and top-up have nothing to extend, and the Plex completion watcher
+ * (`finished.ts`) has no sitting to announce or reconcile; the app continues the queue itself.
+ *
+ * The result says the start was DISPATCHED, never that it played: the app can still ask for the
+ * TV PIN, ask for sign-in, or find the queue empty, and it reports those on its own screen.
+ */
+async function startInQueuePilotTv(
+  setName: string,
+  cfg: RoutingSetCfg,
+  playsAs: string,
+  isSuperseded: () => boolean,
+): Promise<SessionResult> {
+  const label = cfg.label || setName
+  console.log(
+    `[session] ${setName}: starting in QueuePilot TV as '${playsAs}'`,
+  )
+  _publishState({
+    awaiting: "queuepilot-tv",
+    ...SESSION.asDict(),
+  })
+  const started = await tvAppStart.startInTvApp(
+    setName,
+    isSuperseded,
+  )
+  if (isSuperseded()) return { cancelled: true }
+  if (!started.ok) {
+    _publishState({
+      error: `'${label}' could not start in QueuePilot TV: ${started.error}`,
+      ...SESSION.asDict(),
+    })
+    return { error: "queuepilot tv start" }
+  }
+  resume.disarm()
+  section.disarm()
+  section.forgetBoundaries()
+  Object.assign(SESSION, {
+    device: null,
+    kind: null,
+    set: null,
+    profile: null,
+    queue: [],
+    cursor: 0,
+    userUuid: null,
+    playQueueID: null,
+    queuedTotal: 0,
+    target: null,
+  })
+  const playback: HandoffResult = {
+    isDispatched: true,
+    app: "queuepilot-tv",
+    queue: setName,
+  }
+  _publishState({ playback, ...SESSION.asDict() })
+  return { ok: true, playback, set: setName, count: 0 }
+}
+
 /**
  * Start a session from an MQTT/API payload.
  */
@@ -281,16 +379,6 @@ async function startSessionOnDevice(
   const isSuperseded = (): boolean =>
     isCancelled(cancel) || deviceOperationCancelled()
 
-  if (ADB_ENABLED) {
-    try {
-      await adb.ensurePlexOpen()
-    } catch (error) {
-      console.log(
-        `[session] ensurePlexOpen: ${errMessage(error)}`,
-      )
-    }
-  }
-
   if (isSuperseded()) return { cancelled: true }
   let setName: string | null = payload.set || "auto"
   const cardProfile = payload.profile || null
@@ -308,6 +396,12 @@ async function startSessionOnDevice(
   })
   let profileTitle: string | null = null
   let detectedProfile: string | null = null
+  // Plex comes forward before anything else on the auto path, which reads its signed-in
+  // profile. A named queue decides its app first (below): it may play in QueuePilot TV.
+  if (isAuto) {
+    await openPlex()
+    if (isSuperseded()) return { cancelled: true }
+  }
 
   // NOTE (found, not fixed): `loadSets()` returns null for "keep the current sets" — the file
   // was absent, unreadable or empty — and this function has never handled that; it reads
@@ -327,6 +421,16 @@ async function startSessionOnDevice(
           : null,
       timeoutMs: 1_000,
     })
+    // Plex's own session names the account outright. Only without one is the log read, and
+    // only once QueuePilot TV, which signs its requests as a profile too, is closed.
+    if (!active?.title && !(await isPlexLogTrusted())) {
+      if (isSuperseded()) return { cancelled: true }
+      _publishState({
+        error: TV_APP_STILL_OPEN,
+        ...SESSION.asDict(),
+      })
+      return { error: "queuepilot tv open" }
+    }
     const title =
       active?.title ??
       (await profiles.waitForProfile({
@@ -402,6 +506,29 @@ async function startSessionOnDevice(
   }
   if (!required && !isAuto) required = cardProfile
 
+  if (!isAuto) {
+    const route = await tvAppStart.routeStart({
+      setName,
+      cfg,
+      isAuto,
+      only,
+      cardProfile,
+    })
+    if (isSuperseded()) return { cancelled: true }
+    if (route.app === "queuepilot-tv")
+      return startInQueuePilotTv(
+        setName,
+        cfg,
+        route.playsAs,
+        isSuperseded,
+      )
+    console.log(
+      `[session] ${setName}: playing in Plex (${route.reason})`,
+    )
+    await openPlex()
+    if (isSuperseded()) return { cancelled: true }
+  }
+
   if (PLAYBACK_FSM) {
     if (required && !profileTitle) profileTitle = required
   } else if (required && detectedProfile !== required) {
@@ -409,6 +536,14 @@ async function startSessionOnDevice(
       awaiting: `profile:${required}`,
       ...SESSION.asDict(),
     })
+    if (!(await isPlexLogTrusted())) {
+      if (isSuperseded()) return { cancelled: true }
+      _publishState({
+        error: `'${cfg.label || setName}' needs the '${required}' Plex profile. ${TV_APP_STILL_OPEN}`,
+        ...SESSION.asDict(),
+      })
+      return { error: "queuepilot tv open" }
+    }
     // Best-effort ADB switch in background + log wait
     const switchP = ADB_ENABLED
       ? adb

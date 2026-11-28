@@ -234,6 +234,7 @@ export function startLiveUpdates() {
         // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
         played?: boolean
         error?: string
+        app?: "queuepilot-tv"
       }
       now?: { title?: string; show?: string }
     }
@@ -253,7 +254,11 @@ export function startLiveUpdates() {
     if (playStatus.playback) {
       const dev = playStatus.playback.client || "device"
 
-      if (playStatus.playback.played) {
+      // A start handed to QueuePilot TV: the app plays it, or asks for the TV PIN, on its own
+      // screen, so this says where it went and never that it is playing.
+      if (playStatus.playback.app === "queuepilot-tv") {
+        setStatus("Sent to QueuePilot TV", "ok")
+      } else if (playStatus.playback.played) {
         setStatus(
           `Playing ${playStatus.now?.title || playStatus.now?.show || ""} on ${dev}`,
           "ok",
