@@ -67,4 +67,10 @@ export function connect() {
 export async function press() {
   return true
 }
+// Any other adb command, such as the QueuePilot TV check in server/src/tvAppStart.ts. Null is
+// what the real `run()` returns when a command fails, so these suites keep the Plex path.
+export function run(args) {
+  record("run", ...(args || []))
+  return null
+}
 export const TITLE_ID = "com.plexapp.android:id/title_text"

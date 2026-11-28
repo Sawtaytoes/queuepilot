@@ -90,6 +90,12 @@ Automatic profile switching is optional and off by default. To use it, set `ADB_
 enable network ADB on the player, approve the connection once on the player, and persist the
 approved private key at `/config/.android/adbkey`.
 
+With ADB on, a card or chooser start for a named Plex queue plays in the QueuePilot TV app when
+the player has a build that accepts a remote start, and in Plex otherwise. The app plays the
+queue as the queue's own profile, so this start needs no profile switch. Set
+`TV_APP_START=false` to send every start to Plex. See the
+[routing decision](decisions/2026-11-28-a-card-start-plays-in-queuepilot-tv-when-the-shield-has-it-and-plex-otherwise.md).
+
 ## Configure Kavita
 
 QueuePilot reads Kavita series and chapter progress. Starting a reading queue opens Kavita at

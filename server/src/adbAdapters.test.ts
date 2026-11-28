@@ -102,6 +102,33 @@ describe("Plex UI adapter routing", () => {
     })
     expect(adb.pickerReady("Bob")).toEqual([true, "Alice"])
   })
+  test.each([
+    "com.plexapp.android/.MainActivityDefault",
+    "com.plexapp.android/.MainActivityNeon",
+    "com.plexapp.android/com.plexapp.android.MainActivityDefault",
+  ])(
+    "routes Plex 2026.23.1's launcher alias %s to the new adapter",
+    async (activity) => {
+      ctl.activity = activity
+      const cancel = { isSet: () => false }
+      expect(
+        await adb.switchTo("Alice", cancel, "Bob"),
+      ).toEqual([true, "modern"])
+      expect(ctl.calls).toEqual([
+        ["modern", "Alice", cancel],
+      ])
+    },
+  )
+  test.each([
+    "com.plexapp.android/.HomeActivityTV",
+    "com.plexapp.android/tv.vizbee.api.RemoteActivity",
+    "com.example.plex/.MainActivityDefault",
+    "com.plexapp.android/.MainActivity.Extra",
+  ])("keeps %s off the new adapter", async (activity) => {
+    ctl.activity = activity
+    await adb.switchTo("Bob")
+    expect(ctl.calls[0]?.[0]).toBe("legacy")
+  })
   test("does not mistake an unrelated MainActivity for the new Plex UI", async () => {
     ctl.activity = "com.example.launcher/.MainActivity"
     await adb.switchTo("Bob")

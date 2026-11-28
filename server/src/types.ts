@@ -1421,6 +1421,18 @@ export interface PushResult {
   error?: string
   // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   cancelled?: boolean
+  /**
+   * Which app the start went to. Absent means Plex, as every start was before QueuePilot TV
+   * took remote starts (`tvAppStart.ts`).
+   */
+  app?: "queuepilot-tv"
+  /**
+   * QueuePilot TV only: the start reached the app, which plays (or asks for the TV PIN) on its
+   * own. Deliberately not `played`, which means the media is playing.
+   */
+  isDispatched?: boolean
+  /** QueuePilot TV only: the queue the app was asked to start. */
+  queue?: string
   /** driver.js internals, surfaced for the log/state payload only. */
   _profile?: string | null
   _diag?: unknown

@@ -321,6 +321,14 @@ export const ADB_PLEX_LAUNCH_WAIT_SECONDS = int(
   20,
 )
 
+// --- QueuePilot TV remote start ------------------------------------------------ //
+// A named Plex queue's card or chooser start plays in QueuePilot TV when the target Shield has
+// a build that takes a remote start, and in Plex otherwise (decision
+// 2026-11-28-a-card-start-plays-in-queuepilot-tv-when-the-shield-has-it-and-plex-otherwise).
+// Off sends every start to Plex, as before. Needs ADB_ENABLED: the start is an ADB intent.
+// eslint-disable-next-line @typescript-eslint/naming-convention -- an env flag keeps the name of the environment variable it reads
+export const TV_APP_START = bool("TV_APP_START", true)
+
 // --- playback FSM (driver.js; mirrors queue_builder/config.py) ---------------- //
 // When on, session start hands launch + profile gate + play to driver.driveToPlaying,
 // which SAMPLES real state and drives VERIFIED, RETRIED, NON-DESTRUCTIVE transitions

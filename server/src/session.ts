@@ -51,6 +51,7 @@ import {
   seasonReturnLabel,
 } from "./season.js"
 import * as section from "./section.js"
+import * as tvAppStart from "./tvAppStart.js"
 import type {
   CancelFlag,
   Device,
@@ -60,6 +61,7 @@ import type {
   PlexPlayItem,
   ProviderArtifact,
   PublishedStateExtra,
+  RoutingSetCfg,
   SessionStartPayload,
   SessionState,
 } from "./types.js"
@@ -263,6 +265,88 @@ function lastPlayedFromItem(
 }
 
 /**
+ * Best-effort: bring Plex forward over ADB. Never force-stops Plex; see `ensurePlexOpen`. It
+ * does close QueuePilot TV first, so the TV app's own requests cannot pass a Plex profile check
+ * (`tvAppStart.closeBeforePlex`). Both Plex paths call this before their profile log watch.
+ */
+async function openPlex(): Promise<void> {
+  if (!ADB_ENABLED) return
+  try {
+    tvAppStart.closeBeforePlex()
+  } catch (error) {
+    console.log(
+      `[session] closing QueuePilot TV: ${errMessage(error)}`,
+    )
+  }
+  try {
+    await adb.ensurePlexOpen()
+  } catch (error) {
+    console.log(
+      `[session] ensurePlexOpen: ${errMessage(error)}`,
+    )
+  }
+}
+
+/**
+ * Hand a named queue to QueuePilot TV (`tvAppStart.ts`). The app starts its own native session,
+ * so this server keeps NO Plex sitting for it: no set, device, playQueue, lineup, resume plan or
+ * section plan. Advance and top-up have nothing to extend, and the Plex completion watcher
+ * (`finished.ts`) has no sitting to announce or reconcile; the app continues the queue itself.
+ *
+ * The result says the start was DISPATCHED, never that it played: the app can still ask for the
+ * TV PIN, ask for sign-in, or find the queue empty, and it reports those on its own screen.
+ */
+async function startInQueuePilotTv(
+  setName: string,
+  cfg: RoutingSetCfg,
+  playsAs: string,
+  isSuperseded: () => boolean,
+): Promise<SessionResult> {
+  const label = cfg.label || setName
+  console.log(
+    `[session] ${setName}: starting in QueuePilot TV as '${playsAs}'`,
+  )
+  _publishState({
+    awaiting: "queuepilot-tv",
+    ...SESSION.asDict(),
+  })
+  const started = await tvAppStart.startInTvApp(
+    setName,
+    isSuperseded,
+  )
+  if (isSuperseded()) return { cancelled: true }
+  if (!started.ok) {
+    _publishState({
+      error: `'${label}' could not start in QueuePilot TV: ${started.error}`,
+      ...SESSION.asDict(),
+    })
+    return { error: "queuepilot tv start" }
+  }
+  resume.disarm()
+  section.disarm()
+  section.forgetBoundaries()
+  Object.assign(SESSION, {
+    device: null,
+    kind: null,
+    set: null,
+    profile: null,
+    queue: [],
+    cursor: 0,
+    userUuid: null,
+    playQueueID: null,
+    queuedTotal: 0,
+    target: null,
+  })
+  const playback: HandoffResult = {
+    isDispatched: true,
+    app: "queuepilot-tv",
+    queue: setName,
+  }
+  _publishState({ playback, ...SESSION.asDict() })
+  return { ok: true, playback, set: setName, count: 0 }
+}
+
+/**
  * Start a session from an MQTT/API payload.
  */
 async function startSessionOnDevice(
@@ -281,16 +365,6 @@ async function startSessionOnDevice(
   const isSuperseded = (): boolean =>
     isCancelled(cancel) || deviceOperationCancelled()
 
-  if (ADB_ENABLED) {
-    try {
-      await adb.ensurePlexOpen()
-    } catch (error) {
-      console.log(
-        `[session] ensurePlexOpen: ${errMessage(error)}`,
-      )
-    }
-  }
-
   if (isSuperseded()) return { cancelled: true }
   let setName: string | null = payload.set || "auto"
   const cardProfile = payload.profile || null
@@ -308,6 +382,12 @@ async function startSessionOnDevice(
   })
   let profileTitle: string | null = null
   let detectedProfile: string | null = null
+  // Plex comes forward before anything else on the auto path, which reads its signed-in
+  // profile. A named queue decides its app first (below): it may play in QueuePilot TV.
+  if (isAuto) {
+    await openPlex()
+    if (isSuperseded()) return { cancelled: true }
+  }
 
   // NOTE (found, not fixed): `loadSets()` returns null for "keep the current sets" — the file
   // was absent, unreadable or empty — and this function has never handled that; it reads
@@ -401,6 +481,29 @@ async function startSessionOnDevice(
     return { error: "profile mismatch" }
   }
   if (!required && !isAuto) required = cardProfile
+
+  if (!isAuto) {
+    const route = await tvAppStart.routeStart({
+      setName,
+      cfg,
+      isAuto,
+      only,
+      cardProfile,
+    })
+    if (isSuperseded()) return { cancelled: true }
+    if (route.app === "queuepilot-tv")
+      return startInQueuePilotTv(
+        setName,
+        cfg,
+        route.playsAs,
+        isSuperseded,
+      )
+    console.log(
+      `[session] ${setName}: playing in Plex (${route.reason})`,
+    )
+    await openPlex()
+    if (isSuperseded()) return { cancelled: true }
+  }
 
   if (PLAYBACK_FSM) {
     if (required && !profileTitle) profileTitle = required
